@@ -9,8 +9,10 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "better-auth": "^1.7.2",
     "clsx": "^2.1.1",
     "lucide-react": "^1.41.0",
+    "mongodb": "^7.6.0",
     "mongoose": "^9.9.4",
     "next": "16.3.4",
     "react": "19.2.8",

@@ -2,15 +2,11 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: "swap",
-});
+const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "AgriSmart Cloud Central",
-  description: "Next-generation agricultural cloud telemetry and smart management system",
+  description: "Smart Farming Assistant & Gateway Telemetry Dashboard",
 };
 
 export default function RootLayout({
@@ -19,8 +15,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} dark`}>
-      <body className="min-h-screen bg-[#0a0e14] text-[#f0f6fc] antialiased selection:bg-emerald-500/20 selection:text-emerald-300">
+    <html lang="en" className="dark" suppressHydrationWarning>
+      <body
+        className={`${inter.className} min-h-screen bg-[#0a0e14] text-[#f0f6fc] antialiased`}
+        suppressHydrationWarning
+      >
         {children}
       </body>
     </html>
