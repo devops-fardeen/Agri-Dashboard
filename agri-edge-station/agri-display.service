@@ -1,0 +1,27 @@
+[Unit]
+Description=AgriSmart Tier 1 Physical On-Device Touchscreen Display GUI
+After=graphical.target multi-user.target network.target
+Wants=graphical.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/Dashboard/agri-edge-station
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/pi/.Xauthority
+Environment=PYTHONUNBUFFERED=1
+
+# Executable launch
+ExecStart=/usr/bin/python3 /home/pi/Dashboard/agri-edge-station/display_gui.py
+
+# Restart policy for 24/7 continuous field operation
+Restart=always
+RestartSec=5
+
+# Sandboxing & Resource constraints
+KillMode=process
+TimeoutSec=15
+
+[Install]
+WantedBy=graphical.target

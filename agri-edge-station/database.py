@@ -271,6 +271,10 @@ def set_actuator_state(target: str, state: int) -> bool:
         conn.commit()
         return True
 
+# Aliases for Tier 1 display GUI
+get_latest_zone_data = get_latest_telemetry
+update_actuator_state = set_actuator_state
+
 def toggle_actuator_state(target: str) -> int:
     """Toggles the state of an actuator and returns the new state."""
     current = get_actuator_state(target)
