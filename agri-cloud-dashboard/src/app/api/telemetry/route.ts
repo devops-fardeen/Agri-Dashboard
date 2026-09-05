@@ -26,6 +26,8 @@ export async function GET(req: NextRequest) {
       success: true,
       count: records.length,
       limit,
+      latest: records[0] || null,
+      history: records,
       data: records,
     });
   } catch (error: any) {
