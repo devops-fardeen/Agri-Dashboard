@@ -13,6 +13,7 @@ database.init_db()
 
 AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:5000")
 AI_RESULTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dashboard-ai-modals", "results")
+os.makedirs(AI_RESULTS_DIR, exist_ok=True)
 
 app = FastAPI(
     title="AgriSmart Local Edge Station",
@@ -302,6 +303,58 @@ def get_latest_annotated_image():
     if os.path.exists(latest_img_path):
         return FileResponse(latest_img_path, media_type="image/jpeg")
     raise HTTPException(status_code=404, detail="No annotated image available yet")
+
+class StreamScanRequest(BaseModel):
+    url: str
+    node_id: Optional[str] = "ROVER_PHONE_01"
+
+@app.post("/api/edge/ai/scan-stream-url")
+def scan_from_stream_url(req: StreamScanRequest):
+    """
+    Fetches a live snapshot from a phone IP webcam (or rover-mounted camera stream snapshot URL)
+    and runs it through the 4-model AI inference engine on the Pi.
+    """
+    try:
+        res = requests.get(req.url, timeout=6.0)
+        if res.status_code != 200:
+            return {
+                "success": False,
+                "error": f"Failed to fetch snapshot from phone camera stream (HTTP {res.status_code})"
+            }
+        
+        image_bytes = res.content
+        filename = f"phone_stream_{int(datetime.now().timestamp())}.jpg"
+        files = {"image": (filename, image_bytes, "image/jpeg")}
+        
+        ai_res = requests.post(f"{AI_SERVICE_URL}/upload", files=files, timeout=25.0)
+        if ai_res.status_code == 200:
+            ai_data = ai_res.json()
+            results = ai_data.get("results", {})
+            inserted_ids = database.log_ai_inference_bundle(
+                node_id=req.node_id or "ROVER_PHONE_01",
+                results=results,
+                image_filename=ai_data.get("image", filename)
+            )
+            summary = database.get_latest_ai_summary(node_id=req.node_id or "ROVER_PHONE_01")
+            return {
+                "success": True,
+                "node_id": req.node_id,
+                "blur_score": ai_data.get("blur_score", 0),
+                "results": results,
+                "recorded_ids": inserted_ids,
+                "summary": summary,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"AI Engine returned status {ai_res.status_code}: {ai_res.text}"
+            }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"Could not reach phone camera at {req.url}: {str(e)}"
+        }
 
 # ----------------------------------------------------------------------
 # SERVE LOCAL OFFLINE DASHBOARD

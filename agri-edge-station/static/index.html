@@ -592,10 +592,118 @@
       margin-top: 6px;
     }
 
-    .ai-bar-fill {
-      height: 100%;
-      background: var(--color-forest-sage);
+    /* Camera & AI Vision Styles */
+    .cam-btn-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .cam-action-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      font-size: 11px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid rgba(142, 182, 155, 0.45);
+      background: rgba(255, 255, 255, 0.88);
+      color: #051f20;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+    }
+    .cam-action-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(35, 83, 71, 0.12);
+    }
+    .cam-action-btn:active {
+      transform: scale(0.95);
+    }
+    .cam-action-btn.primary {
+      background: linear-gradient(135deg, #235347, #051f20);
+      color: #daf1de;
+      border-color: #235347;
+      box-shadow: 0 4px 14px rgba(5, 31, 32, 0.25);
+    }
+    .cam-action-btn.accent {
+      background: linear-gradient(135deg, #daf1de, #ffffff);
+      color: #051f20;
+      border-color: rgba(35, 83, 71, 0.4);
+    }
+
+    /* Targeting Reticle & Viewfinder */
+    .camera-reticle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 170px;
+      height: 170px;
+      pointer-events: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .reticle-corner {
+      position: absolute;
+      width: 22px;
+      height: 22px;
+      border: 3px solid #00ff88;
+      box-shadow: 0 0 10px rgba(0, 255, 136, 0.6);
+    }
+    .reticle-corner.top-left { top: 0; left: 0; border-right: none; border-bottom: none; border-top-left-radius: 6px; }
+    .reticle-corner.top-right { top: 0; right: 0; border-left: none; border-bottom: none; border-top-right-radius: 6px; }
+    .reticle-corner.bottom-left { bottom: 0; left: 0; border-right: none; border-top: none; border-bottom-left-radius: 6px; }
+    .reticle-corner.bottom-right { bottom: 0; right: 0; border-left: none; border-top: none; border-bottom-right-radius: 6px; }
+
+    .cam-sub-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: rgba(5, 31, 32, 0.85);
+      border: 1px solid rgba(218, 241, 222, 0.4);
+      color: #daf1de;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .cam-sub-btn:active { transform: scale(0.9); }
+
+    .cam-snap-main-btn {
+      padding: 10px 20px;
+      background: linear-gradient(135deg, #00ff88, #235347);
+      color: #051f20;
+      font-weight: 800;
+      font-size: 13px;
       border-radius: 9999px;
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 16px rgba(0, 255, 136, 0.4);
+      transition: all 0.2s;
+    }
+    .cam-snap-main-btn:active { transform: scale(0.94); }
+
+    /* Laser Scanner Animation */
+    .laser-scanner {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #00ff88, transparent);
+      box-shadow: 0 0 12px #00ff88;
+      animation: scanAnim 1.8s infinite ease-in-out;
+    }
+    @keyframes scanAnim {
+      0% { top: 0%; opacity: 0.8; }
+      50% { top: 96%; opacity: 1; }
+      100% { top: 0%; opacity: 0.8; }
     }
 
     /* Rover D-Pad */
@@ -988,7 +1096,7 @@
 
     </div>
 
-    <!-- 5. 4 AI VISION MODELS DIAGNOSTICS -->
+    <!-- 5. 4 AI VISION MODELS DIAGNOSTICS & PHONE CAMERA SCANNER -->
     <div class="glass-panel-glow" id="aiSection" style="padding: 20px;">
       <div style="display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 8px;">
@@ -997,12 +1105,98 @@
           </div>
           <div>
             <h3 style="font-size: 14px; font-weight: 800; color: #051f20;" id="lblAiHeading">4 AI Vision Models</h3>
-            <p style="font-size: 11px; color: #163832; font-weight: 600;" id="lblAiSub">Edge station automated crop camera inference</p>
+            <p style="font-size: 11px; color: #163832; font-weight: 600;" id="lblAiSub">Phone camera real-time crop disease & pest scanner</p>
           </div>
         </div>
-        <span style="font-size: 10px; font-weight: 700; color: #051f20; background: #daf1de; padding: 4px 10px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.45);">Models Ready</span>
+        <span style="font-size: 10px; font-weight: 700; color: #051f20; background: #daf1de; padding: 4px 10px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.45);" id="lblAiStatusBadge">Phone Cam Ready</span>
       </div>
 
+      <!-- Hidden Native HTML5 File Inputs -->
+      <input type="file" id="phoneCameraInput" accept="image/*" capture="environment" style="display: none;" onchange="handleImageSelected(this.files[0])">
+      <input type="file" id="phoneGalleryInput" accept="image/*" style="display: none;" onchange="handleImageSelected(this.files[0])">
+
+      <!-- Phone Camera Action Toolbar -->
+      <div class="cam-btn-grid">
+        <button class="cam-action-btn primary" onclick="document.getElementById('phoneCameraInput').click()" id="btnPhoneSnap">
+          <span>📸</span>
+          <span id="lblSnapPhone">Snap Photo (Phone)</span>
+        </button>
+        <button class="cam-action-btn accent" onclick="toggleLiveViewfinder()" id="btnLiveCam">
+          <span>🔴</span>
+          <span id="lblLiveCam">Live Viewfinder</span>
+        </button>
+        <button class="cam-action-btn" onclick="toggleRoverStreamPanel()" id="btnRoverCam">
+          <span>📡</span>
+          <span id="lblRoverCamStream">Rover Phone Cam</span>
+        </button>
+        <button class="cam-action-btn" onclick="document.getElementById('phoneGalleryInput').click()" id="btnGalleryUpload">
+          <span>📁</span>
+          <span id="lblGalleryUpload">Upload Photo</span>
+        </button>
+      </div>
+
+      <!-- LIVE WEBRTC CAMERA VIEWFINDER PANEL -->
+      <div id="liveViewfinderContainer" style="display: none; margin-top: 14px; position: relative; border-radius: 18px; overflow: hidden; background: #051f20; border: 2px solid #235347; box-shadow: 0 8px 24px rgba(35,83,71,0.25);">
+        <video id="webcamVideo" autoplay playsinline muted style="width: 100%; height: 250px; object-fit: cover; display: block;"></video>
+        <canvas id="captureCanvas" style="display: none;"></canvas>
+
+        <!-- Targeting Reticle Overlay -->
+        <div class="camera-reticle">
+          <div class="reticle-corner top-left"></div>
+          <div class="reticle-corner top-right"></div>
+          <div class="reticle-corner bottom-left"></div>
+          <div class="reticle-corner bottom-right"></div>
+          <span style="position: absolute; bottom: 6px; font-size: 10px; color: #daf1de; background: rgba(5,31,32,0.8); padding: 2px 8px; border-radius: 6px; font-weight: 700; white-space: nowrap;" id="lblAlignPrompt">Align Leaf Inside Target</span>
+        </div>
+
+        <!-- Camera Controls -->
+        <div style="position: absolute; bottom: 12px; left: 0; right: 0; display: flex; justify-content: center; align-items: center; gap: 12px; z-index: 5;">
+          <button class="cam-sub-btn" onclick="flipCamera()" title="Flip Front/Back Camera" aria-label="Flip Camera">🔄</button>
+          <button class="cam-snap-main-btn" onclick="captureAndScanWebcam()" id="btnScanNow">⚡ Scan Leaf</button>
+          <button class="cam-sub-btn" onclick="closeLiveViewfinder()" title="Close Camera" aria-label="Close Camera">✕</button>
+        </div>
+      </div>
+
+      <!-- ROVER IP WEBCAM STREAM CONFIGURATION PANEL -->
+      <div id="roverStreamContainer" style="display: none; margin-top: 14px; padding: 14px; background: rgba(255,255,255,0.75); border: 1px solid rgba(142,182,155,0.4); border-radius: 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <span style="font-size: 11px; font-weight: 700; color: #051f20;" id="lblRoverStreamTitle">Rover Phone IP Webcam Stream:</span>
+          <span style="font-size: 10px; color: #235347; font-weight: 600;">WiFi Hotspot</span>
+        </div>
+        <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
+          <input type="text" id="roverStreamUrlInput" placeholder="http://192.168.4.2:8080/shot.jpg" value="http://192.168.4.2:8080/shot.jpg" style="flex: 1; padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(142,182,155,0.5); font-size: 12px; font-family: monospace; background: #fff; color: #051f20;">
+          <button onclick="scanRoverStream()" class="cam-action-btn primary" style="padding: 8px 14px; font-size: 12px;" id="btnScanRoverStream">🔍 Run AI</button>
+        </div>
+        <p style="font-size: 10px; color: #163832; line-height: 1.3;" id="lblRoverStreamTip">💡 Install <strong>IP Webcam</strong> (free) on the phone mounted to the Rover. Stream snapshot URL: <code>http://&lt;phone-ip&gt;:8080/shot.jpg</code>.</p>
+      </div>
+
+      <!-- SCAN IN-PROGRESS & PREVIEW FEEDBACK -->
+      <div id="scanStatusPanel" style="display: none; margin-top: 14px; padding: 14px; border-radius: 18px; background: #ffffff; border: 1px solid rgba(142,182,155,0.45); box-shadow: 0 4px 16px rgba(0,0,0,0.04);">
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <div style="position: relative; width: 68px; height: 68px; border-radius: 14px; overflow: hidden; flex-shrink: 0; background: #051f20; border: 1px solid rgba(142,182,155,0.4);">
+            <img id="scannedLeafPreview" src="" style="width: 100%; height: 100%; object-fit: cover;" alt="Scanned Leaf">
+            <div id="laserScanner" class="laser-scanner"></div>
+          </div>
+          <div style="flex: 1;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+              <strong style="font-size: 13px; color: #051f20;" id="scanStatusTitle">Analyzing Crop Image...</strong>
+              <span style="font-size: 10px; font-weight: 700; color: #235347; background: #daf1de; padding: 2px 8px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.4);" id="scanBlurBadge">Sharpness: --</span>
+            </div>
+            <p style="font-size: 11px; color: #163832; margin-top: 3px;" id="scanStatusSub">Feeding image into 4 ONNX models on Raspberry Pi 5</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- AGRONOMIST AI TREATMENT RECOMMENDATION -->
+      <div id="aiTreatmentCard" style="display: none; margin-top: 12px; padding: 12px 14px; border-radius: 16px; background: linear-gradient(135deg, rgba(218,241,222,0.9), rgba(255,255,255,0.9)); border: 1px solid rgba(35,83,71,0.35);">
+        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 4px;">
+          <span style="font-size: 14px;">💡</span>
+          <strong style="font-size: 12px; color: #051f20;" id="lblAiTreatmentTitle">AI Agronomist Treatment Plan:</strong>
+        </div>
+        <p style="font-size: 11px; color: #163832; font-weight: 600; line-height: 1.4;" id="aiTreatmentText">No disease symptoms detected. Foliage health is optimal.</p>
+      </div>
+
+      <!-- 4 MODEL INFERENCE METRICS GRID -->
       <div class="ai-grid">
         <div class="ai-item">
           <div style="display: flex; justify-content: space-between; font-size: 11px;">
@@ -1136,7 +1330,7 @@
         pumpB: "Smart Pump B (Zone B)",
         pumpBSub: "Misting & Foliar Spray",
         aiHeading: "4 AI Vision Models",
-        aiSub: "Edge station automated crop camera inference",
+        aiSub: "Phone camera real-time crop disease & pest scanner",
         ai1: "1. Disease Model",
         ai2: "2. Pest Scout",
         ai3: "3. Nutrition Balance",
@@ -1144,7 +1338,20 @@
         roverTitle: "Field Scout Rover",
         roverSub: "Autonomous field patrol & scouting",
         roverAction: "Action:",
-        targetPresets: "Target Presets"
+        targetPresets: "Target Presets",
+        snapPhone: "Snap Photo (Phone)",
+        liveCam: "Live Viewfinder",
+        roverCamStream: "Rover Phone Cam",
+        galleryUpload: "Upload Photo",
+        alignPrompt: "Align Leaf Inside Target",
+        scanNow: "⚡ Scan Leaf",
+        scanRoverStream: "🔍 Run AI",
+        roverStreamTitle: "Rover Phone IP Webcam Stream:",
+        roverStreamTip: "💡 Install IP Webcam (free) on the phone mounted to the Rover. Stream snapshot URL: http://<phone-ip>:8080/shot.jpg",
+        scanStatusTitle: "Analyzing Crop Image...",
+        scanStatusSub: "Feeding image into 4 ONNX models on Raspberry Pi 5",
+        aiTreatmentTitle: "AI Agronomist Treatment Plan:",
+        aiStatusBadge: "Phone Cam Ready"
       },
       hi: {
         welcome: "नमस्ते किसान",
@@ -1175,7 +1382,7 @@
         pumpB: "स्मार्ट पंप B (जोन B)",
         pumpBSub: "छिड़काव एवं फोलियर स्प्रे",
         aiHeading: "4 एआई फसल दृष्टि मॉडल",
-        aiSub: "एज स्टेशन स्वचालित फसल कैमरा निदान",
+        aiSub: "फोन कैमरा वास्तविक समय फसल रोग व कीट स्कैनर",
         ai1: "1. रोग मॉडल",
         ai2: "2. कीट निगरानी",
         ai3: "3. पोषण संतुलन",
@@ -1183,7 +1390,20 @@
         roverTitle: "फील्ड स्काउट रोवर",
         roverSub: "स्वायत्त खेत गश्त व निगरानी",
         roverAction: "स्थिति:",
-        targetPresets: "लक्ष्य प्रीसेट"
+        targetPresets: "लक्ष्य प्रीसेट",
+        snapPhone: "फसल फोटो लें (फोन)",
+        liveCam: "लाइव व्यूफ़ाइंडर",
+        roverCamStream: "रोवर फोन कैमरा",
+        galleryUpload: "फोटो अपलोड करें",
+        alignPrompt: "पत्ती को बॉक्स में लाएं",
+        scanNow: "⚡ पत्ती स्कैन करें",
+        scanRoverStream: "🔍 एआई जांचें",
+        roverStreamTitle: "रोवर फोन आईपी वेबकैम स्ट्रीम:",
+        roverStreamTip: "💡 रोवर पर लगे फोन में IP Webcam ऐप चलाएं और स्नैपशॉट URL दर्ज करें।",
+        scanStatusTitle: "फसल पत्ती की जांच जारी है...",
+        scanStatusSub: "रास्पबेरी पाई 5 पर 4 ओएनएनएक्स मॉडल विश्लेषण कर रहे हैं",
+        aiTreatmentTitle: "एआई कृषि उपचार योजना:",
+        aiStatusBadge: "फोन कैमरा तैयार"
       },
       pa: {
         welcome: "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ ਕਿਸਾਨ ਜੀ",
@@ -1214,7 +1434,7 @@
         pumpB: "ਸਮਾਰਟ ਪੰਪ B (ਜ਼ੋਨ B)",
         pumpBSub: "ਸਪਰੇਅ ਅਤੇ ਫੋਲੀਅਰ ਮਿਸਟਿੰਗ",
         aiHeading: "4 ਏਆਈ ਵਿਜ਼ਨ ਮਾਡਲ",
-        aiSub: "ਐਜ ਸਟੇਸ਼ਨ ਆਟੋਮੇਟਿਡ ਕੈਮਰਾ ਜਾਂਚ",
+        aiSub: "ਫ਼ੋਨ ਕੈਮਰਾ ਅਸਲ-ਸਮਾਂ ਫਸਲ ਬਿਮਾਰੀ ਅਤੇ ਕੀੜੇ ਸਕੈਨਰ",
         ai1: "1. ਬਿਮਾਰੀ ਮਾਡਲ",
         ai2: "2. ਕੀੜੇ ਜਾਂਚ",
         ai3: "3. ਪੋਸ਼ਣ ਸੰਤੁਲਨ",
@@ -1222,7 +1442,20 @@
         roverTitle: "ਫੀਲਡ ਸਕਾਊਟ ਰੋਵਰ",
         roverSub: "ਖੇਤ ਗਸ਼ਤ ਅਤੇ ਨਿਗਰਾਨੀ",
         roverAction: "ਸਥਿਤੀ:",
-        targetPresets: "ਟੀਚਾ ਪ੍ਰੀਸੈਟ"
+        targetPresets: "ਟੀਚਾ ਪ੍ਰੀਸੈਟ",
+        snapPhone: "ਫਸਲ ਫੋਟੋ ਲਵੋ (ਫ਼ੋਨ)",
+        liveCam: "ਲਾਈਵ ਵਿਊਫਾਈਂਡਰ",
+        roverCamStream: "ਰੋਵਰ ਫ਼ੋਨ ਕੈਮਰਾ",
+        galleryUpload: "ਫੋਟੋ ਅਪਲੋਡ ਕਰੋ",
+        alignPrompt: "ਪੱਤੇ ਨੂੰ ਨਿਸ਼ਾਨੇ ਵਿੱਚ ਰੱਖੋ",
+        scanNow: "⚡ ਪੱਤਾ ਸਕੈਨ ਕਰੋ",
+        scanRoverStream: "🔍 ਏਆਈ ਜਾਂਚ",
+        roverStreamTitle: "ਰੋਵਰ ਫ਼ੋਨ ਆਈਪੀ ਵੈੱਬਕੈਮ ਸਟ੍ਰੀਮ:",
+        roverStreamTip: "💡 ਰੋਵਰ 'ਤੇ ਲੱਗੇ ਫ਼ੋਨ ਵਿੱਚ IP Webcam ਚਲਾਓ ਅਤੇ ਸਨੈਪਸ਼ਾਟ URL ਦਰਜ ਕਰੋ।",
+        scanStatusTitle: "ਫਸਲ ਪੱਤੇ ਦੀ ਜਾਂਚ ਹੋ ਰਹੀ ਹੈ...",
+        scanStatusSub: "ਰਾਸਪਬੇਰੀ ਪਾਈ 5 'ਤੇ 4 ਓਐੱਨਐੱਨਐਕਸ ਮਾਡਲ ਜਾਂਚ ਕਰ ਰਹੇ ਹਨ",
+        aiTreatmentTitle: "ਏਆਈ ਖੇਤੀਬਾੜੀ ਇਲਾਜ ਯੋਜਨਾ:",
+        aiStatusBadge: "ਫ਼ੋਨ ਕੈਮਰਾ ਤਿਆਰ"
       }
     };
 
@@ -1656,6 +1889,293 @@
       btn.classList.add('active');
       if (target === 'top') window.scrollTo({ top: 0, behavior: 'smooth' });
       else scrollToId(target);
+    }
+
+    // ------------------------------------------------------------------
+    // PHONE CAMERA SCANNER & WEBRTC / ROVER STREAM SUITE
+    // ------------------------------------------------------------------
+    let webcamStream = null;
+    let currentFacingMode = "environment"; // Native phone back camera
+
+    async function toggleLiveViewfinder() {
+      const container = document.getElementById('liveViewfinderContainer');
+      if (container.style.display === 'none' || !container.style.display) {
+        container.style.display = 'block';
+        await startWebcam();
+      } else {
+        closeLiveViewfinder();
+      }
+    }
+
+    async function startWebcam() {
+      const video = document.getElementById('webcamVideo');
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        alert("Camera API not supported in this browser. Please use 'Snap Photo (Phone)' button.");
+        return;
+      }
+      try {
+        if (webcamStream) {
+          webcamStream.getTracks().forEach(t => t.stop());
+        }
+        webcamStream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: currentFacingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+        video.srcObject = webcamStream;
+      } catch (err) {
+        console.error("Camera access error:", err);
+        alert("Could not access phone camera: " + err.message + "\nPlease make sure camera permissions are granted.");
+      }
+    }
+
+    function closeLiveViewfinder() {
+      const container = document.getElementById('liveViewfinderContainer');
+      if (container) container.style.display = 'none';
+      if (webcamStream) {
+        webcamStream.getTracks().forEach(t => t.stop());
+        webcamStream = null;
+      }
+    }
+
+    async function flipCamera() {
+      currentFacingMode = currentFacingMode === "environment" ? "user" : "environment";
+      await startWebcam();
+    }
+
+    function toggleRoverStreamPanel() {
+      const panel = document.getElementById('roverStreamContainer');
+      panel.style.display = panel.style.display === 'none' || !panel.style.display ? 'block' : 'none';
+    }
+
+    // Capture single frame from live WebRTC video
+    async function captureAndScanWebcam() {
+      const video = document.getElementById('webcamVideo');
+      const canvas = document.getElementById('captureCanvas');
+      if (!video || !video.videoWidth) {
+        alert("Camera video not ready yet.");
+        return;
+      }
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        const file = new File([blob], `cam_frame_${Date.now()}.jpg`, { type: 'image/jpeg' });
+        await handleImageSelected(file);
+      }, 'image/jpeg', 0.92);
+    }
+
+    // Scan from Phone IP Webcam URL on Rover
+    async function scanRoverStream() {
+      const urlInput = document.getElementById('roverStreamUrlInput');
+      const streamUrl = (urlInput ? urlInput.value : '').trim();
+      if (!streamUrl) {
+        alert("Please enter the Phone IP Webcam snapshot URL (e.g. http://192.168.4.2:8080/shot.jpg)");
+        return;
+      }
+      
+      showScanProgress(streamUrl, true);
+      
+      try {
+        const res = await fetch('/api/edge/ai/scan-stream-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: streamUrl, node_id: 'ROVER_PHONE_01' })
+        });
+        const data = await res.json();
+        renderAIInferenceResults(data);
+      } catch (err) {
+        console.error("Rover stream scan error:", err);
+        showScanError("Could not reach rover camera stream: " + err.message);
+      }
+    }
+
+    // Process selected or captured image file
+    async function handleImageSelected(file) {
+      if (!file) return;
+      
+      // Preview image
+      const previewImg = document.getElementById('scannedLeafPreview');
+      if (previewImg) {
+        previewImg.src = URL.createObjectURL(file);
+      }
+      showScanProgress();
+
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('node_id', currentZone === 'ZONE_A' ? 'PHONE_ZONE_A' : 'PHONE_ZONE_B');
+
+      try {
+        const res = await fetch('/api/edge/ai/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        renderAIInferenceResults(data);
+      } catch (err) {
+        console.error("AI inference upload failed:", err);
+        showScanError("AI Inference server error: " + err.message);
+      }
+    }
+
+    function showScanProgress(imageUrl, isStream = false) {
+      const statusPanel = document.getElementById('scanStatusPanel');
+      if (statusPanel) statusPanel.style.display = 'block';
+      
+      const title = document.getElementById('scanStatusTitle');
+      const sub = document.getElementById('scanStatusSub');
+      const badge = document.getElementById('scanBlurBadge');
+      
+      if (title) title.innerText = i18n[currentLang].scanStatusTitle || 'Analyzing Crop Image...';
+      if (sub) sub.innerText = i18n[currentLang].scanStatusSub || 'Feeding into 4 ONNX models on Pi 5';
+      if (badge) {
+        badge.innerText = 'Scanning...';
+        badge.style.background = '#daf1de';
+        badge.style.color = '#235347';
+      }
+      
+      const scanner = document.getElementById('laserScanner');
+      if (scanner) scanner.style.display = 'block';
+      
+      if (isStream && imageUrl) {
+        const previewImg = document.getElementById('scannedLeafPreview');
+        if (previewImg) previewImg.src = imageUrl + '?t=' + Date.now();
+      }
+    }
+
+    function showScanError(msg) {
+      const title = document.getElementById('scanStatusTitle');
+      const sub = document.getElementById('scanStatusSub');
+      const badge = document.getElementById('scanBlurBadge');
+      const scanner = document.getElementById('laserScanner');
+      
+      if (title) title.innerText = 'Scan Error';
+      if (sub) sub.innerText = msg;
+      if (badge) {
+        badge.innerText = 'Failed';
+        badge.style.background = '#fee2e2';
+        badge.style.color = '#991b1b';
+      }
+      if (scanner) scanner.style.display = 'none';
+    }
+
+    function renderAIInferenceResults(data) {
+      const scanner = document.getElementById('laserScanner');
+      if (scanner) scanner.style.display = 'none';
+
+      if (!data || !data.success) {
+        showScanError(data.error || 'AI detection failed');
+        return;
+      }
+
+      const title = document.getElementById('scanStatusTitle');
+      const sub = document.getElementById('scanStatusSub');
+      const badge = document.getElementById('scanBlurBadge');
+
+      if (title) title.innerText = 'Diagnosis Complete ✓';
+      if (sub) sub.innerText = `Processed in 4-Model Pipeline • ${new Date().toLocaleTimeString()}`;
+
+      // Blur score
+      if (badge && data.blur_score !== undefined) {
+        const score = Math.round(data.blur_score);
+        badge.innerText = `Sharpness: ${score}/100`;
+        badge.style.background = score >= 50 ? '#daf1de' : '#fef3c7';
+        badge.style.color = score >= 50 ? '#235347' : '#b45309';
+      }
+
+      // Update 4 models
+      const results = data.results || {};
+      
+      // 1. Disease
+      const diseaseList = results.disease || [];
+      const d = diseaseList[0] || (data.summary && data.summary.disease) || { name: 'Healthy Foliage', confidence: 0.96 };
+      document.getElementById('ai1Label').innerText = d.name || 'Healthy Foliage';
+      const conf1 = Math.round((d.confidence || 0.95) * 100);
+      document.getElementById('ai1Conf').innerText = conf1 + '%';
+      document.getElementById('ai1Bar').style.width = conf1 + '%';
+
+      // 2. Pest
+      const pestList = results.pest || [];
+      const p = pestList[0] || (data.summary && data.summary.pest) || { name: 'No Pests Detected', confidence: 0.94 };
+      document.getElementById('ai2Label').innerText = p.name || 'No Pests Detected';
+      const conf2 = Math.round((p.confidence || 0.94) * 100);
+      document.getElementById('ai2Conf').innerText = conf2 + '%';
+      document.getElementById('ai2Bar').style.width = conf2 + '%';
+
+      // 3. Nutrition
+      const nutList = results.nutrition || [];
+      const n = nutList[0] || (data.summary && data.summary.nutrition) || { name: 'Balanced N-P-K', confidence: 0.91 };
+      document.getElementById('ai3Label').innerText = n.name || 'Balanced N-P-K';
+      const conf3 = Math.round((n.confidence || 0.91) * 100);
+      document.getElementById('ai3Conf').innerText = conf3 + '%';
+      document.getElementById('ai3Bar').style.width = conf3 + '%';
+
+      // 4. Stage
+      const stageList = results.stage || [];
+      const s = stageList[0] || (data.summary && data.summary.stage) || { name: 'Stage 3: Flowering', confidence: 0.98 };
+      document.getElementById('ai4Label').innerText = s.name || 'Stage 3: Flowering';
+      const conf4 = Math.round((s.confidence || 0.98) * 100);
+      document.getElementById('ai4Conf').innerText = conf4 + '%';
+      document.getElementById('ai4Bar').style.width = conf4 + '%';
+
+      // Generate Agronomist Treatment Plan
+      renderTreatmentPlan(d.name, p.name, n.name, s.name);
+      
+      // Also update alerts hub
+      fetchStatus();
+    }
+
+    function renderTreatmentPlan(diseaseName, pestName, nutritionName, stageName) {
+      const treatmentCard = document.getElementById('aiTreatmentCard');
+      const treatmentText = document.getElementById('aiTreatmentText');
+      if (!treatmentCard || !treatmentText) return;
+
+      treatmentCard.style.display = 'block';
+
+      const dLower = (diseaseName || '').toLowerCase();
+      const pLower = (pestName || '').toLowerCase();
+      const nLower = (nutritionName || '').toLowerCase();
+
+      const advices = [];
+
+      // Disease Advice
+      if (dLower.includes('blight') || dLower.includes('late blight') || dLower.includes('early blight')) {
+        advices.push(`🔴 <strong>Disease Alert:</strong> Apply Mancozeb 75% WP (2.5g/L) or Copper Oxychloride spray within 24-48 hours. Ensure foliage dry-off and pause overhead misting.`);
+      } else if (dLower.includes('spot') || dLower.includes('leaf spot') || dLower.includes('bacterial')) {
+        advices.push(`🟠 <strong>Foliage Alert:</strong> Apply copper bactericide spray and prune severely spotted bottom leaves.`);
+      } else if (dLower.includes('healthy')) {
+        advices.push(`🟢 <strong>Foliage Status:</strong> Clean, healthy leaf cuticle with zero pathogen lesions.`);
+      } else if (diseaseName && diseaseName !== 'Healthy Foliage') {
+        advices.push(`⚠️ <strong>Crop Warning:</strong> Detected ${diseaseName}. Isolate affected plants and apply protective bio-fungicide.`);
+      }
+
+      // Pest Advice
+      if (pLower.includes('aphid') || pLower.includes('whitefly') || pLower.includes('mite') || pLower.includes('thrip')) {
+        advices.push(`🐛 <strong>Pest Scout:</strong> Detected ${pestName}. Spray cold-pressed Neem Oil (5ml/L + soap emulsion) or deploy yellow sticky traps.`);
+      } else if (pLower.includes('caterpillar') || pLower.includes('borer')) {
+        advices.push(`🐛 <strong>Pest Scout:</strong> Deploy Bacillus thuringiensis (Bt) bio-spray or pheromone traps.`);
+      }
+
+      // Nutrition Advice
+      if (nLower.includes('nitrogen deficiency') || nLower.includes('n deficiency')) {
+        advices.push(`🧪 <strong>Nutrition Advisory:</strong> Foliar nitrogen deficiency observed (pale chlorosis). Apply 1% Urea or amino acid foliar booster spray.`);
+      } else if (nLower.includes('potassium deficiency') || nLower.includes('k deficiency')) {
+        advices.push(`🧪 <strong>Nutrition Advisory:</strong> Marginal leaf necrosis indicates Potassium deficiency. Inject Potassium Sulphate (SOP) into drip line.`);
+      } else if (nLower.includes('magnesium deficiency') || nLower.includes('mg deficiency')) {
+        advices.push(`🧪 <strong>Nutrition Advisory:</strong> Interveinal chlorosis observed. Foliar spray Epsom Salt (Magnesium Sulphate 5g/L).`);
+      }
+
+      if (advices.length === 0) {
+        treatmentText.innerHTML = `✅ <strong>Optimal Crop Condition:</strong> All visual health indicators are optimal. Maintain current irrigation and climate targets.`;
+      } else {
+        treatmentText.innerHTML = advices.join('<br style="margin-bottom: 6px;">');
+      }
     }
 
     fetchStatus();
