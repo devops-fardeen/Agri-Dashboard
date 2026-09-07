@@ -1564,15 +1564,22 @@
       }
     }
 
+    let lastUserAutoToggleTime = 0;
+
     async function toggleRoverAutoMode() {
       roverAutoState = !roverAutoState;
+      lastUserAutoToggleTime = Date.now();
       const btn = document.getElementById('btnAutoMode');
       if (btn) {
         btn.innerText = roverAutoState ? '🤖 Auto: ON' : '🤖 Auto: OFF';
-        btn.classList.toggle('primary', roverAutoState);
-        btn.classList.toggle('accent', !roverAutoState);
+        btn.style.background = roverAutoState ? '#051f20' : '#ffffff';
+        btn.style.color = roverAutoState ? '#daf1de' : '#163832';
+        btn.style.borderColor = roverAutoState ? '#051f20' : 'rgba(142,182,155,0.5)';
       }
-      await sendRoverCmd(roverAutoState ? 'AUTO_ON' : 'AUTO_OFF');
+      const action = roverAutoState ? 'AUTO_ON' : 'AUTO_OFF';
+      const el = document.getElementById('roverActionTxt');
+      if (el) el.innerText = action;
+      await sendRoverCmd(action);
     }
 
     async function setRoverSpeed(val) {
@@ -1645,16 +1652,18 @@
         if (distLbl && data.distance_cm !== undefined) {
           distLbl.innerText = `Obstacle: ${data.distance_cm.toFixed(0)}cm`;
         }
-        if (actionLbl && data.movement) {
+        if (actionLbl && data.movement && (Date.now() - lastUserAutoToggleTime > 4000)) {
           actionLbl.innerText = data.movement;
         }
-        if (data.auto_mode !== undefined) {
-          roverAutoState = !!data.auto_mode;
+        if (data.auto_mode !== undefined && (Date.now() - lastUserAutoToggleTime > 4000)) {
+          const isAuto = (data.auto_mode === true || data.auto_mode === 'true' || data.auto_mode === 1 || data.auto_mode === 'ON');
+          roverAutoState = isAuto;
           const btn = document.getElementById('btnAutoMode');
           if (btn) {
             btn.innerText = roverAutoState ? '🤖 Auto: ON' : '🤖 Auto: OFF';
-            btn.classList.toggle('primary', roverAutoState);
-            btn.classList.toggle('accent', !roverAutoState);
+            btn.style.background = roverAutoState ? '#051f20' : '#ffffff';
+            btn.style.color = roverAutoState ? '#daf1de' : '#163832';
+            btn.style.borderColor = roverAutoState ? '#051f20' : 'rgba(142,182,155,0.5)';
           }
         }
       }

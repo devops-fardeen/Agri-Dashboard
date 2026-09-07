@@ -360,6 +360,22 @@ def get_rover_state() -> Dict[str, Any]:
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
+def update_rover_battery(battery_percent: int) -> bool:
+    """Updates the rover battery percentage in SQLite."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    pct = max(0, min(100, int(battery_percent)))
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO rover_state (id, heading, speed, battery, last_action, updated_at)
+            VALUES (1, 'NW (312°)', 0.0, ?, 'STOP', ?)
+            ON CONFLICT(id) DO UPDATE SET
+                battery = excluded.battery,
+                updated_at = excluded.updated_at
+        """, (pct, now_iso))
+        conn.commit()
+    return True
+
 def update_rover_command(action: str) -> Dict[str, Any]:
     """Updates rover movement command and simulates speed/heading changes."""
     action_clean = action.upper().strip()
@@ -370,6 +386,8 @@ def update_rover_command(action: str) -> Dict[str, Any]:
         "MOVE_BACKWARD": 0.4,
         "MOVE_LEFT": 0.3,
         "MOVE_RIGHT": 0.3,
+        "AUTO_ON": 0.6,
+        "AUTO_OFF": 0.0,
         "STOP": 0.0
     }
     heading_map = {
@@ -377,6 +395,8 @@ def update_rover_command(action: str) -> Dict[str, Any]:
         "MOVE_BACKWARD": "S (180°)",
         "MOVE_LEFT": "W (270°)",
         "MOVE_RIGHT": "E (090°)",
+        "AUTO_ON": "N (000°)",
+        "AUTO_OFF": "NW (312°)",
         "STOP": "NW (312°)"
     }
     
