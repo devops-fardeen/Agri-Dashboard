@@ -1475,6 +1475,13 @@
       if (titleEl) {
         titleEl.innerText = currentZone === 'ZONE_A' ? t.fieldA : t.fieldB;
       }
+      const subEl = document.getElementById('lblStationSub');
+      if (subEl) {
+        const host = window.location.host || "192.168.43.X:8000";
+        if (lang === 'hi') subEl.innerText = `फोन हॉटस्पॉट गेटवे • ${host}`;
+        else if (lang === 'pa') subEl.innerText = `ਫ਼ੋਨ ਹਾਟਸਪੌਟ ਗੇਟਵੇਅ • ${host}`;
+        else subEl.innerText = `Phone Hotspot Gateway • ${host}`;
+      }
       if (stateCache) evaluateAlerts(stateCache);
     }
 
@@ -2178,6 +2185,7 @@
       }
     }
 
+    setLang('en');
     fetchStatus();
     setInterval(fetchStatus, 5000);
   </script>
