@@ -143,12 +143,51 @@ def get_weather():
 
 @app.get("/api/edge/rover")
 def get_rover():
-    """Returns the field scout rover telemetry state."""
+    """Returns the field scout rover telemetry state from SQLite."""
     state = database.get_rover_state()
     return {
         "success": True,
         "rover": state
     }
+
+@app.get("/api/edge/rover/telemetry")
+def get_rover_live_telemetry(ip: Optional[str] = None):
+    """Directly queries the live Rover ESP32 WebServer for battery, distance, and movement state."""
+    rover_ip = ip or os.getenv("ROVER_IP", "10.202.46.196")
+    try:
+        resp = requests.get(f"http://{rover_ip}/telemetry", timeout=1.5)
+        if resp.status_code == 200:
+            data = resp.json()
+            # Update SQLite with live telemetry
+            if "battery_percent" in data:
+                database.update_rover_battery(int(data["battery_percent"]))
+            if "movement" in data:
+                database.update_rover_command(data["movement"])
+            return {
+                "success": True,
+                "online": True,
+                "telemetry": data
+            }
+    except Exception as e:
+        pass
+    
+    # Fallback to local DB state
+    state = database.get_rover_state()
+    return {
+        "success": True,
+        "online": False,
+        "telemetry": state
+    }
+
+@app.post("/api/edge/rover/speed/{value}")
+def set_rover_speed_direct(value: int = Path(..., ge=0, le=255), ip: Optional[str] = None):
+    """Sets the rover motor speed directly."""
+    rover_ip = ip or os.getenv("ROVER_IP", "10.202.46.196")
+    try:
+        resp = requests.get(f"http://{rover_ip}/speed?value={value}", timeout=1.5)
+        return {"success": True, "speed": value, "rover_resp": resp.text}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.post("/api/edge/rover/command")
 def send_rover_command(payload: RoverCommandRequest):
