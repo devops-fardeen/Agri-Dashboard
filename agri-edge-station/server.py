@@ -39,6 +39,17 @@ INDEX_FILE = os.path.join(STATIC_DIR, "index.html")
 class RoverCommandRequest(BaseModel):
     action: str
 
+class IngestTelemetryRequest(BaseModel):
+    zone_id: str = "ZONE_A"
+    node_id: str = "SLAVE_01"
+    soil_moisture: float
+    soil_temp: Optional[float] = 24.0
+    ambient_temp: Optional[float] = 27.5  # DHT11 Temperature
+    ambient_humidity: Optional[float] = 65.0  # DHT11 Humidity
+    light_lux: Optional[float] = 0.0
+    barometric_pressure: Optional[float] = 1013.25
+    pump_active: Optional[int] = 0
+
 class AIDetectionRequest(BaseModel):
     node_id: str = "NODE_01"
     model_name: str
@@ -50,6 +61,42 @@ class AIDetectionRequest(BaseModel):
 # ----------------------------------------------------------------------
 # API ENDPOINTS
 # ----------------------------------------------------------------------
+
+@app.post("/api/edge/telemetry")
+def ingest_telemetry(payload: IngestTelemetryRequest):
+    """Ingests live sensor readings from Master ESP32 / Slave Node via ESP-NOW into SQLite."""
+    row_id = database.log_telemetry(
+        zone_id=payload.zone_id,
+        soil_moisture=payload.soil_moisture,
+        soil_temp=payload.soil_temp or (payload.ambient_temp or 24.0),
+        ambient_temp=payload.ambient_temp or (payload.soil_temp or 27.0),
+        ambient_humidity=payload.ambient_humidity or 65.0,
+        pump_active=payload.pump_active or 0,
+        light_lux=payload.light_lux or 0.0,
+        barometric_pressure=payload.barometric_pressure or 1013.25,
+        node_id=payload.node_id
+    )
+    return {
+        "success": True,
+        "id": row_id,
+        "message": "Telemetry logged into edge buffer",
+        "zone_id": payload.zone_id
+    }
+
+@app.get("/api/edge/actuators")
+def get_actuators_state():
+    """Returns simple actuator relay states for ESP32 hardware relay switching."""
+    return database.get_all_actuators()
+
+@app.get("/api/edge/rover/command/latest")
+def get_latest_rover_command():
+    """Returns the latest rover navigation command for Rover ESP32 motor driver."""
+    state = database.get_rover_state()
+    return {
+        "action": state.get("last_action", "STOP"),
+        "speed": state.get("speed", 0.0),
+        "battery": state.get("battery", 84)
+    }
 
 @app.get("/api/edge/status")
 def get_edge_status():
