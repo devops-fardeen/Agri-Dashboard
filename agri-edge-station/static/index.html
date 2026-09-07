@@ -1158,16 +1158,16 @@
       </div>
 
       <!-- ROVER IP WEBCAM STREAM CONFIGURATION PANEL -->
-      <div id="roverStreamContainer" style="display: none; margin-top: 14px; padding: 14px; background: rgba(255,255,255,0.75); border: 1px solid rgba(142,182,155,0.4); border-radius: 18px;">
+      <div id="roverStreamContainer" style="display: none; margin-top: 14px; padding: 14px; background: rgba(255,255,255,0.75); border: 1px solid rgba(142,182,182,0.4); border-radius: 18px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <span style="font-size: 11px; font-weight: 700; color: #051f20;" id="lblRoverStreamTitle">Rover Phone IP Webcam Stream:</span>
           <span style="font-size: 10px; color: #235347; font-weight: 600;">WiFi Hotspot</span>
         </div>
         <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 8px;">
-          <input type="text" id="roverStreamUrlInput" placeholder="http://192.168.4.2:8080/shot.jpg" value="http://192.168.4.2:8080/shot.jpg" style="flex: 1; padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(142,182,155,0.5); font-size: 12px; font-family: monospace; background: #fff; color: #051f20;">
+          <input type="text" id="roverStreamUrlInput" placeholder="http://10.202.46.77:8080/shot.jpg" value="http://10.202.46.77:8080/shot.jpg" style="flex: 1; padding: 8px 12px; border-radius: 12px; border: 1px solid rgba(142,182,155,0.5); font-size: 12px; font-family: monospace; background: #fff; color: #051f20;">
           <button onclick="scanRoverStream()" class="cam-action-btn primary" style="padding: 8px 14px; font-size: 12px;" id="btnScanRoverStream">🔍 Run AI</button>
         </div>
-        <p style="font-size: 10px; color: #163832; line-height: 1.3;" id="lblRoverStreamTip">💡 Install <strong>IP Webcam</strong> (free) on the phone mounted to the Rover. Stream snapshot URL: <code>http://&lt;phone-ip&gt;:8080/shot.jpg</code>.</p>
+        <p style="font-size: 10px; color: #163832; line-height: 1.3;" id="lblRoverStreamTip">💡 Install <strong>IP Webcam</strong> (free) on the phone mounted to the Rover. Stream snapshot URL: <code>http://10.202.46.77:8080/shot.jpg</code>.</p>
       </div>
 
       <!-- SCAN IN-PROGRESS & PREVIEW FEEDBACK -->
@@ -1267,9 +1267,17 @@
 
       <!-- Speed & Target Rover IP -->
       <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.65); padding: 8px 12px; border-radius: 14px; margin-bottom: 8px; border: 1px solid rgba(142,182,155,0.35); font-size: 11px;">
-        <span style="color: #163832; font-weight: 600;">⚡ Speed: <strong id="valRoverSpeed">180</strong></span>
-        <input type="range" min="80" max="255" value="180" step="5" style="width: 100px; accent-color: #235347;" onchange="setRoverSpeed(this.value)">
+        <span style="color: #163832; font-weight: 600;">⚡ Speed: <strong id="valRoverSpeed">190</strong></span>
+        <input id="roverSpeedSlider" type="range" min="60" max="255" value="190" step="5" style="width: 100px; accent-color: #235347;" oninput="setRoverSpeed(this.value)" onchange="setRoverSpeed(this.value)">
         <input type="text" id="roverIpInput" placeholder="Rover IP" value="10.202.46.196" oninput="onRoverIpChanged(this.value)" style="width: 95px; font-size: 10px; padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(142,182,155,0.5); text-align: center;">
+      </div>
+
+      <!-- Manual Mode Camera Photo Capture Button -->
+      <div style="margin-bottom: 8px;">
+        <button class="cam-action-btn primary" onclick="captureRoverPhotoManual()" style="width: 100%; font-size: 12px; padding: 10px 14px; border-radius: 14px; display: flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 12px rgba(35,83,71,0.25);" id="btnRoverManualSnap">
+          <span style="font-size: 16px;">📸</span>
+          <span style="font-weight: 800;">Click Crop Photo & Run AI Diagnostics</span>
+        </button>
       </div>
 
       <div style="display: flex; justify-content: space-between; font-size: 11px; border-top: 1px solid rgba(142,182,155,0.3); padding-top: 8px;">
@@ -2106,6 +2114,41 @@
         console.error("Rover stream scan error:", err);
         showScanError("Could not reach rover camera stream: " + err.message);
       }
+    }
+
+    // Manual Mode Rover Photo Capture & AI Diagnosis
+    async function captureRoverPhotoManual() {
+      const el = document.getElementById('roverActionTxt');
+      if (el) el.innerText = '📸 CAPTURING PLANT PHOTO...';
+      
+      const streamInput = document.getElementById('roverStreamUrlInput');
+      const streamUrl = (streamInput ? streamInput.value.trim() : '') || 'http://10.202.46.77:8080/shot.jpg';
+
+      showScanProgress(streamUrl, true);
+
+      // 1. Try to snapshot directly from Rover Phone stream URL
+      try {
+        const res = await fetch('/api/edge/ai/scan-stream-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: streamUrl, node_id: 'ROVER_MANUAL_CAM' }),
+          signal: AbortSignal.timeout(6000)
+        });
+        if (res.ok) {
+          const data = await res.json();
+          renderAIInferenceResults(data);
+          if (el) el.innerText = '✓ SCAN COMPLETE';
+          const aiSec = document.getElementById('aiSection');
+          if (aiSec) aiSec.scrollIntoView({ behavior: 'smooth' });
+          return;
+        }
+      } catch (e) {
+        console.log('Stream snapshot fallback to native camera:', e);
+      }
+
+      // 2. Fallback to phone camera file picker
+      const camInput = document.getElementById('phoneCameraInput');
+      if (camInput) camInput.click();
     }
 
     // Process selected or captured image file

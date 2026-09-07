@@ -32,20 +32,30 @@ WebServer server(80);
 #define BATTERY_PIN 35
 
 // =====================================================
-// OPERATIONAL VARIABLES & STATE
+// SPEED & MOVEMENT STATE
 // =====================================================
 int motorSpeed = 190;
 String currentMovement = "STOP";
 
-// Autonomous Navigation Constants
-const float OBSTACLE_THRESHOLD_CM = 22.0; // Trigger distance in cm
-const unsigned long AUTO_TURN_DURATION = 350; // ms to pivot away from obstacle
-const unsigned long TURN_COOLDOWN_MS = 1000;  // ms to drive forward before allowing another turn
+// =====================================================
+// AUTONOMOUS PATROL & PLANT SCANNING ROUTINE
+// Routine: Drive 1.5s -> Stop 1.0s to scan plant with phone camera -> Drive 1.5s
+// Obstacle: If distance <= 25cm, stop & use IR left/right to find clear path!
+// =====================================================
+const unsigned long PATROL_MOVE_DURATION = 1500; // ms: Move forward along crop row
+const unsigned long SCAN_PAUSE_DURATION  = 1000; // ms: Stop 1 second to capture phone camera AI photo
+const unsigned long EVADE_TURN_DURATION  = 400;  // ms: Turn away from detected obstacle
+const float FRONT_OBSTACLE_THRESHOLD_CM  = 25.0; // cm: Obstacle detection distance
+
+enum AutoState {
+  STATE_PATROL_FORWARD,   // Moving to next plant
+  STATE_SCAN_PAUSE,       // Stopped 1s for plant diagnosis photo
+  STATE_EVADE_OBSTACLE    // Steering around front obstacle
+};
 
 bool autoMode = false;
-bool isTurning = false;
-unsigned long turnStartTime = 0;
-unsigned long lastTurnCompletedTime = 0;
+AutoState autoPhase = STATE_PATROL_FORWARD;
+unsigned long phaseStartTime = 0;
 
 unsigned long lastSensorCheck = 0;
 const unsigned long SENSOR_CHECK_INTERVAL = 50; // ms
@@ -148,29 +158,6 @@ void turnRight() {
   currentMovement = "RIGHT";
 }
 
-// Re-applies active speed to motors immediately
-void refreshActiveMovement() {
-  if (currentMovement == "FORWARD" || currentMovement == "AUTO" || currentMovement == "AUTO-FORWARD") {
-    leftForward(motorSpeed);
-    rightForward(motorSpeed);
-  } else if (currentMovement == "BACKWARD") {
-    leftBackward(motorSpeed);
-    rightBackward(motorSpeed);
-  } else if (currentMovement == "LEFT" || currentMovement == "AUTO-AVOID-LEFT") {
-    leftBackward(motorSpeed);
-    rightForward(motorSpeed);
-  } else if (currentMovement == "RIGHT" || currentMovement == "AUTO-AVOID-RIGHT") {
-    leftForward(motorSpeed);
-    rightBackward(motorSpeed);
-  } else if (currentMovement == "AUTO-NUDGE-RIGHT") {
-    leftForward(motorSpeed);
-    rightForward((int)(motorSpeed * 0.60));
-  } else if (currentMovement == "AUTO-NUDGE-LEFT") {
-    leftForward((int)(motorSpeed * 0.60));
-    rightForward(motorSpeed);
-  }
-}
-
 // =====================================================
 // SENSORS (Ultrasonic & Infrared)
 // =====================================================
@@ -191,73 +178,98 @@ float getDistance() {
 }
 
 bool leftBlocked() {
-  return digitalRead(LEFT_IR) == LOW;
+  return digitalRead(LEFT_IR) == LOW; // Low means obstacle detected
 }
 
 bool rightBlocked() {
-  return digitalRead(RIGHT_IR) == LOW;
+  return digitalRead(RIGHT_IR) == LOW; // Low means obstacle detected
 }
 
 // =====================================================
-// CONTINUOUS AUTONOMOUS ROW FOLLOWING & EVASION
+// AUTONOMOUS ROUTINE: PATROL -> STOP 1s (SCAN) -> PATROL
+// WITH IR-ASSISTED OBSTACLE EVASION
 // =====================================================
-void runAutonomousRoutine() {
+void runAutonomousPatrolAndScan() {
   unsigned long now = millis();
 
-  // 1. If currently in an avoidance turn, check if turn duration is done
-  if (isTurning) {
-    if (now - turnStartTime >= AUTO_TURN_DURATION) {
-      isTurning = false;
-      lastTurnCompletedTime = now;
-      // Immediately resume continuous forward propulsion!
-      moveForward();
-      currentMovement = "AUTO-FORWARD";
+  // 1. Check front obstacle periodically
+  if (now - lastSensorCheck >= SENSOR_CHECK_INTERVAL) {
+    lastSensorCheck = now;
+    float distance = getDistance();
+
+    // If an obstacle is detected in front, switch to evasion immediately!
+    if (distance <= FRONT_OBSTACLE_THRESHOLD_CM && autoPhase != STATE_EVADE_OBSTACLE) {
+      stopMotors();
+      bool leftClear = !leftBlocked();
+      bool rightClear = !rightBlocked();
+
+      if (leftClear && !rightClear) {
+        // Left is open -> Turn Left
+        turnLeft();
+        currentMovement = "EVADE-LEFT";
+      } else if (rightClear && !leftClear) {
+        // Right is open -> Turn Right
+        turnRight();
+        currentMovement = "EVADE-RIGHT";
+      } else if (leftClear && rightClear) {
+        // Both sides open -> Turn Right
+        turnRight();
+        currentMovement = "EVADE-RIGHT";
+      } else {
+        // Both sides blocked -> Back up
+        moveBackward();
+        currentMovement = "EVADE-BACK";
+      }
+
+      autoPhase = STATE_EVADE_OBSTACLE;
+      phaseStartTime = now;
+      return;
     }
-    return;
   }
 
-  // 2. Periodic sensor check rate
-  if (now - lastSensorCheck < SENSOR_CHECK_INTERVAL) return;
-  lastSensorCheck = now;
+  // 2. State Machine: Patrol -> Scan 1s -> Patrol
+  switch (autoPhase) {
+    case STATE_PATROL_FORWARD:
+      // Driving forward along crop row
+      leftForward(motorSpeed);
+      rightForward(motorSpeed);
+      currentMovement = "PATROL-FORWARD";
 
-  float distance = getDistance();
-  bool leftObs = leftBlocked();
-  bool rightObs = rightBlocked();
+      if (now - phaseStartTime >= PATROL_MOVE_DURATION) {
+        // Pause 1 second at this crop plant for phone camera scanning!
+        stopMotors();
+        currentMovement = "SCANNING PLANT";
+        autoPhase = STATE_SCAN_PAUSE;
+        phaseStartTime = now;
+      }
+      break;
 
-  // 3. Front Obstacle Collision Evasion (with turn cooldown)
-  if (distance <= OBSTACLE_THRESHOLD_CM && (now - lastTurnCompletedTime > TURN_COOLDOWN_MS)) {
-    if (!leftObs && rightObs) {
-      // Turn left away from obstacle
-      turnLeft();
-      isTurning = true;
-      turnStartTime = now;
-      currentMovement = "AUTO-AVOID-LEFT";
-    } else {
-      // Turn right away from obstacle
-      turnRight();
-      isTurning = true;
-      turnStartTime = now;
-      currentMovement = "AUTO-AVOID-RIGHT";
-    }
-    return;
-  }
+    case STATE_SCAN_PAUSE:
+      // Stopped in front of plant for 1.0 second so camera takes clear leaf photo
+      stopMotors();
+      currentMovement = "SCANNING PLANT";
 
-  // 4. Crop Row Boundary Alignment (IR Sensors)
-  if (leftObs && !rightObs) {
-    // Row on left -> steer gently right without stopping
-    leftForward(motorSpeed);
-    rightForward((int)(motorSpeed * 0.60));
-    currentMovement = "AUTO-NUDGE-RIGHT";
-  } else if (rightObs && !leftObs) {
-    // Row on right -> steer gently left without stopping
-    leftForward((int)(motorSpeed * 0.60));
-    rightForward(motorSpeed);
-    currentMovement = "AUTO-NUDGE-LEFT";
-  } else {
-    // Both sides clear or centered -> full speed ahead!
-    leftForward(motorSpeed);
-    rightForward(motorSpeed);
-    currentMovement = "AUTO-FORWARD";
+      if (now - phaseStartTime >= SCAN_PAUSE_DURATION) {
+        // Resume moving forward to next plant!
+        leftForward(motorSpeed);
+        rightForward(motorSpeed);
+        currentMovement = "PATROL-FORWARD";
+        autoPhase = STATE_PATROL_FORWARD;
+        phaseStartTime = now;
+      }
+      break;
+
+    case STATE_EVADE_OBSTACLE:
+      // Performing evasion maneuver
+      if (now - phaseStartTime >= EVADE_TURN_DURATION) {
+        // Evasion completed -> Resume forward patrol!
+        leftForward(motorSpeed);
+        rightForward(motorSpeed);
+        currentMovement = "PATROL-FORWARD";
+        autoPhase = STATE_PATROL_FORWARD;
+        phaseStartTime = now;
+      }
+      break;
   }
 }
 
@@ -298,33 +310,28 @@ void handleCommand() {
 
   if (cmd == "forward" || cmd == "start" || cmd == "move_forward") {
     autoMode = false;
-    isTurning = false;
     moveForward();
   } else if (cmd == "backward" || cmd == "move_backward") {
     autoMode = false;
-    isTurning = false;
     moveBackward();
   } else if (cmd == "left" || cmd == "move_left") {
     autoMode = false;
-    isTurning = false;
     turnLeft();
   } else if (cmd == "right" || cmd == "move_right") {
     autoMode = false;
-    isTurning = false;
     turnRight();
   } else if (cmd == "stop") {
     autoMode = false;
-    isTurning = false;
     stopMotors();
   } else if (cmd == "auto_on" || cmd == "auto") {
     autoMode = true;
-    isTurning = false;
-    currentMovement = "AUTO-FORWARD";
-    moveForward(); // Starts driving forward immediately!
-    Serial.println("✓ Auto Mode ENGAGED — Driving autonomously!");
+    autoPhase = STATE_PATROL_FORWARD;
+    phaseStartTime = millis();
+    moveForward();
+    currentMovement = "PATROL-FORWARD";
+    Serial.println("✓ Auto Mode ENGAGED: Patrol -> Scan (1s) -> Patrol Loop Active!");
   } else if (cmd == "auto_off") {
     autoMode = false;
-    isTurning = false;
     stopMotors();
     Serial.println("✓ Auto Mode DISENGAGED — Stopped.");
   } else {
@@ -352,7 +359,16 @@ void handleSpeed() {
   Serial.print(">>> Speed Updated to: ");
   Serial.println(motorSpeed);
 
-  refreshActiveMovement();
+  if (currentMovement == "FORWARD" || currentMovement == "PATROL-FORWARD") {
+    moveForward();
+  } else if (currentMovement == "BACKWARD") {
+    moveBackward();
+  } else if (currentMovement == "LEFT") {
+    turnLeft();
+  } else if (currentMovement == "RIGHT") {
+    turnRight();
+  }
+
   server.send(200, "text/plain", "SPEED OK");
 }
 
@@ -430,7 +446,7 @@ void connectWiFi() {
 // SETUP
 // =====================================================
 void setup() {
-  // Disable Brownout detector to handle BTS7960 motor current surges
+  // Disable Brownout detector for BTS7960 motor current surges
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
   Serial.begin(115200);
@@ -486,16 +502,16 @@ void loop() {
     }
   }
 
-  // Autonomous Mode Execution
+  // Autonomous Patrol & Scanning Routine
   if (autoMode) {
-    runAutonomousRoutine();
+    runAutonomousPatrolAndScan();
   }
 
   // Serial Diagnostic Telemetry (Every 1 second)
   if (now - lastSerialLog >= SERIAL_LOG_INTERVAL) {
     lastSerialLog = now;
     float dist = getDistance();
-    Serial.printf("[STATUS] Mode: %s | Move: %s | Spd: %d | Dist: %.1fcm | L_IR: %d | R_IR: %d\n",
+    Serial.printf("[STATUS] Mode: %s | Phase: %s | Spd: %d | Dist: %.1fcm | L_IR: %d | R_IR: %d\n",
       autoMode ? "AUTO" : "MANUAL",
       currentMovement.c_str(),
       motorSpeed,
