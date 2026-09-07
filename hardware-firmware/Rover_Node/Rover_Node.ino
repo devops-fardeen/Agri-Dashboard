@@ -35,7 +35,7 @@ WebServer server(80);
 #define PWM_FREQ       1000
 #define PWM_RESOLUTION 8
 
-int motorSpeed = 180;
+int motorSpeed = 190;
 
 // =====================================================
 // BATTERY CALIBRATION (3S LiPo: 11.1V - 12.6V)
@@ -45,21 +45,15 @@ float voltageCalibration = 5.00;
 // =====================================================
 // AUTONOMOUS CROP ROW FOLLOWING MODE
 // =====================================================
-const float FRONT_STOP_DISTANCE = 35.0;
+const float FRONT_OBSTACLE_DISTANCE = 30.0; // cm
 
 bool autoMode = false;
 bool autoTurning = false;
 unsigned long autoTurnStart = 0;
-const unsigned long AUTO_TURN_TIME = 450;
+const unsigned long AUTO_TURN_TIME = 450; // ms for turn evasion
 
 unsigned long lastAutoCheck = 0;
-const unsigned long AUTO_CHECK_INTERVAL = 80;
-
-// =====================================================
-// PI COMMUNICATION WATCHDOG & HEARTBEAT
-// =====================================================
-unsigned long lastPiHeartbeat = 0;
-const unsigned long PI_TIMEOUT = 3000;
+const unsigned long AUTO_CHECK_INTERVAL = 60; // ms
 
 String currentMovement = "STOP";
 
@@ -82,7 +76,7 @@ void setupPWM() {
 }
 
 // =====================================================
-// LEFT MOTOR (BTS7960)
+// MOTOR CONTROL PRIMITIVES (BTS7960)
 // =====================================================
 void leftForward(int speed) {
   speed = constrain(speed, 0, 255);
@@ -96,9 +90,6 @@ void leftBackward(int speed) {
   ledcWrite(LEFT_LPWM, speed);
 }
 
-// =====================================================
-// RIGHT MOTOR (BTS7960)
-// =====================================================
 void rightForward(int speed) {
   speed = constrain(speed, 0, 255);
   ledcWrite(RIGHT_RPWM, speed);
@@ -111,9 +102,6 @@ void rightBackward(int speed) {
   ledcWrite(RIGHT_LPWM, speed);
 }
 
-// =====================================================
-// STOP
-// =====================================================
 void stopMotors() {
   ledcWrite(LEFT_RPWM, 0);
   ledcWrite(LEFT_LPWM, 0);
@@ -123,7 +111,7 @@ void stopMotors() {
 }
 
 // =====================================================
-// MANUAL STEERING MOVEMENTS
+// DIRECTIONAL MOVEMENTS
 // =====================================================
 void moveForward() {
   leftForward(motorSpeed);
@@ -159,7 +147,7 @@ float getDistance() {
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
+  long duration = pulseIn(ECHO_PIN, HIGH, 25000); // 25ms timeout (~4m max)
   if (duration == 0) return 999.0;
   return (duration * 0.0343 / 2.0);
 }
@@ -186,16 +174,18 @@ float getBatteryVoltage() {
 }
 
 // =====================================================
-// AUTOMATIC ROW FOLLOWING & COLLISION AVOIDANCE
+// CONTINUOUS AUTONOMOUS ROW FOLLOWING & EVASION
 // =====================================================
 void automaticMode() {
   unsigned long now = millis();
 
-  // Handle active timed turn
+  // Handle active timed turn for collision avoidance
   if (autoTurning) {
     if (now - autoTurnStart >= AUTO_TURN_TIME) {
-      stopMotors();
       autoTurning = false;
+      // Immediately resume continuous forward drive after turn!
+      moveForward();
+      currentMovement = "AUTO-FORWARD";
     }
     return;
   }
@@ -208,46 +198,43 @@ void automaticMode() {
   bool leftObstacle = leftBlocked();
   bool rightObstacle = rightBlocked();
 
-  // Front obstacle auto-evasion
-  if (distance < FRONT_STOP_DISTANCE) {
-    stopMotors();
-
+  // Front obstacle auto-evasion (< 30 cm)
+  if (distance > 1.0 && distance < FRONT_OBSTACLE_DISTANCE) {
     if (!leftObstacle && rightObstacle) {
       turnLeft();
       autoTurning = true;
       autoTurnStart = now;
+      currentMovement = "AUTO-AVOID-LEFT";
     } else if (!rightObstacle && leftObstacle) {
       turnRight();
       autoTurning = true;
       autoTurnStart = now;
-    } else if (!leftObstacle && !rightObstacle) {
-      turnLeft();
+      currentMovement = "AUTO-AVOID-RIGHT";
+    } else {
+      turnRight();
       autoTurning = true;
       autoTurnStart = now;
-    } else {
-      stopMotors();
+      currentMovement = "AUTO-AVOID-RIGHT";
     }
     return;
   }
 
-  // Row edge alignment
+  // Crop row boundary following via IR sensors
   if (leftObstacle && !rightObstacle) {
-    leftForward(110);
-    rightForward(motorSpeed);
-    currentMovement = "AUTO-RIGHT";
-  } else if (rightObstacle && !leftObstacle) {
+    // Left row detected -> steer gently right without stopping
     leftForward(motorSpeed);
-    rightForward(110);
-    currentMovement = "AUTO-LEFT";
-  } else if (!leftObstacle && !rightObstacle) {
-    moveForward();
+    rightForward((int)(motorSpeed * 0.55));
+    currentMovement = "AUTO-NUDGE-RIGHT";
+  } else if (rightObstacle && !leftObstacle) {
+    // Right row detected -> steer gently left without stopping
+    leftForward((int)(motorSpeed * 0.55));
+    rightForward(motorSpeed);
+    currentMovement = "AUTO-NUDGE-LEFT";
   } else {
-    stopMotors();
+    // Both sides clear or centered -> continuous forward drive!
+    moveForward();
+    currentMovement = "AUTO-FORWARD";
   }
-}
-
-void updateHeartbeat() {
-  lastPiHeartbeat = millis();
 }
 
 // =====================================================
@@ -266,19 +253,27 @@ void handleRoot() {
   message += "Distance: " + String(getDistance(), 1) + " cm\n";
   message += "================================\n";
 
+  server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "text/plain", message);
 }
 
 void handleCommand() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
   if (!server.hasArg("move")) {
-    server.send(400, "text/plain", "Missing command");
+    server.send(400, "text/plain", "Missing move argument");
     return;
   }
 
   String command = server.arg("move");
   command.toLowerCase();
-  updateHeartbeat();
+  command.trim();
 
+  Serial.print("Received Rover Command: ");
+  Serial.println(command);
+
+  // Manual continuous navigation:
+  // Starts immediately and keeps running until STOP or next command!
   if (command == "forward" || command == "start" || command == "move_forward") {
     autoMode = false;
     autoTurning = false;
@@ -302,7 +297,8 @@ void handleCommand() {
   } else if (command == "auto_on" || command == "auto") {
     autoMode = true;
     autoTurning = false;
-    currentMovement = "AUTO";
+    currentMovement = "AUTO-FORWARD";
+    moveForward(); // Start moving forward immediately in Auto Mode!
   } else if (command == "auto_off") {
     autoMode = false;
     autoTurning = false;
@@ -316,23 +312,40 @@ void handleCommand() {
 }
 
 void handleSpeed() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
   if (!server.hasArg("value")) {
-    server.send(400, "text/plain", "Missing speed");
+    server.send(400, "text/plain", "Missing value argument");
     return;
   }
 
   int newSpeed = server.arg("value").toInt();
-  motorSpeed = constrain(newSpeed, 50, 255);
-  updateHeartbeat();
+  motorSpeed = constrain(newSpeed, 60, 255);
+  Serial.print("Speed Updated: ");
+  Serial.println(motorSpeed);
+
+  // Apply speed immediately to active movement
+  if (currentMovement == "FORWARD" || currentMovement == "AUTO" || currentMovement == "AUTO-FORWARD") {
+    moveForward();
+  } else if (currentMovement == "BACKWARD") {
+    moveBackward();
+  } else if (currentMovement == "LEFT") {
+    turnLeft();
+  } else if (currentMovement == "RIGHT") {
+    turnRight();
+  }
+
   server.send(200, "text/plain", "SPEED OK");
 }
 
 void handleHeartbeat() {
-  updateHeartbeat();
+  server.sendHeader("Access-Control-Allow-Origin", "*");
   server.send(200, "text/plain", "ALIVE");
 }
 
 void handleTelemetry() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
   float distance = getDistance();
   bool left = leftBlocked();
   bool right = rightBlocked();
@@ -361,6 +374,8 @@ void handleTelemetry() {
 }
 
 void handleStatus() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+
   String json = "{";
   json += "\"device\":\"AGRI_ROVER\"";
   json += ",\"status\":\"ONLINE\"";
@@ -431,7 +446,7 @@ void setup() {
   stopMotors();
   connectWiFi();
 
-  // API Route Registrations
+  // Register API Endpoints
   server.on("/", handleRoot);
   server.on("/cmd", handleCommand);
   server.on("/speed", handleSpeed);
@@ -439,8 +454,8 @@ void setup() {
   server.on("/telemetry", handleTelemetry);
   server.on("/status", handleStatus);
 
+  server.enableCORS(true);
   server.begin();
-  lastPiHeartbeat = millis();
 
   Serial.println("✓ Rover WebServer API started on Port 80");
 }
@@ -451,13 +466,8 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  // Wi-Fi Reconnect Handling
+  // Wi-Fi Connection Monitor
   if (WiFi.status() != WL_CONNECTED) {
-    stopMotors();
-    autoMode = false;
-    autoTurning = false;
-    currentMovement = "WIFI LOST";
-
     unsigned long now = millis();
     if (now - lastWiFiReconnectAttempt >= WIFI_RECONNECT_INTERVAL) {
       lastWiFiReconnectAttempt = now;
@@ -468,17 +478,7 @@ void loop() {
     return;
   }
 
-  // Safety Watchdog for Manual Drive (auto-stops manual motors if command drops for >3s)
-  if (!autoMode) {
-    if (millis() - lastPiHeartbeat > PI_TIMEOUT) {
-      if (currentMovement != "STOP" && currentMovement != "SAFETY STOP") {
-        stopMotors();
-        currentMovement = "SAFETY STOP";
-      }
-    }
-  }
-
-  // Autonomous Mode execution
+  // Continuous Autonomous Execution
   if (autoMode) {
     automaticMode();
   }

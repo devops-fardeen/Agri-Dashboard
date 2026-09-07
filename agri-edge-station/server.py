@@ -156,37 +156,45 @@ def send_rover_command(payload: RoverCommandRequest):
     action = payload.action.upper().strip()
     valid_actions = [
         "MOVE_FORWARD", "MOVE_BACKWARD", "MOVE_LEFT", "MOVE_RIGHT", "STOP",
-        "FORWARD", "BACKWARD", "LEFT", "RIGHT", "AUTO_ON", "AUTO_OFF"
+        "FORWARD", "BACKWARD", "LEFT", "RIGHT", "AUTO_ON", "AUTO_OFF", "SPEED"
     ]
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Invalid rover command. Must be one of {valid_actions}")
         
     updated = database.update_rover_command(action)
+    rover_ip = payload.rover_ip or os.getenv("ROVER_IP", "10.202.46.196")
 
-    # Map action for Rover ESP32 WebServer (/cmd?move=...)
-    cmd_map = {
-        "MOVE_FORWARD": "forward",
-        "FORWARD": "forward",
-        "MOVE_BACKWARD": "backward",
-        "BACKWARD": "backward",
-        "MOVE_LEFT": "left",
-        "LEFT": "left",
-        "MOVE_RIGHT": "right",
-        "RIGHT": "right",
-        "STOP": "stop",
-        "AUTO_ON": "auto_on",
-        "AUTO_OFF": "auto_off"
-    }
-    rover_cmd = cmd_map.get(action, "stop")
-    rover_ip = payload.rover_ip or os.getenv("ROVER_IP", "192.168.43.150")
+    # Map action for Rover ESP32 WebServer
+    if action == "SPEED" and payload.speed is not None:
+        def dispatch_rover_speed(ip: str, spd: int):
+            try:
+                requests.get(f"http://{ip}/speed?value={spd}", timeout=1.5)
+            except Exception:
+                pass
+        threading.Thread(target=dispatch_rover_speed, args=(rover_ip, payload.speed), daemon=True).start()
+    else:
+        cmd_map = {
+            "MOVE_FORWARD": "forward",
+            "FORWARD": "forward",
+            "MOVE_BACKWARD": "backward",
+            "BACKWARD": "backward",
+            "MOVE_LEFT": "left",
+            "LEFT": "left",
+            "MOVE_RIGHT": "right",
+            "RIGHT": "right",
+            "STOP": "stop",
+            "AUTO_ON": "auto_on",
+            "AUTO_OFF": "auto_off"
+        }
+        rover_cmd = cmd_map.get(action, "stop")
 
-    def dispatch_rover_http(ip: str, cmd: str):
-        try:
-            requests.get(f"http://{ip}/cmd?move={cmd}", timeout=1.2)
-        except Exception:
-            pass
+        def dispatch_rover_http(ip: str, cmd: str):
+            try:
+                requests.get(f"http://{ip}/cmd?move={cmd}", timeout=1.5)
+            except Exception:
+                pass
 
-    threading.Thread(target=dispatch_rover_http, args=(rover_ip, rover_cmd), daemon=True).start()
+        threading.Thread(target=dispatch_rover_http, args=(rover_ip, rover_cmd), daemon=True).start()
 
     return {
         "success": True,
