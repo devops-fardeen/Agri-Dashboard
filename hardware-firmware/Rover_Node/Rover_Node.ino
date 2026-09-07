@@ -32,21 +32,36 @@ WebServer server(80);
 #define BATTERY_PIN 35
 
 // =====================================================
-// PWM CONFIGURATION & STATE
+// OPERATIONAL VARIABLES & STATE
 // =====================================================
-#define PWM_FREQ       1000
-#define PWM_RESOLUTION 8
-
 int motorSpeed = 190;
 String currentMovement = "STOP";
 
-// =====================================================
-// BATTERY VOLTAGE MONITORING (3S LiPo Calibration)
-// Voltage Divider: R1=30k, R2=7.5k (Ratio = 5.00)
-// =====================================================
+// Autonomous Navigation Constants
+const float OBSTACLE_THRESHOLD_CM = 22.0; // Trigger distance in cm
+const unsigned long AUTO_TURN_DURATION = 350; // ms to pivot away from obstacle
+const unsigned long TURN_COOLDOWN_MS = 1000;  // ms to drive forward before allowing another turn
+
+bool autoMode = false;
+bool isTurning = false;
+unsigned long turnStartTime = 0;
+unsigned long lastTurnCompletedTime = 0;
+
+unsigned long lastSensorCheck = 0;
+const unsigned long SENSOR_CHECK_INTERVAL = 50; // ms
+
+unsigned long lastSerialLog = 0;
+const unsigned long SERIAL_LOG_INTERVAL = 1000; // ms
+
+unsigned long lastWiFiCheck = 0;
+const unsigned long WIFI_CHECK_INTERVAL = 5000;
+
+// Battery Divider Calibration (3S LiPo: 11.1V - 12.6V)
 float voltageCalibration = 5.00;
 
-// Calculate accurate LiPo percentage using standard discharge curve
+// =====================================================
+// BATTERY VOLTAGE & PERCENTAGE CALCULATION
+// =====================================================
 int calculateBatteryPercent(float voltage) {
   if (voltage >= 12.60) return 100;
   if (voltage >= 12.45) return 95;
@@ -63,162 +78,118 @@ int calculateBatteryPercent(float voltage) {
   return 0;
 }
 
-// Multi-sampled ADC reading to eliminate motor electrical noise
 float getBatteryVoltage() {
   long rawSum = 0;
-  for (int i = 0; i < 32; i++) {
+  for (int i = 0; i < 20; i++) {
     rawSum += analogRead(BATTERY_PIN);
     delayMicroseconds(50);
   }
-  float avgRaw = (float)rawSum / 32.0;
+  float avgRaw = (float)rawSum / 20.0;
   float pinVoltage = (avgRaw / 4095.0) * 3.3;
-  float actualVoltage = pinVoltage * voltageCalibration;
-  return actualVoltage;
+  return pinVoltage * voltageCalibration;
 }
 
 // =====================================================
-// AUTONOMOUS NAVIGATION CONFIGURATION
+// MOTOR CONTROL PRIMITIVES (Universal analogWrite)
 // =====================================================
-const float FRONT_OBSTACLE_DISTANCE = 28.0; // cm
-
-bool autoMode = false;
-bool autoTurning = false;
-unsigned long autoTurnStart = 0;
-const unsigned long AUTO_TURN_TIME = 380; // ms turn duration
-
-unsigned long lastAutoCheck = 0;
-const unsigned long AUTO_CHECK_INTERVAL = 60; // ms check rate
-
-unsigned long lastWiFiCheck = 0;
-const unsigned long WIFI_CHECK_INTERVAL = 5000;
-
-// =====================================================
-// PWM SETUP
-// =====================================================
-void setupPWM() {
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcAttach(LEFT_RPWM, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttach(LEFT_LPWM, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttach(RIGHT_RPWM, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttach(RIGHT_LPWM, PWM_FREQ, PWM_RESOLUTION);
-
-  ledcWrite(LEFT_RPWM, 0);
-  ledcWrite(LEFT_LPWM, 0);
-  ledcWrite(RIGHT_RPWM, 0);
-  ledcWrite(RIGHT_LPWM, 0);
-#else
-  ledcSetup(0, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(LEFT_RPWM, 0);
-  ledcSetup(1, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(LEFT_LPWM, 1);
-  ledcSetup(2, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(RIGHT_RPWM, 2);
-  ledcSetup(3, PWM_FREQ, PWM_RESOLUTION);
-  ledcAttachPin(RIGHT_LPWM, 3);
-
-  ledcWrite(0, 0);
-  ledcWrite(1, 0);
-  ledcWrite(2, 0);
-  ledcWrite(3, 0);
-#endif
+void leftForward(int speed) {
+  speed = constrain(speed, 0, 255);
+  analogWrite(LEFT_RPWM, speed);
+  analogWrite(LEFT_LPWM, 0);
 }
 
-void writeMotorPWM(int leftR, int leftL, int rightR, int rightL) {
-  leftR = constrain(leftR, 0, 255);
-  leftL = constrain(leftL, 0, 255);
-  rightR = constrain(rightR, 0, 255);
-  rightL = constrain(rightL, 0, 255);
-
-#if ESP_ARDUINO_VERSION_MAJOR >= 3
-  ledcWrite(LEFT_RPWM, leftR);
-  ledcWrite(LEFT_LPWM, leftL);
-  ledcWrite(RIGHT_RPWM, rightR);
-  ledcWrite(RIGHT_LPWM, rightL);
-#else
-  ledcWrite(0, leftR);
-  ledcWrite(1, leftL);
-  ledcWrite(2, rightR);
-  ledcWrite(3, rightL);
-#endif
+void leftBackward(int speed) {
+  speed = constrain(speed, 0, 255);
+  analogWrite(LEFT_RPWM, 0);
+  analogWrite(LEFT_LPWM, speed);
 }
 
-// =====================================================
-// MOTOR CONTROL PRIMITIVES (BTS7960)
-// =====================================================
+void rightForward(int speed) {
+  speed = constrain(speed, 0, 255);
+  analogWrite(RIGHT_RPWM, speed);
+  analogWrite(RIGHT_LPWM, 0);
+}
+
+void rightBackward(int speed) {
+  speed = constrain(speed, 0, 255);
+  analogWrite(RIGHT_RPWM, 0);
+  analogWrite(RIGHT_LPWM, speed);
+}
+
 void stopMotors() {
-  writeMotorPWM(0, 0, 0, 0);
+  analogWrite(LEFT_RPWM, 0);
+  analogWrite(LEFT_LPWM, 0);
+  analogWrite(RIGHT_RPWM, 0);
+  analogWrite(RIGHT_LPWM, 0);
   currentMovement = "STOP";
 }
 
 void moveForward() {
-  writeMotorPWM(motorSpeed, 0, motorSpeed, 0);
+  leftForward(motorSpeed);
+  rightForward(motorSpeed);
   currentMovement = "FORWARD";
 }
 
 void moveBackward() {
-  writeMotorPWM(0, motorSpeed, 0, motorSpeed);
+  leftBackward(motorSpeed);
+  rightBackward(motorSpeed);
   currentMovement = "BACKWARD";
 }
 
 void turnLeft() {
-  writeMotorPWM(0, motorSpeed, motorSpeed, 0);
+  leftBackward(motorSpeed);
+  rightForward(motorSpeed);
   currentMovement = "LEFT";
 }
 
 void turnRight() {
-  writeMotorPWM(motorSpeed, 0, 0, motorSpeed);
+  leftForward(motorSpeed);
+  rightBackward(motorSpeed);
   currentMovement = "RIGHT";
 }
 
-// Apply speed immediately to whatever state is currently active
-void applyCurrentMovement() {
+// Re-applies active speed to motors immediately
+void refreshActiveMovement() {
   if (currentMovement == "FORWARD" || currentMovement == "AUTO" || currentMovement == "AUTO-FORWARD") {
-    writeMotorPWM(motorSpeed, 0, motorSpeed, 0);
+    leftForward(motorSpeed);
+    rightForward(motorSpeed);
   } else if (currentMovement == "BACKWARD") {
-    writeMotorPWM(0, motorSpeed, 0, motorSpeed);
+    leftBackward(motorSpeed);
+    rightBackward(motorSpeed);
   } else if (currentMovement == "LEFT" || currentMovement == "AUTO-AVOID-LEFT") {
-    writeMotorPWM(0, motorSpeed, motorSpeed, 0);
+    leftBackward(motorSpeed);
+    rightForward(motorSpeed);
   } else if (currentMovement == "RIGHT" || currentMovement == "AUTO-AVOID-RIGHT") {
-    writeMotorPWM(motorSpeed, 0, 0, motorSpeed);
+    leftForward(motorSpeed);
+    rightBackward(motorSpeed);
   } else if (currentMovement == "AUTO-NUDGE-RIGHT") {
-    writeMotorPWM(motorSpeed, 0, (int)(motorSpeed * 0.55), 0);
+    leftForward(motorSpeed);
+    rightForward((int)(motorSpeed * 0.60));
   } else if (currentMovement == "AUTO-NUDGE-LEFT") {
-    writeMotorPWM((int)(motorSpeed * 0.55), 0, motorSpeed, 0);
+    leftForward((int)(motorSpeed * 0.60));
+    rightForward(motorSpeed);
   }
 }
 
 // =====================================================
-// ULTRASONIC DISTANCE SENSOR (HC-SR04 with Filter)
+// SENSORS (Ultrasonic & Infrared)
 // =====================================================
-float readSingleDistance() {
+float getDistance() {
   digitalWrite(TRIG_PIN, LOW);
   delayMicroseconds(2);
   digitalWrite(TRIG_PIN, HIGH);
   delayMicroseconds(10);
   digitalWrite(TRIG_PIN, LOW);
 
-  long duration = pulseIn(ECHO_PIN, HIGH, 22000); // 22ms max (~3.7m)
-  if (duration == 0) return 999.0;
-  return (duration * 0.0343 / 2.0);
+  long duration = pulseIn(ECHO_PIN, HIGH, 18000); // 18ms timeout (~3m)
+  if (duration <= 0) return 999.0;
+  float distance = (duration * 0.0343) / 2.0;
+
+  // Filter out noise glitches
+  if (distance < 3.0 || distance > 350.0) return 999.0;
+  return distance;
 }
 
-// 3-sample median filter for rock-solid distance readings
-float getDistance() {
-  float r1 = readSingleDistance();
-  delayMicroseconds(500);
-  float r2 = readSingleDistance();
-  delayMicroseconds(500);
-  float r3 = readSingleDistance();
-
-  // Median calculation
-  if ((r1 <= r2 && r2 <= r3) || (r3 <= r2 && r2 <= r1)) return r2;
-  if ((r2 <= r1 && r1 <= r3) || (r3 <= r1 && r1 <= r2)) return r1;
-  return r3;
-}
-
-// =====================================================
-// INFRARED SENSORS
-// =====================================================
 bool leftBlocked() {
   return digitalRead(LEFT_IR) == LOW;
 }
@@ -228,58 +199,64 @@ bool rightBlocked() {
 }
 
 // =====================================================
-// CONTINUOUS AUTONOMOUS MODE
+// CONTINUOUS AUTONOMOUS ROW FOLLOWING & EVASION
 // =====================================================
-void automaticMode() {
+void runAutonomousRoutine() {
   unsigned long now = millis();
 
-  // Active evasion turn handling
-  if (autoTurning) {
-    if (now - autoTurnStart >= AUTO_TURN_TIME) {
-      autoTurning = false;
-      // Resume continuous forward drive immediately!
+  // 1. If currently in an avoidance turn, check if turn duration is done
+  if (isTurning) {
+    if (now - turnStartTime >= AUTO_TURN_DURATION) {
+      isTurning = false;
+      lastTurnCompletedTime = now;
+      // Immediately resume continuous forward propulsion!
       moveForward();
       currentMovement = "AUTO-FORWARD";
     }
     return;
   }
 
-  // Periodic sensor checks
-  if (now - lastAutoCheck < AUTO_CHECK_INTERVAL) return;
-  lastAutoCheck = now;
+  // 2. Periodic sensor check rate
+  if (now - lastSensorCheck < SENSOR_CHECK_INTERVAL) return;
+  lastSensorCheck = now;
 
   float distance = getDistance();
-  bool leftObstacle = leftBlocked();
-  bool rightObstacle = rightBlocked();
+  bool leftObs = leftBlocked();
+  bool rightObs = rightBlocked();
 
-  // Front obstacle evasion (< 28 cm)
-  if (distance > 1.5 && distance < FRONT_OBSTACLE_DISTANCE) {
-    if (!leftObstacle && rightObstacle) {
+  // 3. Front Obstacle Collision Evasion (with turn cooldown)
+  if (distance <= OBSTACLE_THRESHOLD_CM && (now - lastTurnCompletedTime > TURN_COOLDOWN_MS)) {
+    if (!leftObs && rightObs) {
+      // Turn left away from obstacle
       turnLeft();
-      autoTurning = true;
-      autoTurnStart = now;
+      isTurning = true;
+      turnStartTime = now;
       currentMovement = "AUTO-AVOID-LEFT";
     } else {
+      // Turn right away from obstacle
       turnRight();
-      autoTurning = true;
-      autoTurnStart = now;
+      isTurning = true;
+      turnStartTime = now;
       currentMovement = "AUTO-AVOID-RIGHT";
     }
     return;
   }
 
-  // Row edge steering via IR
-  if (leftObstacle && !rightObstacle) {
-    // Steer gently right
-    writeMotorPWM(motorSpeed, 0, (int)(motorSpeed * 0.55), 0);
+  // 4. Crop Row Boundary Alignment (IR Sensors)
+  if (leftObs && !rightObs) {
+    // Row on left -> steer gently right without stopping
+    leftForward(motorSpeed);
+    rightForward((int)(motorSpeed * 0.60));
     currentMovement = "AUTO-NUDGE-RIGHT";
-  } else if (rightObstacle && !leftObstacle) {
-    // Steer gently left
-    writeMotorPWM((int)(motorSpeed * 0.55), 0, motorSpeed, 0);
+  } else if (rightObs && !leftObs) {
+    // Row on right -> steer gently left without stopping
+    leftForward((int)(motorSpeed * 0.60));
+    rightForward(motorSpeed);
     currentMovement = "AUTO-NUDGE-LEFT";
   } else {
-    // Both clear or both aligned -> drive forward continuously
-    moveForward();
+    // Both sides clear or centered -> full speed ahead!
+    leftForward(motorSpeed);
+    rightForward(motorSpeed);
     currentMovement = "AUTO-FORWARD";
   }
 }
@@ -293,12 +270,12 @@ void handleRoot() {
   float v = getBatteryVoltage();
   int pct = calculateBatteryPercent(v);
 
-  String msg = "AGRI ROVER READY\n";
+  String msg = "AGRI ROVER ONLINE\n";
   msg += "IP: " + WiFi.localIP().toString() + "\n";
   msg += "Movement: " + currentMovement + "\n";
   msg += "Speed: " + String(motorSpeed) + "\n";
   msg += "Auto Mode: " + String(autoMode ? "ON" : "OFF") + "\n";
-  msg += "Battery Voltage: " + String(v, 2) + " V (" + String(pct) + "%)\n";
+  msg += "Battery: " + String(v, 2) + " V (" + String(pct) + "%)\n";
   msg += "Distance: " + String(getDistance(), 1) + " cm\n";
 
   server.send(200, "text/plain", msg);
@@ -316,40 +293,42 @@ void handleCommand() {
   cmd.toLowerCase();
   cmd.trim();
 
-  Serial.print("Cmd: ");
+  Serial.print(">>> Web Command Received: ");
   Serial.println(cmd);
 
   if (cmd == "forward" || cmd == "start" || cmd == "move_forward") {
     autoMode = false;
-    autoTurning = false;
+    isTurning = false;
     moveForward();
   } else if (cmd == "backward" || cmd == "move_backward") {
     autoMode = false;
-    autoTurning = false;
+    isTurning = false;
     moveBackward();
   } else if (cmd == "left" || cmd == "move_left") {
     autoMode = false;
-    autoTurning = false;
+    isTurning = false;
     turnLeft();
   } else if (cmd == "right" || cmd == "move_right") {
     autoMode = false;
-    autoTurning = false;
+    isTurning = false;
     turnRight();
   } else if (cmd == "stop") {
     autoMode = false;
-    autoTurning = false;
+    isTurning = false;
     stopMotors();
   } else if (cmd == "auto_on" || cmd == "auto") {
     autoMode = true;
-    autoTurning = false;
+    isTurning = false;
     currentMovement = "AUTO-FORWARD";
-    moveForward();
+    moveForward(); // Starts driving forward immediately!
+    Serial.println("✓ Auto Mode ENGAGED — Driving autonomously!");
   } else if (cmd == "auto_off") {
     autoMode = false;
-    autoTurning = false;
+    isTurning = false;
     stopMotors();
+    Serial.println("✓ Auto Mode DISENGAGED — Stopped.");
   } else {
-    server.send(400, "text/plain", "Unknown cmd");
+    server.send(400, "text/plain", "Unknown command");
     return;
   }
 
@@ -365,17 +344,15 @@ void handleSpeed() {
   } else if (server.hasArg("speed")) {
     newSpeed = server.arg("speed").toInt();
   } else {
-    server.send(400, "text/plain", "Missing speed value");
+    server.send(400, "text/plain", "Missing speed parameter");
     return;
   }
 
   motorSpeed = constrain(newSpeed, 60, 255);
-  Serial.print("Speed updated: ");
+  Serial.print(">>> Speed Updated to: ");
   Serial.println(motorSpeed);
 
-  // Apply speed immediately to active movement
-  applyCurrentMovement();
-
+  refreshActiveMovement();
   server.send(200, "text/plain", "SPEED OK");
 }
 
@@ -423,10 +400,11 @@ void handleStatus() {
 // =====================================================
 void connectWiFi() {
   WiFi.mode(WIFI_STA);
-  WiFi.setSleep(false); // Disable WiFi sleep for rock-solid low latency
+  WiFi.setSleep(false);
 
   Serial.println();
-  Serial.println("Connecting Rover to Hotspot: " + String(WIFI_SSID));
+  Serial.print("Connecting to Hotspot: ");
+  Serial.println(WIFI_SSID);
 
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   int attempts = 0;
@@ -438,7 +416,11 @@ void connectWiFi() {
   Serial.println();
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("✓ ROVER CONNECTED | IP: " + WiFi.localIP().toString());
+    Serial.println("================================");
+    Serial.println("✓ AGRI ROVER CONNECTED!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+    Serial.println("================================");
   } else {
     Serial.println("WiFi connect failed, will keep retrying in loop");
   }
@@ -448,24 +430,29 @@ void connectWiFi() {
 // SETUP
 // =====================================================
 void setup() {
-  // 1. DISABLE ESP32 BROWNOUT DETECTOR
-  // Prevents ESP32 from restarting due to motor startup current surges!
+  // Disable Brownout detector to handle BTS7960 motor current surges
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
   Serial.begin(115200);
-  delay(500);
+  delay(400);
 
   Serial.println("\n================================");
-  Serial.println("       AGRI ROVER BOOT");
+  Serial.println("    AGRI ROVER INITIALIZING");
   Serial.println("================================");
 
-  pinMode(LEFT_IR, INPUT);
-  pinMode(RIGHT_IR, INPUT);
+  // Motor PWM pins
+  pinMode(LEFT_RPWM, OUTPUT);
+  pinMode(LEFT_LPWM, OUTPUT);
+  pinMode(RIGHT_RPWM, OUTPUT);
+  pinMode(RIGHT_LPWM, OUTPUT);
+
+  // Sensors
+  pinMode(LEFT_IR, INPUT_PULLUP);
+  pinMode(RIGHT_IR, INPUT_PULLUP);
   pinMode(TRIG_PIN, OUTPUT);
   pinMode(ECHO_PIN, INPUT);
   pinMode(BATTERY_PIN, INPUT);
 
-  setupPWM();
   stopMotors();
   connectWiFi();
 
@@ -480,7 +467,7 @@ void setup() {
   server.enableCORS(true);
   server.begin();
 
-  Serial.println("✓ WebServer running on Port 80");
+  Serial.println("✓ Rover Web API ready on Port 80");
 }
 
 // =====================================================
@@ -489,7 +476,7 @@ void setup() {
 void loop() {
   server.handleClient();
 
-  // Periodic WiFi check without destroying state
+  // Periodic WiFi reconnection check
   unsigned long now = millis();
   if (now - lastWiFiCheck >= WIFI_CHECK_INTERVAL) {
     lastWiFiCheck = now;
@@ -499,8 +486,22 @@ void loop() {
     }
   }
 
-  // Continuous Autonomous Execution
+  // Autonomous Mode Execution
   if (autoMode) {
-    automaticMode();
+    runAutonomousRoutine();
+  }
+
+  // Serial Diagnostic Telemetry (Every 1 second)
+  if (now - lastSerialLog >= SERIAL_LOG_INTERVAL) {
+    lastSerialLog = now;
+    float dist = getDistance();
+    Serial.printf("[STATUS] Mode: %s | Move: %s | Spd: %d | Dist: %.1fcm | L_IR: %d | R_IR: %d\n",
+      autoMode ? "AUTO" : "MANUAL",
+      currentMovement.c_str(),
+      motorSpeed,
+      dist,
+      leftBlocked(),
+      rightBlocked()
+    );
   }
 }
