@@ -5,6 +5,7 @@ import sys
 import database
 from mock_sensor import FieldSensorSimulator
 from sync_worker import CloudSyncWorker
+from serial_bridge import MasterSerialBridge
 from server import app
 
 logging.basicConfig(
@@ -24,18 +25,24 @@ def main():
     database.init_db()
     logger.info("Initialized local SQLite offline buffer (agri_edge.db)")
 
-    # 2. Start Background Mock Sensor Simulator (5s interval)
+    # 2. Start Master ESP32 USB Serial Hardware Bridge
+    serial_bridge = MasterSerialBridge()
+    serial_bridge_thread = serial_bridge.start_background()
+    logger.info("Started Master ESP32 USB Serial Bridge")
+
+    # 3. Start Background Mock Sensor Simulator (5s interval)
     simulator = FieldSensorSimulator()
     simulator_thread = simulator.start_background(interval_seconds=5.0)
     logger.info("Started Mock Sensor Simulator thread (5s polling)")
 
-    # 3. Start Background Cloud Sync Worker (10s interval)
+    # 4. Start Background Cloud Sync Worker (10s interval)
     sync_worker = CloudSyncWorker()
     sync_thread = sync_worker.start_background(interval_seconds=10.0)
     logger.info("Started Cloud Sync Worker thread (10s sync batch to Tier 3 Cloud)")
 
     def handle_shutdown(signum, frame):
         logger.info("Received termination signal. Shutting down AgriSmart Edge...")
+        serial_bridge.stop()
         simulator.stop()
         sync_worker.stop()
         sys.exit(0)

@@ -1,4 +1,5 @@
 import os
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 import requests
@@ -39,6 +40,8 @@ INDEX_FILE = os.path.join(STATIC_DIR, "index.html")
 
 class RoverCommandRequest(BaseModel):
     action: str
+    speed: Optional[int] = None
+    rover_ip: Optional[str] = None
 
 class IngestTelemetryRequest(BaseModel):
     zone_id: str = "ZONE_A"
@@ -149,13 +152,42 @@ def get_rover():
 
 @app.post("/api/edge/rover/command")
 def send_rover_command(payload: RoverCommandRequest):
-    """Processes a navigation/emergency command for the rover."""
+    """Processes a navigation/emergency command for the rover and dispatches to Rover ESP32 WebServer."""
     action = payload.action.upper().strip()
-    valid_actions = ["MOVE_FORWARD", "MOVE_BACKWARD", "MOVE_LEFT", "MOVE_RIGHT", "STOP"]
+    valid_actions = [
+        "MOVE_FORWARD", "MOVE_BACKWARD", "MOVE_LEFT", "MOVE_RIGHT", "STOP",
+        "FORWARD", "BACKWARD", "LEFT", "RIGHT", "AUTO_ON", "AUTO_OFF"
+    ]
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Invalid rover command. Must be one of {valid_actions}")
         
     updated = database.update_rover_command(action)
+
+    # Map action for Rover ESP32 WebServer (/cmd?move=...)
+    cmd_map = {
+        "MOVE_FORWARD": "forward",
+        "FORWARD": "forward",
+        "MOVE_BACKWARD": "backward",
+        "BACKWARD": "backward",
+        "MOVE_LEFT": "left",
+        "LEFT": "left",
+        "MOVE_RIGHT": "right",
+        "RIGHT": "right",
+        "STOP": "stop",
+        "AUTO_ON": "auto_on",
+        "AUTO_OFF": "auto_off"
+    }
+    rover_cmd = cmd_map.get(action, "stop")
+    rover_ip = payload.rover_ip or os.getenv("ROVER_IP", "192.168.43.150")
+
+    def dispatch_rover_http(ip: str, cmd: str):
+        try:
+            requests.get(f"http://{ip}/cmd?move={cmd}", timeout=1.2)
+        except Exception:
+            pass
+
+    threading.Thread(target=dispatch_rover_http, args=(rover_ip, rover_cmd), daemon=True).start()
+
     return {
         "success": True,
         "action": action,
