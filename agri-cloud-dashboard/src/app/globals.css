@@ -1,18 +1,104 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0a0e14;
-  --foreground: #f0f6fc;
+  --color-forest-noir: #051f20;
+  --color-deep-evergreen: #0b2b26;
+  --color-dark-spruce: #163832;
+  --color-forest-sage: #235347;
+  --color-soft-sage: #8eb69b;
+  --color-pale-mint: #daf1de;
+  --color-bg: #f0f7f2;
+  --color-text-main: #051f20;
+  --color-text-muted: #163832;
+
+  --background: #f0f7f2;
+  --foreground: #051f20;
+  --emerald-primary: #235347;
+  --emerald-glow: rgba(142, 182, 155, 0.4);
+  --glass-bg: rgba(255, 255, 255, 0.85);
+  --glass-card: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(142, 182, 155, 0.4);
+  --glass-border-hover: rgba(35, 83, 71, 0.6);
+  --pill-bg: rgba(255, 255, 255, 0.85);
+  --pill-active: #051f20;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-sans: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans);
+  background-image: 
+    radial-gradient(circle at 18% 12%, rgba(142, 182, 155, 0.38), transparent 45%),
+    radial-gradient(circle at 85% 18%, rgba(218, 241, 222, 0.6), transparent 40%),
+    radial-gradient(circle at 50% 85%, rgba(35, 83, 71, 0.12), transparent 50%),
+    radial-gradient(circle at 92% 90%, rgba(5, 31, 32, 0.1), transparent 45%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Glassmorphic Panels with the Emerald Pine & Soft Sage Palette */
+.glass-panel {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(240, 247, 242, 0.85));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(142, 182, 155, 0.4);
+  box-shadow: 0 10px 30px -4px rgba(11, 43, 38, 0.07), 0 2px 8px rgba(0, 0, 0, 0.02);
+}
+
+.glass-panel-glow {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(218, 241, 222, 0.75));
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(142, 182, 155, 0.55);
+  box-shadow: 0 14px 36px -6px rgba(35, 83, 71, 0.16), 0 2px 10px rgba(5, 31, 32, 0.04);
+}
+
+.glass-pill {
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(142, 182, 155, 0.45);
+  color: #163832;
+  box-shadow: 0 2px 8px rgba(5, 31, 32, 0.03);
+}
+
+.glass-pill-active {
+  background: #051f20 !important;
+  color: #daf1de !important;
+  border: 1px solid #051f20 !important;
+  box-shadow: 0 4px 16px rgba(5, 31, 32, 0.25);
+}
+
+.glow-text {
+  text-shadow: 0 2px 12px rgba(142, 182, 155, 0.35);
+}
+
+.glow-btn {
+  box-shadow: 0 4px 20px -2px rgba(35, 83, 71, 0.35);
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(218, 241, 222, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(142, 182, 155, 0.6);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(35, 83, 71, 0.8);
 }

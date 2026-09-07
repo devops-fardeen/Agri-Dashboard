@@ -24,71 +24,78 @@ export function RoverPanel() {
   };
 
   return (
-    <div className="p-5 rounded-xl bg-[#161b22] border border-[#30363d] space-y-4">
+    <div className="glass-panel-glow rounded-[28px] p-5 space-y-4 border border-[#8eb69b]/40">
       <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-2xl bg-[#daf1de] border border-[#8eb69b]/50 flex items-center justify-center text-[#235347]">
+            <Navigation className="w-4 h-4" />
+          </div>
+          <div>
+            <h3 className="text-sm font-extrabold text-[#051f20]">Field Scout Rover</h3>
+            <p className="text-xs text-[#163832] font-semibold">Autonomous edge navigation unit</p>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
-          <Navigation className="w-5 h-5 text-emerald-400" />
-          <h3 className="font-semibold text-sm text-white">Field Scout Rover</h3>
-        </div>
-        <div className="flex items-center gap-3 text-xs">
-          <span className="flex items-center gap-1 text-emerald-400">
-            <BatteryCharging className="w-4 h-4" /> 84%
-          </span>
-          <span className="flex items-center gap-1 text-blue-400">
-            <Wifi className="w-4 h-4" /> Edge Linked
+          <span className="flex items-center gap-1 text-xs text-[#051f20] font-bold bg-[#daf1de] px-2.5 py-0.5 rounded-full border border-[#8eb69b]/50">
+            <BatteryCharging className="w-3.5 h-3.5 text-[#235347]" /> 84%
           </span>
         </div>
       </div>
 
-      {/* Rover Status Display */}
+      {/* Rover Status Indicators */}
       <div className="grid grid-cols-3 gap-2 text-center text-xs">
-        <div className="p-2 bg-[#0d1117] rounded border border-[#21262d]">
-          <p className="text-gray-400">Heading</p>
-          <p className="text-white font-bold mt-0.5">NW (312°)</p>
+        <div className="p-2.5 bg-white rounded-2xl border border-[#8eb69b]/35 shadow-sm">
+          <p className="text-[#163832] text-[10px] uppercase font-bold">Heading</p>
+          <p className="text-[#051f20] font-extrabold mt-0.5">NW (312°)</p>
         </div>
-        <div className="p-2 bg-[#0d1117] rounded border border-[#21262d]">
-          <p className="text-gray-400">Speed</p>
-          <p className="text-white font-bold mt-0.5">0.6 m/s</p>
+        <div className="p-2.5 bg-white rounded-2xl border border-[#8eb69b]/35 shadow-sm">
+          <p className="text-[#163832] text-[10px] uppercase font-bold">Speed</p>
+          <p className="text-[#051f20] font-extrabold mt-0.5">0.6 m/s</p>
         </div>
-        <div className="p-2 bg-[#0d1117] rounded border border-[#21262d]">
-          <p className="text-gray-400">Current Action</p>
-          <p className="text-emerald-400 font-bold mt-0.5">{activeCommand}</p>
+        <div className="p-2.5 bg-white rounded-2xl border border-[#8eb69b]/35 shadow-sm">
+          <p className="text-[#163832] text-[10px] uppercase font-bold">Action</p>
+          <p className="text-[#235347] font-extrabold mt-0.5 truncate">{activeCommand}</p>
         </div>
       </div>
 
-      {/* Manual D-Pad Navigation Controls */}
-      <div className="pt-2 flex flex-col items-center justify-center space-y-2">
+      {/* D-Pad Directional Controls */}
+      <div className="flex flex-col items-center justify-center gap-1.5 py-1">
         <button
           onClick={() => sendRoverCommand("MOVE_FORWARD")}
-          className="p-3 bg-[#21262d] hover:bg-emerald-600 active:scale-95 rounded-lg border border-[#30363d] transition"
+          className="w-11 h-10 rounded-xl glass-pill flex items-center justify-center text-[#051f20] hover:bg-[#8eb69b]/30 active:scale-90 transition shadow-sm font-bold"
+          title="Forward"
         >
-          <ArrowUp className="w-5 h-5 text-white" />
+          <ArrowUp className="w-4 h-4 text-[#051f20]" />
         </button>
         <div className="flex items-center gap-2">
           <button
             onClick={() => sendRoverCommand("MOVE_LEFT")}
-            className="p-3 bg-[#21262d] hover:bg-emerald-600 active:scale-95 rounded-lg border border-[#30363d] transition"
+            className="w-11 h-10 rounded-xl glass-pill flex items-center justify-center text-[#051f20] hover:bg-[#8eb69b]/30 active:scale-90 transition shadow-sm font-bold"
+            title="Left"
           >
-            <ArrowLeft className="w-5 h-5 text-white" />
+            <ArrowLeft className="w-4 h-4 text-[#051f20]" />
           </button>
           <button
             onClick={() => sendRoverCommand("STOP")}
-            className="p-3 bg-rose-600/30 hover:bg-rose-600 active:scale-95 rounded-lg border border-rose-500 text-rose-300 transition"
+            className="w-12 h-10 rounded-xl bg-gradient-to-r from-[#be123c] to-[#9f1239] text-white flex items-center justify-center active:scale-90 transition shadow-md"
+            title="EMERGENCY STOP"
           >
-            <Square className="w-5 h-5" />
+            <Square className="w-4 h-4 fill-white" />
           </button>
           <button
             onClick={() => sendRoverCommand("MOVE_RIGHT")}
-            className="p-3 bg-[#21262d] hover:bg-emerald-600 active:scale-95 rounded-lg border border-[#30363d] transition"
+            className="w-11 h-10 rounded-xl glass-pill flex items-center justify-center text-[#051f20] hover:bg-[#8eb69b]/30 active:scale-90 transition shadow-sm font-bold"
+            title="Right"
           >
-            <ArrowRight className="w-5 h-5 text-white" />
+            <ArrowRight className="w-4 h-4 text-[#051f20]" />
           </button>
         </div>
         <button
           onClick={() => sendRoverCommand("MOVE_BACKWARD")}
-          className="p-3 bg-[#21262d] hover:bg-emerald-600 active:scale-95 rounded-lg border border-[#30363d] transition"
+          className="w-11 h-10 rounded-xl glass-pill flex items-center justify-center text-[#051f20] hover:bg-[#8eb69b]/30 active:scale-90 transition shadow-sm font-bold"
+          title="Backward"
         >
-          <ArrowDown className="w-5 h-5 text-white" />
+          <ArrowDown className="w-4 h-4 text-[#051f20]" />
         </button>
       </div>
     </div>

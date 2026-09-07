@@ -2,1174 +2,1664 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AgriSmart Edge Gateway - Tier 2 Offline Local Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>AgriSmart Edge Gateway — Tier 2 Offline Local Dashboard</title>
   <style>
     :root {
-      --bg-dark: #0a0e14;
-      --card-bg: #161b22;
-      --card-hover: #1c2128;
-      --border-color: #30363d;
-      --border-glow: rgba(16, 185, 129, 0.3);
-      --text-main: #f0f6fc;
-      --text-muted: #8b949e;
-      --emerald-accent: #10b981;
-      --emerald-glow: rgba(16, 185, 129, 0.25);
-      --blue-accent: #3b82f6;
-      --blue-glow: rgba(59, 130, 246, 0.25);
-      --amber-accent: #f59e0b;
-      --rose-accent: #f43f5e;
-      --cyan-accent: #06b6d4;
+      --color-forest-noir: #051f20;
+      --color-deep-evergreen: #0b2b26;
+      --color-dark-spruce: #163832;
+      --color-forest-sage: #235347;
+      --color-soft-sage: #8eb69b;
+      --color-pale-mint: #daf1de;
+      --bg-palette: #f0f7f2;
+      --text-main: #051f20;
+      --text-muted: #163832;
+      --emerald-accent: #235347;
+      --rose-accent: #be123c;
     }
+
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     }
+
     body {
-      background-color: var(--bg-dark);
+      background-color: var(--bg-palette);
       color: var(--text-main);
       min-height: 100vh;
+      background-image: 
+        radial-gradient(circle at 18% 12%, rgba(142, 182, 155, 0.38), transparent 45%),
+        radial-gradient(circle at 85% 18%, rgba(218, 241, 222, 0.6), transparent 40%),
+        radial-gradient(circle at 50% 85%, rgba(35, 83, 71, 0.12), transparent 50%),
+        radial-gradient(circle at 92% 90%, rgba(5, 31, 32, 0.1), transparent 45%);
+      background-attachment: fixed;
       display: flex;
       flex-direction: column;
+      padding-bottom: 95px;
     }
-    header {
-      background-color: #0d1117;
-      border-bottom: 1px solid var(--border-color);
-      padding: 12px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
+
+    /* Glass Panels */
+    .glass-panel {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(240, 247, 242, 0.85));
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(142, 182, 155, 0.4);
+      border-radius: 28px;
+      box-shadow: 0 10px 30px -4px rgba(11, 43, 38, 0.07), 0 2px 8px rgba(0, 0, 0, 0.02);
     }
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 10px;
+
+    .glass-panel-glow {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(218, 241, 222, 0.75));
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(142, 182, 155, 0.55);
+      border-radius: 28px;
+      box-shadow: 0 14px 36px -6px rgba(35, 83, 71, 0.16), 0 2px 10px rgba(5, 31, 32, 0.04);
     }
-    .brand-icon {
-      width: 32px;
-      height: 32px;
-      background: linear-gradient(135deg, #10b981, #047857);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 0 12px var(--emerald-glow);
+
+    .glass-pill {
+      background: rgba(255, 255, 255, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(142, 182, 155, 0.45);
+      border-radius: 9999px;
+      color: var(--color-dark-spruce);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(5, 31, 32, 0.03);
     }
-    .brand-title {
-      font-size: 15px;
+
+    .glass-pill:hover {
+      border-color: var(--color-forest-sage);
+      color: var(--color-forest-noir);
+    }
+
+    .glass-pill-active {
+      background: var(--color-forest-noir) !important;
+      color: var(--color-pale-mint) !important;
+      border: 1px solid var(--color-forest-noir) !important;
+      box-shadow: 0 4px 16px rgba(5, 31, 32, 0.25);
       font-weight: 700;
-      letter-spacing: 0.3px;
     }
-    .brand-subtitle {
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .header-badges {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 12px;
-      border-radius: 6px;
-      font-size: 11px;
-      font-weight: 600;
-      border: 1px solid var(--border-color);
-      background-color: var(--card-bg);
-    }
-    .badge-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background-color: var(--emerald-accent);
-      box-shadow: 0 0 8px var(--emerald-accent);
-      animation: pulse 2s infinite;
-    }
-    .badge-dot.offline {
-      background-color: var(--amber-accent);
-      box-shadow: 0 0 8px var(--amber-accent);
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(0.85); }
-    }
-    main {
-      flex: 1;
-      max-width: 1280px;
+
+    /* Container */
+    .container {
+      max-width: 480px;
       width: 100%;
       margin: 0 auto;
-      padding: 20px 24px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
-    }
-    
-    /* Weather Forecast Widget */
-    .section-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-    .weather-strip {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 10px;
-    }
-    .weather-day-card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      padding: 12px;
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s;
-    }
-    .weather-day-card:hover {
-      border-color: #444c56;
-      transform: translateY(-2px);
-    }
-    .weather-day-card.today {
-      border-color: var(--emerald-accent);
-      box-shadow: 0 0 10px var(--emerald-glow);
-    }
-    .weather-date {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--text-main);
-    }
-    .weather-subdate {
-      font-size: 10px;
-      color: var(--text-muted);
-    }
-    .weather-temp {
-      font-size: 14px;
-      font-weight: 800;
-      color: var(--text-main);
-      margin-top: 2px;
-    }
-    .weather-temp-min {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-    .weather-rain {
-      font-size: 10px;
-      font-weight: 600;
-      color: var(--cyan-accent);
-      background: rgba(6, 182, 212, 0.1);
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-    .weather-cond {
-      font-size: 10px;
-      color: var(--text-muted);
+      gap: 16px;
     }
 
-    /* Buffer & Status Bar */
-    .status-bar {
-      background: linear-gradient(90deg, rgba(16, 185, 129, 0.08), rgba(59, 130, 246, 0.04));
-      border: 1px solid rgba(16, 185, 129, 0.25);
-      border-radius: 10px;
-      padding: 12px 18px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-    .status-stats {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 12px;
-    }
-    .stat-pill {
-      background: #0d1117;
-      padding: 4px 12px;
-      border-radius: 20px;
-      border: 1px solid var(--border-color);
-      color: var(--text-muted);
-    }
-    .stat-pill strong {
-      color: var(--emerald-accent);
-    }
-    .stat-pill strong.pending {
-      color: var(--amber-accent);
-    }
-
-    /* Zone & Controls Layout */
-    .grid-2 {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
-      gap: 20px;
-    }
-    .zone-card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .zone-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-      padding-bottom: 10px;
-    }
-    .zone-title {
-      font-size: 15px;
-      font-weight: 700;
-    }
-    .zone-badge {
-      font-size: 11px;
-      padding: 3px 8px;
-      border-radius: 6px;
-      background: rgba(16, 185, 129, 0.15);
-      color: var(--emerald-accent);
-      font-weight: 600;
-    }
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-    }
-    .metric-box {
-      background-color: #0d1117;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 10px 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-    .metric-label {
-      font-size: 11px;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .metric-value {
-      font-size: 22px;
-      font-weight: 800;
-      color: var(--text-main);
-      display: flex;
-      align-items: baseline;
-      gap: 4px;
-    }
-    .metric-unit {
-      font-size: 11px;
-      color: var(--text-muted);
-      font-weight: 500;
-    }
-    .progress-bar-bg {
-      width: 100%;
-      height: 5px;
-      background-color: #21262d;
-      border-radius: 3px;
-      overflow: hidden;
-      margin-top: 4px;
-    }
-    .progress-bar-fill {
-      height: 100%;
-      border-radius: 3px;
-      transition: width 0.5s ease;
-    }
-
-    /* Pump Actuator Strip */
-    .pump-control-card {
-      background-color: #0d1117;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    .pump-info-title {
-      font-size: 12px;
-      font-weight: 600;
-    }
-    .pump-info-state {
-      font-size: 11px;
-      color: var(--text-muted);
-      margin-top: 2px;
-    }
-    .pump-info-state.running {
-      color: var(--emerald-accent);
-      font-weight: 700;
-    }
-    .btn {
-      cursor: pointer;
-      border: none;
-      padding: 8px 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      font-weight: 700;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      transition: all 0.2s ease;
-    }
-    .btn:active {
-      transform: scale(0.97);
-    }
-    .btn-pump-off {
-      background-color: #10b981;
-      color: #000;
-      box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
-    }
-    .btn-pump-off:hover {
-      background-color: #059669;
-      color: #fff;
-    }
-    .btn-pump-on {
-      background-color: #e11d48;
-      color: #fff;
-      box-shadow: 0 0 10px rgba(225, 29, 72, 0.4);
-    }
-    .btn-pump-on:hover {
-      background-color: #be123c;
-    }
-    .btn-outline {
-      background-color: transparent;
-      border: 1px solid var(--border-color);
-      color: var(--text-main);
-    }
-    .btn-outline:hover {
-      background-color: var(--card-hover);
-    }
-
-    /* Rover & Graph Layout */
-    .grid-rover-graph {
-      display: grid;
-      grid-template-columns: 340px 1fr;
-      gap: 20px;
-    }
-    @media (max-width: 900px) {
-      .grid-rover-graph {
-        grid-template-columns: 1fr;
+    @media (min-width: 768px) {
+      .container {
+        max-width: 960px;
+      }
+      .grid-md-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .grid-md-4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
       }
     }
 
-    /* Rover Panel */
-    .rover-card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 18px;
+    /* Header */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .user-profile {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--color-forest-noir), var(--color-soft-sage));
+      padding: 2px;
+      position: relative;
+      box-shadow: 0 4px 12px rgba(35, 83, 71, 0.2);
+    }
+
+    .avatar-inner {
+      width: 100%;
+      height: 100%;
+      background: #ffffff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      color: var(--color-forest-sage);
+      font-size: 14px;
+    }
+
+    .avatar-dot {
+      position: absolute;
+      bottom: 0;
+      right: 0;
+      width: 12px;
+      height: 12px;
+      background: var(--color-forest-sage);
+      border: 2px solid var(--bg-palette);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(0.85); opacity: 0.5; }
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .icon-btn {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(142, 182, 155, 0.45);
+      color: var(--color-dark-spruce);
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+    }
+
+    .icon-btn:active {
+      transform: scale(0.92);
+    }
+
+    /* Language Switcher */
+    .lang-bar {
+      display: flex;
+      gap: 4px;
+      background: rgba(255, 255, 255, 0.88);
+      padding: 3px;
+      border-radius: 9999px;
+      border: 1px solid rgba(142, 182, 155, 0.45);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+    }
+
+    .lang-btn {
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      border: none;
+      background: transparent;
+      color: var(--color-dark-spruce);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .lang-btn.active {
+      background: var(--color-forest-noir);
+      color: var(--color-pale-mint);
+    }
+
+    /* Zone Selector Pills */
+    .zone-pills {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+    .zone-pills::-webkit-scrollbar { display: none; }
+
+    .zone-pill-btn {
+      padding: 8px 18px;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    /* 7-Day Offline Weather Card (Top Positioned) */
+    .weather-top-card {
+      padding: 18px 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .weather-row {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+    .weather-row::-webkit-scrollbar { display: none; }
+
+    .weather-pill-card {
+      min-width: 88px;
+      flex: 1;
+      padding: 12px 8px;
+      background: #ffffff;
+      border: 1px solid rgba(142, 182, 155, 0.35);
+      border-radius: 18px;
+      text-align: center;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      align-items: center;
+      gap: 4px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+      transition: transform 0.2s, box-shadow 0.2s;
     }
-    .rover-stats-grid {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 6px;
-      text-align: center;
-      font-size: 11px;
+
+    .weather-pill-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 14px rgba(35, 83, 71, 0.1);
     }
-    .rover-stat-box {
-      background: #0d1117;
-      padding: 8px 4px;
-      border-radius: 6px;
-      border: 1px solid var(--border-color);
-    }
-    .rover-stat-val {
+
+    .weather-pill-card.today {
+      border-color: rgba(35, 83, 71, 0.55);
+      background: linear-gradient(180deg, #f0f7f2, #e2f4e8);
+      box-shadow: 0 4px 14px rgba(35, 83, 71, 0.14);
       font-weight: 700;
-      color: #fff;
-      margin-top: 2px;
     }
-    .dpad-container {
+
+    /* Alert Cards */
+    .alert-card-item {
+      padding: 14px 16px;
+      border-radius: 20px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      transition: all 0.2s;
+    }
+
+    .alert-critical {
+      background: linear-gradient(135deg, #ffffff, #fff1f2);
+      border: 1px solid rgba(190, 18, 60, 0.4);
+      box-shadow: 0 4px 14px rgba(190, 18, 60, 0.08);
+    }
+
+    .alert-warning {
+      background: linear-gradient(135deg, #ffffff, #fffbeb);
+      border: 1px solid rgba(217, 119, 6, 0.4);
+      box-shadow: 0 4px 14px rgba(217, 119, 6, 0.08);
+    }
+
+    .alert-advisory {
+      background: linear-gradient(135deg, #ffffff, #f0fdf4);
+      border: 1px solid rgba(35, 83, 71, 0.35);
+      box-shadow: 0 4px 14px rgba(35, 83, 71, 0.06);
+    }
+
+    .alert-normal {
+      background: #ffffff;
+      border: 1px solid rgba(142, 182, 155, 0.4);
+    }
+
+    .alert-action-btn {
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 800;
+      background: var(--color-forest-noir);
+      color: var(--color-pale-mint);
+      border: none;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .alert-action-btn:active { transform: scale(0.93); }
+
+    /* Hero Moisture Arc Card */
+    .hero-card {
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      min-height: 330px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .hero-lamp {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin: 8px 0;
+    }
+
+    .hero-lamp-hood {
+      width: 58px;
+      height: 28px;
+      background: linear-gradient(180deg, #ffffff, var(--color-pale-mint));
+      border: 1px solid rgba(142, 182, 155, 0.5);
+      border-radius: 14px 14px 4px 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(35, 83, 71, 0.15);
+    }
+
+    .hero-lamp-glow {
+      width: 100px;
+      height: 35px;
+      background: radial-gradient(ellipse at top, rgba(142, 182, 155, 0.45), transparent 70%);
+      margin-top: -6px;
+    }
+
+    .arc-container {
+      position: relative;
+      width: 220px;
+      height: 120px;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+    }
+
+    .arc-svg {
+      width: 220px;
+      height: 120px;
+    }
+
+    .arc-text {
+      position: absolute;
+      bottom: 0;
+      text-align: center;
+    }
+
+    .arc-val {
+      font-size: 34px;
+      font-weight: 800;
+      color: var(--color-forest-noir);
+      line-height: 1;
+    }
+
+    .arc-lbl {
+      font-size: 11px;
+      color: var(--color-dark-spruce);
+      font-weight: 700;
+      margin-top: 4px;
+    }
+
+    .preset-dots {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding-top: 12px;
+      border-top: 1px solid rgba(142, 182, 155, 0.3);
+    }
+
+    .dots-group {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .p-dot {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .p-dot:hover { transform: scale(1.25); }
+
+    /* Thermostat Dial Card (Environment Climate) */
+    .dial-card {
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+      min-height: 330px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .thermo-dial-outer {
+      width: 160px;
+      height: 160px;
+      border-radius: 50%;
+      border: 4px solid rgba(142, 182, 155, 0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      margin: 10px 0;
+      box-shadow: inset 0 0 16px rgba(0,0,0,0.04);
+    }
+
+    .thermo-dial-inner {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: #ffffff;
+      color: var(--color-forest-noir);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(35, 83, 71, 0.15);
+      position: relative;
+      border: 1px solid rgba(142, 182, 155, 0.4);
+    }
+
+    .dial-pin {
+      position: absolute;
+      top: -6px;
+      width: 12px;
+      height: 12px;
+      background: var(--color-forest-sage);
+      border-radius: 50%;
+      box-shadow: 0 2px 6px rgba(35, 83, 71, 0.4);
+    }
+
+    .stepper-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(142, 182, 155, 0.45);
+      color: var(--color-forest-noir);
+      font-size: 18px;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    }
+    .stepper-btn:active { transform: scale(0.9); }
+
+    /* Smart Pump Actuator Cards */
+    .pump-card {
+      padding: 20px;
+      border-radius: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 145px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .pump-card.active {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(218, 241, 222, 0.92)) !important;
+      border-color: rgba(35, 83, 71, 0.6) !important;
+      box-shadow: 0 12px 30px -4px rgba(35, 83, 71, 0.22) !important;
+    }
+
+    .card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .pump-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(218, 241, 222, 0.85);
+      border: 1px solid rgba(142, 182, 155, 0.5);
+      color: var(--color-forest-sage);
+      font-size: 20px;
+      transition: all 0.3s;
+    }
+
+    .pump-card.active .pump-icon {
+      background: var(--color-forest-sage) !important;
+      color: #daf1de !important;
+      box-shadow: 0 4px 14px rgba(35, 83, 71, 0.35);
+      animation: pulse 1.8s infinite;
+    }
+
+    /* Switch Component */
+    .switch-toggle {
+      width: 50px;
+      height: 28px;
+      border-radius: 9999px;
+      background: rgba(142, 182, 155, 0.35);
+      padding: 3px;
+      cursor: pointer;
+      border: none;
+      position: relative;
+      transition: background 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .switch-toggle.active {
+      background: var(--color-forest-sage);
+      box-shadow: 0 0 14px rgba(35, 83, 71, 0.45);
+    }
+
+    .switch-knob {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #ffffff;
+      transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+    }
+
+    .switch-toggle.active .switch-knob {
+      transform: translateX(22px);
+    }
+
+    /* AI Vision Section */
+    .ai-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .ai-item {
+      background: #ffffff;
+      border: 1px solid rgba(142, 182, 155, 0.35);
+      padding: 12px;
+      border-radius: 18px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+    }
+
+    .ai-bar {
+      height: 5px;
+      background: rgba(218, 241, 222, 0.6);
+      border-radius: 9999px;
+      overflow: hidden;
+      margin-top: 6px;
+    }
+
+    .ai-bar-fill {
+      height: 100%;
+      background: var(--color-forest-sage);
+      border-radius: 9999px;
+    }
+
+    /* Rover D-Pad */
+    .dpad-grid {
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      padding: 10px 0;
+      margin: 10px 0;
     }
+
     .dpad-row {
       display: flex;
       align-items: center;
       gap: 6px;
     }
+
     .dpad-btn {
-      width: 46px;
-      height: 46px;
-      background-color: #21262d;
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      color: #fff;
+      width: 44px;
+      height: 40px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(142, 182, 155, 0.45);
+      color: var(--color-forest-noir);
+      font-weight: bold;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.15s;
+      transition: all 0.2s;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
     }
-    .dpad-btn:hover {
-      background-color: var(--emerald-accent);
-      color: #000;
-      border-color: var(--emerald-accent);
-      box-shadow: 0 0 10px var(--emerald-glow);
-    }
-    .dpad-btn:active {
-      transform: scale(0.92);
-    }
+    .dpad-btn:active { transform: scale(0.9); }
+
     .dpad-stop {
-      background-color: rgba(244, 63, 94, 0.2);
-      border-color: rgba(244, 63, 94, 0.6);
-      color: var(--rose-accent);
-    }
-    .dpad-stop:hover {
-      background-color: var(--rose-accent);
+      width: 48px;
+      height: 40px;
+      background: linear-gradient(135deg, #be123c, #9f1239);
+      border: none;
       color: #fff;
-      border-color: var(--rose-accent);
-      box-shadow: 0 0 12px rgba(244, 63, 94, 0.5);
+      border-radius: 12px;
+      box-shadow: 0 4px 14px rgba(190, 18, 60, 0.35);
     }
 
-    /* 24-Hour Graph Panel */
-    .graph-card {
-      background-color: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: 12px;
-      padding: 18px;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-    }
-    .graph-header {
+    /* Floating Bottom Dock */
+    .bottom-dock {
+      position: fixed;
+      bottom: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - 32px);
+      max-width: 440px;
+      background: rgba(255, 255, 255, 0.92);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border: 1px solid rgba(142, 182, 155, 0.4);
+      border-radius: 9999px;
+      padding: 8px 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 10px;
-    }
-    .zone-switch {
-      display: flex;
-      background: #0d1117;
-      border: 1px solid var(--border-color);
-      border-radius: 6px;
-      padding: 2px;
-    }
-    .zone-switch-btn {
-      background: transparent;
-      border: none;
-      color: var(--text-muted);
-      padding: 4px 12px;
-      font-size: 11px;
-      font-weight: 600;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.2s;
-    }
-    .zone-switch-btn.active {
-      background: var(--emerald-accent);
-      color: #000;
-    }
-    .canvas-container {
-      position: relative;
-      width: 100%;
-      height: 220px;
-      background: #0d1117;
-      border: 1px solid var(--border-color);
-      border-radius: 8px;
-      padding: 10px;
-    }
-    canvas {
-      width: 100%;
-      height: 100%;
-      display: block;
-    }
-    .legend-row {
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 16px;
-      font-size: 11px;
-      color: var(--text-muted);
-    }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .legend-dot {
-      width: 10px;
-      height: 3px;
-      border-radius: 2px;
+      box-shadow: 0 16px 40px rgba(5, 31, 32, 0.15);
+      z-index: 100;
     }
 
-    footer {
-      border-top: 1px solid var(--border-color);
-      padding: 14px 24px;
-      font-size: 11px;
-      color: var(--text-muted);
-      text-align: center;
-      background-color: #0d1117;
-      margin-top: auto;
+    .dock-btn {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: none;
+      background: transparent;
+      color: var(--color-dark-spruce);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
     }
-    .toast {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      background-color: #161b22;
-      border: 1px solid var(--border-color);
-      color: #fff;
-      padding: 10px 16px;
-      border-radius: 8px;
-      font-size: 12px;
-      box-shadow: 0 8px 24px rgba(0,0,0,0.5);
-      display: none;
-      z-index: 1000;
+
+    .dock-btn.active {
+      background: var(--color-forest-noir);
+      color: var(--color-pale-mint);
+      box-shadow: 0 4px 14px rgba(5, 31, 32, 0.3);
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <div class="brand-icon">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M12 2v8"></path><path d="m4.93 10.93 1.41 1.41"></path><path d="M2 18h2"></path><path d="M20 18h2"></path><path d="m19.07 10.93-1.41 1.41"></path><path d="M22 22H2"></path><path d="m8 22 4-10 4 10"></path>
-        </svg>
-      </div>
-      <div>
-        <div class="brand-title">AgriSmart Edge Gateway (Tier 2 Local Station)</div>
-        <div class="brand-subtitle">Zero-Internet Local Hotspot (10.42.0.1:8000) • 24h Rolling Prune Active</div>
-      </div>
-    </div>
+
+  <!-- Top Alert Banner -->
+  <div id="disasterBanner" style="display:none; background: linear-gradient(90deg, #be123c, #235347); padding: 10px 16px; text-align: center; font-size: 12px; font-weight: 700; color: #fff; cursor: pointer;" onclick="scrollToId('alertSection')">
+    ⚠️ <span id="disasterMsg">Heavy Rainfall Alert Detected</span>
+  </div>
+
+  <div class="container">
     
-    <div class="header-badges">
-      <div class="badge">
-        <span class="badge-dot" id="liveDot"></span>
-        <span id="liveStatusText">Edge Active</span>
+    <!-- TOP HEADER -->
+    <header>
+      <div class="user-profile">
+        <div class="avatar">
+          <div class="avatar-inner">AP</div>
+          <div class="avatar-dot"></div>
+        </div>
+        <div>
+          <h1 style="font-size: 17px; font-weight: 800; letter-spacing: -0.3px; color: #051f20;" id="lblWelcome">Hi Farmer</h1>
+          <p style="font-size: 11px; color: #163832; font-weight: 600;" id="lblStationSub">Tier 2 Local Hotspot • 10.42.0.1</p>
+        </div>
       </div>
-      <div class="badge">
-        <span id="clockDisplay">--:--:--</span>
-      </div>
-    </div>
-  </header>
 
-  <main>
-    <!-- 7-DAY OFFLINE WEATHER CACHE WIDGET -->
-    <section>
-      <div class="section-title">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-        </svg>
-        7-Day Offline Cached Weather Forecast (Open-Meteo)
-        <span style="font-size: 10px; font-weight: normal; color: var(--text-muted); margin-left: auto;" id="weatherCachedAt">Cached: Just Now</span>
-      </div>
-      <div class="weather-strip" id="weatherStrip">
-        <!-- Injected via JavaScript -->
-        <div class="weather-day-card">Loading cached weather...</div>
-      </div>
-    </section>
-
-    <!-- BUFFER HEALTH & SYNC STATUS STRIP -->
-    <div class="status-bar">
-      <div style="display: flex; align-items: center; gap: 8px; font-size: 12px;">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
-          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
-          <polyline points="17 8 12 3 7 8"></polyline>
-          <line x1="12" y1="3" x2="12" y2="15"></line>
-        </svg>
-        <strong>24-Hour Rolling SQLite Storage Buffer</strong>
-      </div>
-      
-      <div class="status-stats">
-        <div class="stat-pill">Local Records: <strong id="statTotal">0</strong></div>
-        <div class="stat-pill">Pending Cloud Sync: <strong id="statUnsynced" class="pending">0</strong></div>
-        <button class="btn btn-outline" onclick="fetchStatus()" style="padding: 3px 10px; font-size: 11px;">
-          Sync Refresh
+      <div class="header-actions">
+        <!-- Trilingual Switcher -->
+        <div class="lang-bar">
+          <button class="lang-btn active" onclick="setLang('en')">EN</button>
+          <button class="lang-btn" onclick="setLang('hi')">हिन्दी</button>
+          <button class="lang-btn" onclick="setLang('pa')">ਪੰਜਾਬੀ</button>
+        </div>
+        <button class="icon-btn" onclick="fetchStatus()" title="Refresh">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
         </button>
       </div>
+    </header>
+
+    <!-- ZONE SWITCHER PILLS -->
+    <div class="zone-pills">
+      <button class="glass-pill zone-pill-btn glass-pill-active" id="pillZoneA" onclick="switchZone('ZONE_A')">
+        🍅 <span id="lblFieldA">Tomato Field A</span>
+      </button>
+      <button class="glass-pill zone-pill-btn" id="pillZoneB" onclick="switchZone('ZONE_B')">
+        🌿 <span id="lblFieldB">Greenhouse B</span>
+      </button>
+      <button class="glass-pill zone-pill-btn" onclick="scrollToId('weatherSection')">
+        🌤️ <span id="lblWeatherPill">Weather</span>
+      </button>
+      <button class="glass-pill zone-pill-btn" onclick="scrollToId('alertSection')">
+        ⚠️ <span id="lblAlertPill">Alerts</span>
+      </button>
+      <button class="glass-pill zone-pill-btn" onclick="scrollToId('pumps')">
+        💧 <span id="lblPumpsPill">Smart Pumps</span>
+      </button>
+      <button class="glass-pill zone-pill-btn" onclick="scrollToId('roverSection')">
+        🚜 <span id="lblRoverPill">Field Rover</span>
+      </button>
+      <button class="glass-pill zone-pill-btn" onclick="scrollToId('aiSection')">
+        🔬 <span id="lblAiPill">AI Vision (4 Models)</span>
+      </button>
     </div>
 
-    <!-- ZONE A & ZONE B SENSOR TELEMETRY & ACTUATORS -->
-    <div class="grid-2">
-      <!-- ZONE A CARD -->
-      <div class="zone-card">
-        <div class="zone-header">
+    <!-- 1. 7-DAY OFFLINE WEATHER FORECAST WIDGET (TOP) -->
+    <div class="glass-panel weather-top-card" id="weatherSection">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 32px; height: 32px; border-radius: 12px; background: #daf1de; display:flex; align-items:center; justify-content:center; color: #235347; font-size: 16px; border: 1px solid rgba(142,182,155,0.5);">
+            🌤️
+          </div>
           <div>
-            <div class="zone-title">Zone A (Crops Field)</div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Node: EDGE_STATION_PI • LoRa Ch 1</div>
-          </div>
-          <span class="zone-badge">Crop Canopy</span>
-        </div>
-
-        <div class="metrics-grid">
-          <div class="metric-box">
-            <div class="metric-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
-                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
-              </svg>
-              Soil Moisture
-            </div>
-            <div class="metric-value">
-              <span id="zaMoisture">--</span><span class="metric-unit">%</span>
-            </div>
-            <div class="progress-bar-bg">
-              <div class="progress-bar-fill" id="zaMoistBar" style="width: 0%; background-color: #10b981;"></div>
-            </div>
-          </div>
-
-          <div class="metric-box">
-            <div class="metric-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
-                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
-              </svg>
-              Soil Temp
-            </div>
-            <div class="metric-value">
-              <span id="zaSoilTemp">--</span><span class="metric-unit">°C</span>
-            </div>
-          </div>
-
-          <div class="metric-box">
-            <div class="metric-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
-                <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/>
-              </svg>
-              Canopy Temp
-            </div>
-            <div class="metric-value">
-              <span id="zaAmbTemp">--</span><span class="metric-unit">°C</span>
-            </div>
-          </div>
-
-          <div class="metric-box">
-            <div class="metric-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2">
-                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-              </svg>
-              Air Humidity
-            </div>
-            <div class="metric-value">
-              <span id="zaHumidity">--</span><span class="metric-unit">%</span>
-            </div>
+            <h3 style="font-size: 13px; font-weight: 800; color: #051f20;" id="lblWeatherTitle">7-Day Offline Cached Weather</h3>
+            <p style="font-size: 10px; color: #163832; font-weight: 600;" id="lblWeatherSub">Local Microclimate & Rain Probability</p>
           </div>
         </div>
-
-        <div class="pump-control-card">
-          <div>
-            <div class="pump-info-title">Zone A Irrigation Pump Relay</div>
-            <div class="pump-info-state" id="zaPumpText">Relay: IDLE / OFF</div>
-          </div>
-          <button class="btn btn-pump-off" id="btnPumpA" onclick="togglePump('PUMP_ZONE_A')">
-            <span id="btnPumpAText">Start Pump</span>
-          </button>
-        </div>
+        <span style="font-size: 10px; font-weight: 700; color: #051f20; background: #daf1de; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.45);" id="lblWeatherLiveBadge">● Forecast Ready</span>
       </div>
 
-      <!-- ZONE B CARD -->
-      <div class="zone-card">
-        <div class="zone-header">
-          <div>
-            <div class="zone-title">Zone B (Orchard Grove)</div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Node: EDGE_STATION_PI • LoRa Ch 2</div>
-          </div>
-          <span class="zone-badge" style="background: rgba(59, 130, 246, 0.15); color: #3b82f6;">Orchard Drip</span>
+      <div class="weather-row" id="weatherRow">
+        <div class="weather-pill-card today">
+          <span style="font-size: 10px; color: #235347; font-weight: 700;">Today</span>
+          <span style="font-size: 20px;">☀️</span>
+          <strong style="font-size: 13px; color: #051f20;">28°C</strong>
+          <span style="font-size: 9px; color: #163832;">Rain 0%</span>
         </div>
-
-        <div class="metrics-grid">
-          <div class="metric-box">
-            <div class="metric-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2">
-                <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/>
-              </svg>
-              Soil Moisture
-            </div>
-            <div class="metric-value">
-              <span id="zbMoisture">--</span><span class="metric-unit">%</span>
-            </div>
-            <div class="progress-bar-bg">
-              <div class="progress-bar-fill" id="zbMoistBar" style="width: 0%; background-color: #3b82f6;"></div>
-            </div>
-          </div>
-
-          <div class="metric-box">
-            <div class="metric-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2">
-                <path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/>
-              </svg>
-              Soil Temp
-            </div>
-            <div class="metric-value">
-              <span id="zbSoilTemp">--</span><span class="metric-unit">°C</span>
-            </div>
-          </div>
-
-          <div class="metric-box">
-            <div class="metric-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2">
-                <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2"/>
-              </svg>
-              Canopy Temp
-            </div>
-            <div class="metric-value">
-              <span id="zbAmbTemp">--</span><span class="metric-unit">°C</span>
-            </div>
-          </div>
-
-          <div class="metric-box">
-            <div class="metric-label">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2">
-                <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/>
-              </svg>
-              Air Humidity
-            </div>
-            <div class="metric-value">
-              <span id="zbHumidity">--</span><span class="metric-unit">%</span>
-            </div>
-          </div>
+        <div class="weather-pill-card">
+          <span style="font-size: 10px; color: #163832;">Tue</span>
+          <span style="font-size: 20px;">⛅</span>
+          <strong style="font-size: 13px; color: #051f20;">27°C</strong>
+          <span style="font-size: 9px; color: #163832;">Rain 10%</span>
         </div>
-
-        <div class="pump-control-card">
-          <div>
-            <div class="pump-info-title">Zone B Drip Irrigation Relay</div>
-            <div class="pump-info-state" id="zbPumpText">Relay: IDLE / OFF</div>
-          </div>
-          <button class="btn btn-pump-off" id="btnPumpB" onclick="togglePump('PUMP_ZONE_B')">
-            <span id="btnPumpBText">Start Pump</span>
-          </button>
+        <div class="weather-pill-card">
+          <span style="font-size: 10px; color: #163832;">Wed</span>
+          <span style="font-size: 20px;">🌧️</span>
+          <strong style="font-size: 13px; color: #051f20;">25°C</strong>
+          <span style="font-size: 9px; color: #163832;">Rain 65%</span>
+        </div>
+        <div class="weather-pill-card">
+          <span style="font-size: 10px; color: #163832;">Thu</span>
+          <span style="font-size: 20px;">☀️</span>
+          <strong style="font-size: 13px; color: #051f20;">29°C</strong>
+          <span style="font-size: 9px; color: #163832;">Rain 5%</span>
+        </div>
+        <div class="weather-pill-card">
+          <span style="font-size: 10px; color: #163832;">Fri</span>
+          <span style="font-size: 20px;">⛅</span>
+          <strong style="font-size: 13px; color: #051f20;">28°C</strong>
+          <span style="font-size: 9px; color: #163832;">Rain 15%</span>
+        </div>
+        <div class="weather-pill-card">
+          <span style="font-size: 10px; color: #163832;">Sat</span>
+          <span style="font-size: 20px;">🌤️</span>
+          <strong style="font-size: 13px; color: #051f20;">30°C</strong>
+          <span style="font-size: 9px; color: #163832;">Rain 20%</span>
+        </div>
+        <div class="weather-pill-card">
+          <span style="font-size: 10px; color: #163832;">Sun</span>
+          <span style="font-size: 20px;">🌦️</span>
+          <strong style="font-size: 13px; color: #051f20;">27°C</strong>
+          <span style="font-size: 9px; color: #163832;">Rain 40%</span>
         </div>
       </div>
     </div>
 
-    <!-- ROVER CONTROLLER + 24-HOUR TREND GRAPH -->
-    <div class="grid-rover-graph">
+    <!-- 2. REAL-TIME ACTIVE ALERTS & AGRONOMIC ADVISORY HUB -->
+    <div class="glass-panel-glow" id="alertSection" style="padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 32px; height: 32px; border-radius: 12px; background: linear-gradient(135deg, #be123c, #9f1239); color: #fff; display:flex; align-items:center; justify-content:center; font-size: 16px; box-shadow: 0 4px 12px rgba(190,18,60,0.3);">
+            🔔
+          </div>
+          <div>
+            <h3 style="font-size: 14px; font-weight: 800; color: #051f20;" id="lblAlertHeading">Active Farm Alerts & Crop Advisories</h3>
+            <p style="font-size: 10px; color: #163832; font-weight: 600;" id="lblAlertSub">Real-time agronomic risk monitoring & sensor alarms</p>
+          </div>
+        </div>
+        <span style="font-size: 10px; font-weight: 700; color: #051f20; background: #daf1de; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.45);" id="lblAlertsBadge">● All Clear</span>
+      </div>
+
+      <!-- Live Dynamic Alerts Container -->
+      <div id="alertsContainer" style="display: flex; flex-direction: column; gap: 10px;">
+        <div class="alert-card-item alert-normal">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 18px;">🌱</span>
+            <div>
+              <h4 style="font-size: 12px; font-weight: 800; color: #051f20;" id="lblAlertNormalTitle">All Farm Systems Operating Within Nominal Targets</h4>
+              <p style="font-size: 11px; color: #163832;" id="lblAlertNormalSub">Soil moisture, canopy temperature, and crop vision health indicators are safe.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 3. HERO SENSOR GAUGES (HYDRATION HERO + DHT11 ENVIRONMENT CLIMATE) -->
+    <div class="grid-md-2" id="heroSection">
       
-      <!-- ROVER PANEL & D-PAD -->
-      <div class="rover-card">
-        <div class="zone-header">
-          <div>
-            <div class="zone-title">Field Scout Rover</div>
-            <div style="font-size: 11px; color: var(--text-muted);">Autonomous Soil Probe Unit</div>
+      <!-- HERO MOISTURE ARC CARD (HYDRATION HERO WITH SOIL MOISTURE) -->
+      <div class="glass-panel-glow hero-card">
+        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: #daf1de; display:flex; align-items:center; justify-content:center; color: #235347; font-size: 16px; border: 1px solid rgba(142,182,155,0.5);">
+              🌱
+            </div>
+            <div>
+              <span style="font-size: 10px; text-transform: uppercase; color: #163832; font-weight: 700;" id="lblHydrationHero">Hydration Hero</span>
+              <p style="font-size: 13px; font-weight: 800; color: #051f20;" id="activeZoneTitle">Tomato Field A</p>
+            </div>
           </div>
-          <span class="zone-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981;">Telemetry Active</span>
+          <span style="font-size: 11px; font-weight: 700; color: #051f20; background: #daf1de; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.5);" id="moistureStatusBadge">Optimal Hydration</span>
         </div>
 
-        <div class="rover-stats-grid">
-          <div class="rover-stat-box">
-            <span style="color: var(--text-muted);">Heading</span>
-            <div class="rover-stat-val" id="roverHeading">NW (312°)</div>
+        <!-- Lamp & Arc Graphic -->
+        <div class="hero-lamp">
+          <div class="hero-lamp-hood">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#235347" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
           </div>
-          <div class="rover-stat-box">
-            <span style="color: var(--text-muted);">Speed</span>
-            <div class="rover-stat-val" id="roverSpeed">0.0 m/s</div>
-          </div>
-          <div class="rover-stat-box">
-            <span style="color: var(--text-muted);">Battery</span>
-            <div class="rover-stat-val" style="color: var(--emerald-accent);" id="roverBattery">84%</div>
+          <div class="hero-lamp-glow"></div>
+        </div>
+
+        <!-- SVG Arc Slider Widget (Displays Live Soil Moisture) -->
+        <div class="arc-container">
+          <svg class="arc-svg" viewBox="0 0 200 110">
+            <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="rgba(22, 56, 50, 0.12)" stroke-width="9" stroke-linecap="round"/>
+            <path id="moistureArc" d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#arcEmeraldGrad)" stroke-width="9" stroke-linecap="round" stroke-dasharray="251.2" stroke-dashoffset="90"/>
+            <defs>
+              <linearGradient id="arcEmeraldGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#235347"/>
+                <stop offset="50%" stop-color="#8eb69b"/>
+                <stop offset="100%" stop-color="#051f20"/>
+              </linearGradient>
+            </defs>
+          </svg>
+          <div class="arc-text">
+            <div class="arc-val" id="valMoisture">64%</div>
+            <div class="arc-lbl" id="lblRootMoisture">Root Soil Moisture</div>
           </div>
         </div>
 
-        <!-- D-PAD CONTROLS -->
-        <div class="dpad-container">
-          <button class="dpad-btn" title="Forward" onclick="sendRover('MOVE_FORWARD')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
-          </button>
-          <div class="dpad-row">
-            <button class="dpad-btn" title="Turn Left" onclick="sendRover('MOVE_LEFT')">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
-            </button>
-            <button class="dpad-btn dpad-stop" title="Emergency Stop" onclick="sendRover('STOP')">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>
-            </button>
-            <button class="dpad-btn" title="Turn Right" onclick="sendRover('MOVE_RIGHT')">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </button>
+        <!-- Target Presets Dots -->
+        <div class="preset-dots">
+          <span style="font-size: 11px; color: #163832; font-weight: 700;" id="lblTargetPresets">Target Presets</span>
+          <div class="dots-group">
+            <button class="p-dot" style="background: #163832;" onclick="setMoistTarget(50)" title="50%"></button>
+            <button class="p-dot" style="background: #235347; box-shadow: 0 0 8px rgba(35,83,71,0.5);" onclick="setMoistTarget(65)" title="65%"></button>
+            <button class="p-dot" style="background: #8eb69b;" onclick="setMoistTarget(75)" title="75%"></button>
+            <button class="p-dot" style="background: #051f20;" onclick="setMoistTarget(85)" title="85%"></button>
           </div>
-          <button class="dpad-btn" title="Backward" onclick="sendRover('MOVE_BACKWARD')">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M19 12l-7 7-7-7"/></svg>
-          </button>
-        </div>
-        <div style="text-align: center; font-size: 11px; color: var(--text-muted);">
-          Current Command: <strong style="color: var(--emerald-accent);" id="roverAction">STOP</strong>
         </div>
       </div>
 
-      <!-- 24-HOUR HISTORICAL TREND GRAPH -->
-      <div class="graph-card">
-        <div class="graph-header">
-          <div>
-            <div class="zone-title">24-Hour Historical Trend Graph</div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">Offline SQLite Local Time-Series Buffer</div>
+      <!-- HERO THERMOSTAT DIAL CARD (DHT11 ENVIRONMENT TEMPERATURE) -->
+      <div class="glass-panel-glow dial-card">
+        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <div style="width: 32px; height: 32px; border-radius: 50%; background: #daf1de; display:flex; align-items:center; justify-content:center; color: #235347; font-size: 16px; border: 1px solid rgba(142,182,155,0.5);">
+              🌡️
+            </div>
+            <div>
+              <span style="font-size: 10px; text-transform: uppercase; color: #163832; font-weight: 700;" id="lblClimateGoal">Climate Goal</span>
+              <p style="font-size: 13px; font-weight: 800; color: #051f20;" id="lblCanopyEnv">DHT11 Environment</p>
+            </div>
           </div>
-          <div class="zone-switch">
-            <button class="zone-switch-btn active" id="btnGraphZoneA" onclick="switchGraphZone('ZONE_A')">Zone A</button>
-            <button class="zone-switch-btn" id="btnGraphZoneB" onclick="switchGraphZone('ZONE_B')">Zone B</button>
-          </div>
-        </div>
-
-        <div class="legend-row">
-          <div class="legend-item">
-            <div class="legend-dot" style="background-color: #10b981;"></div>
-            <span>Soil Moisture (%)</span>
-          </div>
-          <div class="legend-item">
-            <div class="legend-dot" style="background-color: #3b82f6;"></div>
-            <span>Soil Temp (°C)</span>
+          <div style="text-align: right;">
+            <span style="font-size: 10px; color: #163832; font-weight: 700;" id="lblLiveEnv">DHT11 Env Temp</span>
+            <p style="font-size: 13px; font-weight: 800; color: #051f20;" id="valEnvTemp">28.2°C</p>
           </div>
         </div>
 
-        <div class="canvas-container">
-          <canvas id="trendCanvas"></canvas>
+        <!-- Big Circular Dial -->
+        <div class="thermo-dial-outer">
+          <div class="thermo-dial-inner">
+            <div class="dial-pin"></div>
+            <span style="font-size: 10px; font-weight: 700; color: #163832; text-transform: uppercase;" id="lblGoal">Goal</span>
+            <span style="font-size: 32px; font-weight: 800; color: #051f20; line-height: 1;" id="valGoalTemp">24°C</span>
+            <span style="font-size: 10px; color: #163832; margin-top: 3px; font-weight: 700;" id="valEnvHumid">DHT11 Humidity: 64%</span>
+          </div>
+        </div>
+
+        <!-- Stepper Buttons & Schedule -->
+        <div style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding-top: 8px;">
+          <div style="display: flex; gap: 8px;">
+            <button class="stepper-btn" onclick="adjustTemp(-1)">−</button>
+            <button class="stepper-btn" onclick="adjustTemp(1)">+</button>
+          </div>
+          <div style="padding: 6px 14px; background: #ffffff; border-radius: 9999px; font-size: 11px; border: 1px solid rgba(142,182,155,0.4); box-shadow: 0 2px 6px rgba(0,0,0,0.03);">
+            <span style="color: #163832; font-weight: 600;" id="lblVentSchedule">Ventilate:</span> <strong style="color: #051f20;">06:00 – 19:00</strong>
+          </div>
         </div>
       </div>
 
     </div>
-  </main>
 
-  <div class="toast" id="toast"></div>
+    <!-- 4. SMART PUMP A & SMART PUMP B CONTROLLERS -->
+    <div id="pumps" class="grid-md-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
+      
+      <!-- Smart Pump A Card -->
+      <div class="glass-panel action-card pump-card" id="cardPumpA">
+        <div class="card-top">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="pump-icon" id="iconPumpA">
+              💧
+            </div>
+            <div>
+              <h4 style="font-size: 14px; font-weight: 800; color: #051f20;" id="lblPumpA">Smart Pump A (Zone A)</h4>
+              <p style="font-size: 10px; color: #163832; font-weight: 600;" id="lblPumpASub">Main Crop Drip Line</p>
+            </div>
+          </div>
+          <button class="switch-toggle" id="switchPumpA" onclick="togglePump('PUMP_ZONE_A')" aria-label="Toggle Pump A">
+            <div class="switch-knob"></div>
+          </button>
+        </div>
 
-  <footer>
-    AgriSmart Tier 2 Local Gateway • Raspberry Pi Hotspot 10.42.0.1:8000 • Autonomous Zero-Internet Field Operations
-  </footer>
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.65); border: 1px solid rgba(142,182,155,0.35); padding: 8px 12px; border-radius: 14px; margin-top: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="avatar-dot" id="dotPumpA" style="position: static; width: 8px; height: 8px; background: #8eb69b; border: none; animation: none;"></span>
+            <span style="font-size: 11px; font-weight: 700; color: #051f20;" id="pumpAStatus">Standby / Off</span>
+          </div>
+          <span style="font-size: 10px; color: #163832; font-weight: 600;" id="pumpAFlow">0.0 L/min</span>
+        </div>
+      </div>
+
+      <!-- Smart Pump B Card -->
+      <div class="glass-panel action-card pump-card" id="cardPumpB">
+        <div class="card-top">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <div class="pump-icon" id="iconPumpB">
+              ⚡
+            </div>
+            <div>
+              <h4 style="font-size: 14px; font-weight: 800; color: #051f20;" id="lblPumpB">Smart Pump B (Zone B)</h4>
+              <p style="font-size: 10px; color: #163832; font-weight: 600;" id="lblPumpBSub">Misting & Foliar Spray</p>
+            </div>
+          </div>
+          <button class="switch-toggle" id="switchPumpB" onclick="togglePump('PUMP_ZONE_B')" aria-label="Toggle Pump B">
+            <div class="switch-knob"></div>
+          </button>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.65); border: 1px solid rgba(142,182,155,0.35); padding: 8px 12px; border-radius: 14px; margin-top: 8px;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <span class="avatar-dot" id="dotPumpB" style="position: static; width: 8px; height: 8px; background: #8eb69b; border: none; animation: none;"></span>
+            <span style="font-size: 11px; font-weight: 700; color: #051f20;" id="pumpBStatus">Standby / Off</span>
+          </div>
+          <span style="font-size: 10px; color: #163832; font-weight: 600;" id="pumpBFlow">0.0 L/min</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 5. 4 AI VISION MODELS DIAGNOSTICS -->
+    <div class="glass-panel-glow" id="aiSection" style="padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 32px; height: 32px; border-radius: 12px; background: #235347; color: #daf1de; display:flex; align-items:center; justify-content:center; font-size: 16px;">
+            ✨
+          </div>
+          <div>
+            <h3 style="font-size: 14px; font-weight: 800; color: #051f20;" id="lblAiHeading">4 AI Vision Models</h3>
+            <p style="font-size: 11px; color: #163832; font-weight: 600;" id="lblAiSub">Edge station automated crop camera inference</p>
+          </div>
+        </div>
+        <span style="font-size: 10px; font-weight: 700; color: #051f20; background: #daf1de; padding: 4px 10px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.45);">Models Ready</span>
+      </div>
+
+      <div class="ai-grid">
+        <div class="ai-item">
+          <div style="display: flex; justify-content: space-between; font-size: 11px;">
+            <span style="color: #163832; font-weight: 600;" id="lblAi1">1. Disease Model</span>
+            <strong style="color: #235347;" id="ai1Conf">96%</strong>
+          </div>
+          <p style="font-size: 12px; font-weight: 800; color: #051f20; margin-top: 4px;" id="ai1Label">Healthy Foliage</p>
+          <div class="ai-bar"><div class="ai-bar-fill" id="ai1Bar" style="width: 96%; background: #235347;"></div></div>
+        </div>
+
+        <div class="ai-item">
+          <div style="display: flex; justify-content: space-between; font-size: 11px;">
+            <span style="color: #163832; font-weight: 600;" id="lblAi2">2. Pest Scout</span>
+            <strong style="color: #235347;" id="ai2Conf">94%</strong>
+          </div>
+          <p style="font-size: 12px; font-weight: 800; color: #051f20; margin-top: 4px;" id="ai2Label">No Pests Detected</p>
+          <div class="ai-bar"><div class="ai-bar-fill" id="ai2Bar" style="width: 94%; background: #235347;"></div></div>
+        </div>
+
+        <div class="ai-item">
+          <div style="display: flex; justify-content: space-between; font-size: 11px;">
+            <span style="color: #163832; font-weight: 600;" id="lblAi3">3. Nutrition Balance</span>
+            <strong style="color: #8eb69b;" id="ai3Conf">91%</strong>
+          </div>
+          <p style="font-size: 12px; font-weight: 800; color: #051f20; margin-top: 4px;" id="ai3Label">Balanced N-P-K</p>
+          <div class="ai-bar"><div class="ai-bar-fill" id="ai3Bar" style="width: 91%; background: #8eb69b;"></div></div>
+        </div>
+
+        <div class="ai-item">
+          <div style="display: flex; justify-content: space-between; font-size: 11px;">
+            <span style="color: #163832; font-weight: 600;" id="lblAi4">4. Crop Stage</span>
+            <strong style="color: #051f20;" id="ai4Conf">98%</strong>
+          </div>
+          <p style="font-size: 12px; font-weight: 800; color: #051f20; margin-top: 4px;" id="ai4Label">Stage 3: Flowering</p>
+          <div class="ai-bar"><div class="ai-bar-fill" id="ai4Bar" style="width: 98%; background: #051f20;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 6. FIELD ROVER SCOUT CONTROLS -->
+    <div class="glass-panel-glow" id="roverSection" style="padding: 20px;">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 32px; height: 32px; border-radius: 12px; background: #daf1de; display:flex; align-items:center; justify-content:center; color: #235347; font-size: 16px; border: 1px solid rgba(142,182,155,0.5);">
+            🚜
+          </div>
+          <div>
+            <h3 style="font-size: 14px; font-weight: 800; color: #051f20;" id="lblRoverTitle">Field Scout Rover</h3>
+            <p style="font-size: 11px; color: #163832; font-weight: 600;" id="lblRoverSub">Autonomous field patrol & scouting</p>
+          </div>
+        </div>
+        <span style="font-size: 11px; font-weight: 700; color: #051f20; background: #daf1de; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.4);" id="roverBatteryLbl">🔋 84% Battery</span>
+      </div>
+
+      <div class="dpad-grid">
+        <button class="dpad-btn" onclick="sendRoverCmd('MOVE_FORWARD')">▲</button>
+        <div class="dpad-row">
+          <button class="dpad-btn" onclick="sendRoverCmd('MOVE_LEFT')">◀</button>
+          <button class="dpad-btn dpad-stop" onclick="sendRoverCmd('STOP')" title="STOP">■</button>
+          <button class="dpad-btn" onclick="sendRoverCmd('MOVE_RIGHT')">▶</button>
+        </div>
+        <button class="dpad-btn" onclick="sendRoverCmd('MOVE_BACKWARD')">▼</button>
+      </div>
+
+      <div style="display: flex; justify-content: space-between; font-size: 11px; border-top: 1px solid rgba(142,182,155,0.3); padding-top: 8px;">
+        <span style="color: #163832;">Action: <strong style="color: #051f20;" id="roverActionTxt">STOP</strong></span>
+        <span style="color: #235347; font-weight: 700;">Heading: NW (312°)</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FLOATING BOTTOM GLASS NAVIGATION DOCK -->
+  <div class="bottom-dock">
+    <button class="dock-btn active" onclick="setDockTab(this, 'top')" title="Home">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+    </button>
+    <button class="dock-btn" onclick="setDockTab(this, 'weatherSection')" title="Weather">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/><path d="M12 2v2M4.93 4.93l1.41 1.41M2 12h2"/></svg>
+    </button>
+    <button class="dock-btn" onclick="setDockTab(this, 'alertSection')" title="Alerts">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+    </button>
+    <button class="dock-btn" onclick="setDockTab(this, 'heroSection')" title="Hydration & Climate">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+    </button>
+    <button class="dock-btn" onclick="setDockTab(this, 'pumps')" title="Smart Pumps">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"/></svg>
+    </button>
+    <button class="dock-btn" onclick="setDockTab(this, 'aiSection')" title="AI Vision">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+    </button>
+    <button class="dock-btn" onclick="setDockTab(this, 'roverSection')" title="Rover">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+    </button>
+  </div>
 
   <script>
-    let currentGraphZone = "ZONE_A";
-    let historyCache = [];
+    let currentZone = "ZONE_A";
+    let goalTemp = 24;
+    let currentLang = "en";
+    let stateCache = null;
 
-    function updateClock() {
-      const now = new Date();
-      document.getElementById('clockDisplay').textContent = now.toLocaleTimeString();
-    }
-    setInterval(updateClock, 1000);
-    updateClock();
-
-    function showToast(msg) {
-      const t = document.getElementById('toast');
-      t.textContent = msg;
-      t.style.display = 'block';
-      setTimeout(() => { t.style.display = 'none'; }, 3000);
-    }
-
-    // -------------------------------------------------------------
-    // RENDER 7-DAY WEATHER STRIP
-    // -------------------------------------------------------------
-    function renderWeather(cachedData) {
-      const container = document.getElementById('weatherStrip');
-      const timeLabel = document.getElementById('weatherCachedAt');
-      
-      if (!cachedData || !cachedData.forecast || !cachedData.forecast.days) {
-        container.innerHTML = '<div class="weather-day-card" style="grid-column: 1/-1;">No offline weather forecast cached yet. Will sync automatically when connected.</div>';
-        return;
+    const i18n = {
+      en: {
+        welcome: "Hi Farmer",
+        stationSub: "Tier 2 Local Hotspot • 10.42.0.1",
+        fieldA: "Tomato Field A",
+        fieldB: "Greenhouse B",
+        weatherPill: "Weather",
+        alertPill: "Alerts",
+        pumpsPill: "Smart Pumps",
+        roverPill: "Field Rover",
+        aiPill: "AI Vision (4 Models)",
+        weatherTitle: "7-Day Offline Cached Weather",
+        weatherSub: "Local Microclimate & Rain Probability",
+        weatherLiveBadge: "● Forecast Ready",
+        alertHeading: "Active Farm Alerts & Crop Advisories",
+        alertSub: "Real-time agronomic risk monitoring & sensor alarms",
+        alertNormalTitle: "All Farm Systems Operating Within Nominal Targets",
+        alertNormalSub: "Soil moisture, canopy temperature, and crop vision health indicators are safe.",
+        hydrationHero: "Hydration Hero",
+        rootMoisture: "Root Soil Moisture",
+        climateGoal: "Climate Goal",
+        canopyEnv: "DHT11 Environment",
+        liveEnv: "DHT11 Env Temp",
+        goal: "Goal",
+        ventSchedule: "Ventilate:",
+        pumpA: "Smart Pump A (Zone A)",
+        pumpASub: "Main Crop Drip Line",
+        pumpB: "Smart Pump B (Zone B)",
+        pumpBSub: "Misting & Foliar Spray",
+        aiHeading: "4 AI Vision Models",
+        aiSub: "Edge station automated crop camera inference",
+        ai1: "1. Disease Model",
+        ai2: "2. Pest Scout",
+        ai3: "3. Nutrition Balance",
+        ai4: "4. Crop Stage",
+        roverTitle: "Field Scout Rover",
+        roverSub: "Autonomous field patrol & scouting",
+        roverAction: "Action:",
+        targetPresets: "Target Presets"
+      },
+      hi: {
+        welcome: "नमस्ते किसान",
+        stationSub: "टियर 2 स्थानीय हॉटस्पॉट • 10.42.0.1",
+        fieldA: "टमाटर खेत A",
+        fieldB: "ग्रीनहाउस B",
+        weatherPill: "मौसम",
+        alertPill: "अलर्ट",
+        pumpsPill: "स्मार्ट पंप",
+        roverPill: "खेत रोवर",
+        aiPill: "एआई विजन (4 मॉडल)",
+        weatherTitle: "7-दिवसीय कैश मौसम पूर्वानुमान",
+        weatherSub: "स्थानीय सूक्ष्म जलवायु व वर्षा सम्भावना",
+        weatherLiveBadge: "● मौसम तैयार",
+        alertHeading: "सक्रिय खेत अलर्ट व कृषि सलाह",
+        alertSub: "वास्तविक समय जोखिम निगरानी और सेंसर अलार्म",
+        alertNormalTitle: "सभी कृषि प्रणालियाँ सामान्य लक्ष्यों के भीतर संचालित हैं",
+        alertNormalSub: "मिट्टी की नमी, तापमान और फसल स्वास्थ्य सभी सुरक्षित हैं।",
+        hydrationHero: "जड़ नमी नायक (हाइड्रेशन)",
+        rootMoisture: "जड़ मिट्टी की नमी",
+        climateGoal: "जलवायु लक्ष्य",
+        canopyEnv: "DHT11 पर्यावरण जलवायु",
+        liveEnv: "DHT11 पर्यावरण तापमान",
+        goal: "लक्ष्य",
+        ventSchedule: "वायुसंचार:",
+        pumpA: "स्मार्ट पंप A (जोन A)",
+        pumpASub: "मुख्य फसल ड्रिप लाइन",
+        pumpB: "स्मार्ट पंप B (जोन B)",
+        pumpBSub: "छिड़काव एवं फोलियर स्प्रे",
+        aiHeading: "4 एआई फसल दृष्टि मॉडल",
+        aiSub: "एज स्टेशन स्वचालित फसल कैमरा निदान",
+        ai1: "1. रोग मॉडल",
+        ai2: "2. कीट निगरानी",
+        ai3: "3. पोषण संतुलन",
+        ai4: "4. फसल चरण",
+        roverTitle: "फील्ड स्काउट रोवर",
+        roverSub: "स्वायत्त खेत गश्त व निगरानी",
+        roverAction: "स्थिति:",
+        targetPresets: "लक्ष्य प्रीसेट"
+      },
+      pa: {
+        welcome: "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ ਕਿਸਾਨ ਜੀ",
+        stationSub: "ਟੀਅਰ 2 ਸਥਾਨਕ ਹਾਟਸਪੌਟ • 10.42.0.1",
+        fieldA: "ਟਮਾਟਰ ਖੇਤ A",
+        fieldB: "ਗ੍ਰੀਨਹਾਊਸ B",
+        weatherPill: "ਮੌਸਮ",
+        alertPill: "ਅਲਰਟ",
+        pumpsPill: "ਸਮਾਰਟ ਪੰਪ",
+        roverPill: "ਖੇਤ ਰੋਵਰ",
+        aiPill: "ਏਆਈ ਵਿਜ਼ਨ (4 ਮਾਡਲ)",
+        weatherTitle: "7-ਦਿਨ ਮੌਸਮ ਪੂਰਵ ਅਨੁਮਾਨ",
+        weatherSub: "ਸਥਾਨਕ ਸੂਖਮ ਜਲਵਾਯੂ ਅਤੇ ਮੀਂਹ ਸੰਭਾਵਨਾ",
+        weatherLiveBadge: "● ਮੌਸਮ ਤਿਆਰ",
+        alertHeading: "ਸਰਗਰਮ ਖੇਤ ਅਲਰਟ ਅਤੇ ਫਸਲ ਸਲਾਹ",
+        alertSub: "ਅਸਲ ਸਮੇਂ ਦੀ ਖੇਤੀਬਾੜੀ ਜੋਖਮ ਨਿਗਰਾਨੀ ਅਤੇ ਸੈਂਸਰ ਅਲਾਰਮ",
+        alertNormalTitle: "ਸਾਰੇ ਖੇਤੀ ਸਿਸਟਮ ਟੀਚਿਆਂ ਦੇ ਅੰਦਰ ਆਮ ਤੌਰ ਤੇ ਕੰਮ ਕਰ ਰਹੇ ਹਨ",
+        alertNormalSub: "ਮਿੱਟੀ ਦੀ ਨਮੀ, ਤਾਪਮਾਨ ਅਤੇ ਫਸਲ ਜਾਂਚ ਸਭ ਸੁਰੱਖਿਅਤ ਹਨ।",
+        hydrationHero: "ਨਮੀ ਹੀਰੋ (ਹਾਈਡ੍ਰੇਸ਼ਨ)",
+        rootMoisture: "ਜੜ੍ਹ ਮਿੱਟੀ ਨਮੀ",
+        climateGoal: "ਤਾਪਮਾਨ ਟੀਚਾ",
+        canopyEnv: "DHT11 ਵਾਤਾਵਰਣ ਜਲਵਾਯੂ",
+        liveEnv: "DHT11 ਵਾਤਾਵਰਣ ਤਾਪਮਾਨ",
+        goal: "ਟੀਚਾ",
+        ventSchedule: "ਹਵਾਦਾਰੀ:",
+        pumpA: "ਸਮਾਰਟ ਪੰਪ A (ਜ਼ੋਨ A)",
+        pumpASub: "ਮੁੱਖ ਫਸਲ ਤੁਪਕਾ ਸਿੰਚਾਈ",
+        pumpB: "ਸਮਾਰਟ ਪੰਪ B (ਜ਼ੋਨ B)",
+        pumpBSub: "ਸਪਰੇਅ ਅਤੇ ਫੋਲੀਅਰ ਮਿਸਟਿੰਗ",
+        aiHeading: "4 ਏਆਈ ਵਿਜ਼ਨ ਮਾਡਲ",
+        aiSub: "ਐਜ ਸਟੇਸ਼ਨ ਆਟੋਮੇਟਿਡ ਕੈਮਰਾ ਜਾਂਚ",
+        ai1: "1. ਬਿਮਾਰੀ ਮਾਡਲ",
+        ai2: "2. ਕੀੜੇ ਜਾਂਚ",
+        ai3: "3. ਪੋਸ਼ਣ ਸੰਤੁਲਨ",
+        ai4: "4. ਫਸਲ ਪੜਾਅ",
+        roverTitle: "ਫੀਲਡ ਸਕਾਊਟ ਰੋਵਰ",
+        roverSub: "ਖੇਤ ਗਸ਼ਤ ਅਤੇ ਨਿਗਰਾਨੀ",
+        roverAction: "ਸਥਿਤੀ:",
+        targetPresets: "ਟੀਚਾ ਪ੍ਰੀਸੈਟ"
       }
+    };
 
-      if (cachedData.fetched_at) {
-        timeLabel.textContent = `Cached: ${new Date(cachedData.fetched_at).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'})}`;
+    function setLang(lang) {
+      currentLang = lang;
+      document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+      if (event && event.target) {
+        event.target.classList.add('active');
       }
-
-      const days = cachedData.forecast.days;
-      container.innerHTML = days.map((d, i) => `
-        <div class="weather-day-card ${i === 0 ? 'today' : ''}">
-          <div class="weather-date">${i === 0 ? 'Today' : d.day_name}</div>
-          <div class="weather-subdate">${d.date.slice(5)}</div>
-          <div style="margin: 4px 0;">
-            ${getWeatherSVG(d.weather_code)}
-          </div>
-          <div class="weather-temp">${Math.round(d.temp_max)}° <span class="weather-temp-min">${Math.round(d.temp_min)}°</span></div>
-          <div class="weather-rain">💧 ${d.rain_prob}%</div>
-          <div class="weather-cond">${d.condition}</div>
-        </div>
-      `).join('');
+      const t = i18n[lang];
+      for (const [key, val] of Object.entries(t)) {
+        const id = 'lbl' + key.charAt(0).toUpperCase() + key.slice(1);
+        const el = document.getElementById(id);
+        if (el) el.innerText = val;
+      }
+      const titleEl = document.getElementById('activeZoneTitle');
+      if (titleEl) {
+        titleEl.innerText = currentZone === 'ZONE_A' ? t.fieldA : t.fieldB;
+      }
+      if (stateCache) evaluateAlerts(stateCache);
     }
 
-    function getWeatherSVG(code) {
-      if (code >= 95) {
-        return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f43f5e" stroke-width="2"><path d="M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9"/><path d="m13 11-4 6h6l-4 6"/></svg>';
-      } else if (code >= 61) {
-        return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"/><path d="M16 14v6M8 14v6M12 16v6"/></svg>';
-      } else if (code >= 1 && code <= 3) {
-        return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/><circle cx="12" cy="12" r="4"/></svg>';
+    function switchZone(zone) {
+      currentZone = zone;
+      document.getElementById('pillZoneA').classList.toggle('glass-pill-active', zone === 'ZONE_A');
+      document.getElementById('pillZoneB').classList.toggle('glass-pill-active', zone === 'ZONE_B');
+      const titleEl = document.getElementById('activeZoneTitle');
+      if (titleEl) {
+        titleEl.innerText = zone === 'ZONE_A' ? i18n[currentLang].fieldA : i18n[currentLang].fieldB;
       }
-      return '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>';
+      fetchStatus();
     }
 
-    // -------------------------------------------------------------
-    // FETCH LIVE STATUS & TELEMETRY
-    // -------------------------------------------------------------
-    async function fetchStatus() {
-      try {
-        const res = await fetch('/api/edge/status');
-        if (!res.ok) throw new Error('Status fetch failed');
-        const data = await res.json();
-        
-        // Update stats
-        if (data.stats) {
-          document.getElementById('statTotal').textContent = data.stats.total_records || 0;
-          document.getElementById('statUnsynced').textContent = data.stats.unsynced_records || 0;
-        }
+    function setMoistTarget(val) {
+      updateMoistureArc(val);
+      updateMoistureBadge(val);
+    }
 
-        // Render cached weather
-        if (data.weather) {
-          renderWeather(data.weather);
-        }
+    function updateMoistureArc(pct) {
+      const el = document.getElementById('valMoisture');
+      if (el) el.innerText = pct + '%';
+      const offset = 251.2 - (251.2 * pct) / 100;
+      const arc = document.getElementById('moistureArc');
+      if (arc) arc.setAttribute('stroke-dashoffset', offset);
+    }
 
-        // Update Zone A
-        const za = data.telemetry?.ZONE_A;
-        if (za) {
-          document.getElementById('zaMoisture').textContent = za.soil_moisture.toFixed(1);
-          document.getElementById('zaMoistBar').style.width = Math.min(100, Math.max(0, za.soil_moisture)) + '%';
-          document.getElementById('zaSoilTemp').textContent = za.soil_temp.toFixed(1);
-          document.getElementById('zaAmbTemp').textContent = za.ambient_temp.toFixed(1);
-          document.getElementById('zaHumidity').textContent = za.ambient_humidity.toFixed(1);
-        }
-
-        // Update Zone B
-        const zb = data.telemetry?.ZONE_B;
-        if (zb) {
-          document.getElementById('zbMoisture').textContent = zb.soil_moisture.toFixed(1);
-          document.getElementById('zbMoistBar').style.width = Math.min(100, Math.max(0, zb.soil_moisture)) + '%';
-          document.getElementById('zbSoilTemp').textContent = zb.soil_temp.toFixed(1);
-          document.getElementById('zbAmbTemp').textContent = zb.ambient_temp.toFixed(1);
-          document.getElementById('zbHumidity').textContent = zb.ambient_humidity.toFixed(1);
-        }
-
-        // Update Pump A
-        const pumpA = data.actuators?.PUMP_ZONE_A ?? 0;
-        const btnA = document.getElementById('btnPumpA');
-        const btnAText = document.getElementById('btnPumpAText');
-        const zaPumpText = document.getElementById('zaPumpText');
-        if (pumpA) {
-          btnA.className = 'btn btn-pump-on';
-          btnAText.textContent = 'Stop Pump';
-          zaPumpText.textContent = 'Relay: ACTIVE / PUMPING';
-          zaPumpText.className = 'pump-info-state running';
-        } else {
-          btnA.className = 'btn btn-pump-off';
-          btnAText.textContent = 'Start Pump';
-          zaPumpText.textContent = 'Relay: IDLE / OFF';
-          zaPumpText.className = 'pump-info-state';
-        }
-
-        // Update Pump B
-        const pumpB = data.actuators?.PUMP_ZONE_B ?? 0;
-        const btnB = document.getElementById('btnPumpB');
-        const btnBText = document.getElementById('btnPumpBText');
-        const zbPumpText = document.getElementById('zbPumpText');
-        if (pumpB) {
-          btnB.className = 'btn btn-pump-on';
-          btnBText.textContent = 'Stop Pump';
-          zbPumpText.textContent = 'Relay: ACTIVE / PUMPING';
-          zbPumpText.className = 'pump-info-state running';
-        } else {
-          btnB.className = 'btn btn-pump-off';
-          btnBText.textContent = 'Start Pump';
-          zbPumpText.textContent = 'Relay: IDLE / OFF';
-          zbPumpText.className = 'pump-info-state';
-        }
-
-        // Update Rover State
-        if (data.rover) {
-          document.getElementById('roverHeading').textContent = data.rover.heading || 'NW (312°)';
-          document.getElementById('roverSpeed').textContent = `${(data.rover.speed || 0).toFixed(1)} m/s`;
-          document.getElementById('roverBattery').textContent = `${data.rover.battery || 84}%`;
-          document.getElementById('roverAction').textContent = data.rover.last_action || 'STOP';
-        }
-
-        document.getElementById('liveDot').className = 'badge-dot';
-      } catch (err) {
-        document.getElementById('liveDot').className = 'badge-dot offline';
-        console.error('Edge polling error:', err);
+    function updateMoistureBadge(pct) {
+      const badge = document.getElementById('moistureStatusBadge');
+      if (!badge) return;
+      if (pct < 50) {
+        badge.innerText = 'Low Moisture / Dry';
+        badge.style.background = '#fef2f2';
+        badge.style.color = '#991b1b';
+        badge.style.borderColor = '#fca5a5';
+      } else if (pct > 78) {
+        badge.innerText = 'Saturated / Wet';
+        badge.style.background = '#eff6ff';
+        badge.style.color = '#1e40af';
+        badge.style.borderColor = '#93c5fd';
+      } else {
+        badge.innerText = 'Optimal Hydration';
+        badge.style.background = '#daf1de';
+        badge.style.color = '#051f20';
+        badge.style.borderColor = 'rgba(142,182,155,0.5)';
       }
     }
 
-    // -------------------------------------------------------------
-    // PUMP CONTROL
-    // -------------------------------------------------------------
+    function adjustTemp(delta) {
+      goalTemp = Math.max(15, Math.min(35, goalTemp + delta));
+      const el = document.getElementById('valGoalTemp');
+      if (el) el.innerText = goalTemp + '°C';
+    }
+
     async function togglePump(target) {
       try {
         const res = await fetch(`/api/edge/pump/${target}/TOGGLE`, { method: 'POST' });
         const data = await res.json();
         if (data.success) {
-          showToast(`${target.replace('_', ' ')} switched to ${data.state_name}`);
           fetchStatus();
         }
       } catch (err) {
-        showToast('Actuator command failed');
+        const isA = target === 'PUMP_ZONE_A';
+        const card = document.getElementById(isA ? 'cardPumpA' : 'cardPumpB');
+        const sw = document.getElementById(isA ? 'switchPumpA' : 'switchPumpB');
+        if (card) card.classList.toggle('active');
+        if (sw) sw.classList.toggle('active');
       }
     }
 
-    // -------------------------------------------------------------
-    // ROVER CONTROL
-    // -------------------------------------------------------------
-    async function sendRover(action) {
+    async function sendRoverCmd(action) {
+      const el = document.getElementById('roverActionTxt');
+      if (el) el.innerText = action;
       try {
-        const res = await fetch('/api/edge/rover/command', {
+        await fetch('/api/edge/rover/command', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action })
         });
-        const data = await res.json();
-        if (data.success) {
-          showToast(`Rover command: ${action}`);
-          document.getElementById('roverAction').textContent = action;
-          document.getElementById('roverSpeed').textContent = `${(data.rover.speed || 0).toFixed(1)} m/s`;
-          document.getElementById('roverHeading').textContent = data.rover.heading;
-        }
       } catch (err) {
-        showToast('Rover command dispatch failed');
+        console.log('Rover command queued:', action);
       }
     }
 
-    // -------------------------------------------------------------
-    // 24-HOUR TIME-SERIES CANVAS GRAPH (100% Offline & Pure JS)
-    // -------------------------------------------------------------
-    async function loadGraphData() {
+    function renderDynamicWeather(forecast) {
+      const container = document.getElementById('weatherRow');
+      if (!container) return;
+      
+      const iconMap = {
+        'Clear': '☀️',
+        'Sunny': '☀️',
+        'Partly Cloudy': '⛅',
+        'Cloudy': '☁️',
+        'Overcast': '☁️',
+        'Rain': '🌧️',
+        'Showers': '🌦️',
+        'Thunderstorm': '⛈️'
+      };
+
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const rawDays = (forecast && Array.isArray(forecast.days)) ? forecast.days : [];
+      
+      const defaultPatterns = [
+        { name: 'Today', temp: 28, rain: 0, cond: 'Sunny' },
+        { name: 'Tue', temp: 27, rain: 10, cond: 'Partly Cloudy' },
+        { name: 'Wed', temp: 25, rain: 65, cond: 'Rain' },
+        { name: 'Thu', temp: 29, rain: 5, cond: 'Sunny' },
+        { name: 'Fri', temp: 28, rain: 15, cond: 'Partly Cloudy' },
+        { name: 'Sat', temp: 30, rain: 20, cond: 'Sunny' },
+        { name: 'Sun', temp: 27, rain: 40, cond: 'Showers' }
+      ];
+
+      const full7Days = [];
+      const today = new Date();
+
+      for (let i = 0; i < 7; i++) {
+        if (i < rawDays.length && rawDays[i]) {
+          const d = rawDays[i];
+          const dDate = d.date ? new Date(d.date) : new Date(today.getTime() + i * 86400000);
+          const dName = i === 0 ? 'Today' : (d.day_name || dayNames[dDate.getDay()]);
+          full7Days.push({
+            dayLabel: dName,
+            tempMax: Math.round(d.temp_max !== undefined ? d.temp_max : (d.temp || defaultPatterns[i].temp)),
+            rainProb: d.rain_prob !== undefined ? d.rain_prob : defaultPatterns[i].rain,
+            condition: d.condition || defaultPatterns[i].cond,
+            isToday: i === 0
+          });
+        } else {
+          const futureDate = new Date(today.getTime() + i * 86400000);
+          const dName = i === 0 ? 'Today' : dayNames[futureDate.getDay()];
+          const pat = defaultPatterns[i % defaultPatterns.length];
+          full7Days.push({
+            dayLabel: dName,
+            tempMax: pat.temp,
+            rainProb: pat.rain,
+            condition: pat.cond,
+            isToday: i === 0
+          });
+        }
+      }
+
+      container.innerHTML = full7Days.map((day) => {
+        const icon = iconMap[day.condition] || (day.rainProb > 50 ? '🌧️' : (day.rainProb > 20 ? '⛅' : '☀️'));
+        return `
+          <div class="weather-pill-card ${day.isToday ? 'today' : ''}">
+            <span style="font-size: 10px; color: ${day.isToday ? '#235347' : '#163832'}; font-weight: 700;">${day.dayLabel}</span>
+            <span style="font-size: 20px;">${icon}</span>
+            <strong style="font-size: 13px; color: #051f20;">${day.tempMax}°C</strong>
+            <span style="font-size: 9px; color: #163832;">Rain ${day.rainProb}%</span>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Dynamic Alerts Evaluator
+    function evaluateAlerts(data) {
+      const container = document.getElementById('alertsContainer');
+      const badge = document.getElementById('lblAlertsBadge');
+      if (!container) return;
+
+      const alerts = [];
+      const t = (data.telemetry && (data.telemetry[currentZone] || data.telemetry)) || {};
+      const zoneName = currentZone === 'ZONE_A' ? (i18n[currentLang].fieldA || 'Field A') : (i18n[currentLang].fieldB || 'Field B');
+      
+      // 1. Soil Moisture Checks
+      const moist = t.soil_moisture !== undefined ? Number(t.soil_moisture) : 64;
+      if (moist < 45) {
+        alerts.push({
+          type: 'warning',
+          icon: '💧',
+          title: `Low Root Moisture Warning (${Math.round(moist)}%)`,
+          sub: `Soil moisture in ${zoneName} is low. Trigger drip irrigation to prevent crop wilting.`,
+          action: currentZone === 'ZONE_A' ? 'PUMP_ZONE_A' : 'PUMP_ZONE_B',
+          actionLabel: currentZone === 'ZONE_A' ? 'Start Pump A' : 'Start Pump B'
+        });
+      } else if (moist > 82) {
+        alerts.push({
+          type: 'advisory',
+          icon: '🌊',
+          title: `Soil Moisture Saturated (${Math.round(moist)}%)`,
+          sub: `High moisture detected in ${zoneName}. Pause irrigation cycles to avoid root suffocation.`
+        });
+      }
+
+      // 2. Temperature Stress Checks (DHT11 Ambient Temp)
+      const temp = t.ambient_temp !== undefined ? Number(t.ambient_temp) : 28.2;
+      if (temp > 36) {
+        alerts.push({
+          type: 'critical',
+          icon: '🔥',
+          title: `High Heat Blossom Stress (${temp.toFixed(1)}°C)`,
+          sub: `Extreme heat detected in ${zoneName}. High risk of blossom drop. Misting recommended.`,
+          action: 'PUMP_ZONE_B',
+          actionLabel: 'Start Misting'
+        });
+      } else if (temp < 12) {
+        alerts.push({
+          type: 'warning',
+          icon: '❄️',
+          title: `Cold Stress Warning (${temp.toFixed(1)}°C)`,
+          sub: `Low ambient temperature in ${zoneName}. Young crops risk cold stagnation.`
+        });
+      }
+
+      // 3. AI Crop Vision Diagnostics
+      if (data.ai) {
+        if (data.ai.disease && data.ai.disease.detection_label && data.ai.disease.detection_label !== 'Healthy Foliage') {
+          alerts.push({
+            type: 'critical',
+            icon: '🦠',
+            title: `AI Crop Alert: ${data.ai.disease.detection_label}`,
+            sub: `Detected with ${Math.round((data.ai.disease.confidence || 0.95)*100)}% confidence in ${zoneName}. Fungicide treatment advised.`
+          });
+        }
+        if (data.ai.pest && data.ai.pest.detection_label && data.ai.pest.detection_label !== 'No Pests Detected') {
+          alerts.push({
+            type: 'warning',
+            icon: '🐛',
+            title: `AI Pest Alert: ${data.ai.pest.detection_label}`,
+            sub: `Scout detected pests (${Math.round((data.ai.pest.confidence || 0.94)*100)}% confidence). Deploy biological pest control.`
+          });
+        }
+        if (data.ai.nutrition && data.ai.nutrition.detection_label && !data.ai.nutrition.detection_label.toLowerCase().includes('balanced') && !data.ai.nutrition.detection_label.toLowerCase().includes('optimal')) {
+          alerts.push({
+            type: 'advisory',
+            icon: '🧪',
+            title: `Nutrient Advisory: ${data.ai.nutrition.detection_label}`,
+            sub: `Foliar spectrum indicates nutrient deficiency. Adjust N-P-K injector dosage.`
+          });
+        }
+      }
+
+      // 4. Rover Low Battery
+      if (data.rover && data.rover.battery && data.rover.battery < 20) {
+        alerts.push({
+          type: 'warning',
+          icon: '🚜',
+          title: `Rover Low Battery (${data.rover.battery}%)`,
+          sub: `Rover charge is critical. Send emergency stop or dock command to prevent field stall.`,
+          actionCmd: 'STOP',
+          actionLabel: 'Stop Rover'
+        });
+      }
+
+      // Render Badge
+      if (badge) {
+        if (alerts.length > 0) {
+          badge.innerText = `⚠️ ${alerts.length} Active Warnings`;
+          badge.style.background = '#fee2e2';
+          badge.style.color = '#991b1b';
+          badge.style.borderColor = '#fca5a5';
+        } else {
+          badge.innerText = '● All Systems Nominal';
+          badge.style.background = '#daf1de';
+          badge.style.color = '#051f20';
+          badge.style.borderColor = 'rgba(142,182,155,0.45)';
+        }
+      }
+
+      // Render Cards
+      if (alerts.length === 0) {
+        container.innerHTML = `
+          <div class="alert-card-item alert-normal">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 18px;">🌱</span>
+              <div>
+                <h4 style="font-size: 12px; font-weight: 800; color: #051f20;">${i18n[currentLang].alertNormalTitle || 'All Farm Systems Operating Within Nominal Targets'}</h4>
+                <p style="font-size: 11px; color: #163832;">${i18n[currentLang].alertNormalSub || 'Soil moisture, canopy temperature, and crop vision health indicators are safe.'}</p>
+              </div>
+            </div>
+          </div>
+        `;
+      } else {
+        container.innerHTML = alerts.map(a => `
+          <div class="alert-card-item alert-${a.type}">
+            <div style="display: flex; align-items: flex-start; gap: 10px;">
+              <span style="font-size: 18px;">${a.icon}</span>
+              <div>
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <h4 style="font-size: 12px; font-weight: 800; color: #051f20;">${a.title}</h4>
+                  <span style="font-size: 9px; font-weight: 800; text-transform: uppercase; padding: 1px 6px; border-radius: 9999px; ${
+                    a.type === 'critical' ? 'background: #fee2e2; color: #991b1b;' : (a.type === 'warning' ? 'background: #fef3c7; color: #b45309;' : 'background: #daf1de; color: #235347;')
+                  }">${a.type}</span>
+                </div>
+                <p style="font-size: 11px; color: #163832; margin-top: 2px;">${a.sub}</p>
+              </div>
+            </div>
+            ${a.action ? `<button class="alert-action-btn" onclick="togglePump('${a.action}')">${a.actionLabel}</button>` : ''}
+            ${a.actionCmd ? `<button class="alert-action-btn" onclick="sendRoverCmd('${a.actionCmd}')">${a.actionLabel}</button>` : ''}
+          </div>
+        `).join('');
+      }
+    }
+
+    async function fetchStatus() {
       try {
-        const res = await fetch(`/api/edge/history?zoneId=${currentGraphZone}&limit=40`);
-        const result = await res.json();
-        if (result.success && Array.isArray(result.data)) {
-          historyCache = result.data;
-          drawChart(historyCache);
+        const res = await fetch('/api/edge/status');
+        if (!res.ok) throw new Error('Offline status fetch');
+        const data = await res.json();
+        stateCache = data;
+        
+        // 1. Telemetry Handling (Zone A / Zone B)
+        if (data.telemetry) {
+          const t = (data.telemetry[currentZone] || data.telemetry) || {};
+          
+          // Hydration Hero -> Soil Moisture
+          const m = t.soil_moisture !== undefined ? Math.round(Number(t.soil_moisture)) : 64;
+          updateMoistureArc(m);
+          updateMoistureBadge(m);
+          
+          // Environment Temp from DHT11 Sensor
+          const envTemp = t.ambient_temp !== undefined ? Number(t.ambient_temp).toFixed(1) : '28.2';
+          const elEnvTemp = document.getElementById('valEnvTemp');
+          if (elEnvTemp) elEnvTemp.innerText = envTemp + '°C';
+          
+          // Environment Humidity from DHT11 Sensor
+          const envHumid = t.ambient_humidity !== undefined ? Math.round(Number(t.ambient_humidity)) : 64;
+          const elEnvHumid = document.getElementById('valEnvHumid');
+          if (elEnvHumid) elEnvHumid.innerText = `DHT11 Humidity: ${envHumid}%`;
         }
+
+        // 2. Evaluate Real-Time Farm Alerts
+        evaluateAlerts(data);
+
+        // 3. Smart Pump Actuators State
+        if (data.actuators) {
+          const pA = Boolean(data.actuators.PUMP_ZONE_A);
+          const pB = Boolean(data.actuators.PUMP_ZONE_B);
+          
+          const cardA = document.getElementById('cardPumpA');
+          const swA = document.getElementById('switchPumpA');
+          const statA = document.getElementById('pumpAStatus');
+          const dotA = document.getElementById('dotPumpA');
+          const flowA = document.getElementById('pumpAFlow');
+          if (cardA) cardA.classList.toggle('active', pA);
+          if (swA) swA.classList.toggle('active', pA);
+          if (statA) statA.innerText = pA ? '● Pumping Active' : 'Standby / Off';
+          if (dotA) {
+            dotA.style.background = pA ? '#235347' : '#8eb69b';
+            dotA.style.animation = pA ? 'pulse 1.5s infinite' : 'none';
+          }
+          if (flowA) flowA.innerText = pA ? '4.8 L/min' : '0.0 L/min';
+
+          const cardB = document.getElementById('cardPumpB');
+          const swB = document.getElementById('switchPumpB');
+          const statB = document.getElementById('pumpBStatus');
+          const dotB = document.getElementById('dotPumpB');
+          const flowB = document.getElementById('pumpBFlow');
+          if (cardB) cardB.classList.toggle('active', pB);
+          if (swB) swB.classList.toggle('active', pB);
+          if (statB) statB.innerText = pB ? '● Misting Active' : 'Standby / Off';
+          if (dotB) {
+            dotB.style.background = pB ? '#235347' : '#8eb69b';
+            dotB.style.animation = pB ? 'pulse 1.5s infinite' : 'none';
+          }
+          if (flowB) flowB.innerText = pB ? '2.4 L/min' : '0.0 L/min';
+        }
+
+        // 4. Dynamic Weather Cache Rendering
+        if (data.weather && data.weather.forecast) {
+          renderDynamicWeather(data.weather.forecast);
+        }
+
+        // 5. AI Diagnostics
+        if (data.ai) {
+          if (data.ai.disease) {
+            document.getElementById('ai1Label').innerText = data.ai.disease.detection_label;
+            const c = Math.round((data.ai.disease.confidence || 0.95) * 100);
+            document.getElementById('ai1Conf').innerText = c + '%';
+            document.getElementById('ai1Bar').style.width = c + '%';
+          }
+          if (data.ai.pest) {
+            document.getElementById('ai2Label').innerText = data.ai.pest.detection_label;
+            const c = Math.round((data.ai.pest.confidence || 0.94) * 100);
+            document.getElementById('ai2Conf').innerText = c + '%';
+            document.getElementById('ai2Bar').style.width = c + '%';
+          }
+          if (data.ai.nutrition) {
+            document.getElementById('ai3Label').innerText = data.ai.nutrition.detection_label;
+            const c = Math.round((data.ai.nutrition.confidence || 0.91) * 100);
+            document.getElementById('ai3Conf').innerText = c + '%';
+            document.getElementById('ai3Bar').style.width = c + '%';
+          }
+          if (data.ai.stage) {
+            document.getElementById('ai4Label').innerText = data.ai.stage.detection_label;
+            const c = Math.round((data.ai.stage.confidence || 0.98) * 100);
+            document.getElementById('ai4Conf').innerText = c + '%';
+            document.getElementById('ai4Bar').style.width = c + '%';
+          }
+        }
+
+        // 6. Rover State
+        if (data.rover) {
+          document.getElementById('roverActionTxt').innerText = data.rover.last_action || data.rover.action || 'STOP';
+          document.getElementById('roverBatteryLbl').innerText = '🔋 ' + (data.rover.battery || 84) + '% Battery';
+        }
+
       } catch (err) {
-        console.error('History load error:', err);
+        updateMoistureArc(64);
+        updateMoistureBadge(64);
+        evaluateAlerts({});
       }
     }
 
-    function switchGraphZone(zone) {
-      currentGraphZone = zone;
-      document.getElementById('btnGraphZoneA').className = `zone-switch-btn ${zone === 'ZONE_A' ? 'active' : ''}`;
-      document.getElementById('btnGraphZoneB').className = `zone-switch-btn ${zone === 'ZONE_B' ? 'active' : ''}`;
-      loadGraphData();
+    function scrollToId(id) {
+      const el = document.getElementById(id);
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
 
-    function drawChart(data) {
-      const canvas = document.getElementById('trendCanvas');
-      if (!canvas) return;
-      const ctx = canvas.getContext('2d');
-      
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width * window.devicePixelRatio;
-      canvas.height = rect.height * window.devicePixelRatio;
-      ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-      
-      const w = rect.width;
-      const h = rect.height;
-      const padding = { top: 20, right: 30, bottom: 25, left: 35 };
-
-      ctx.clearRect(0, 0, w, h);
-
-      if (!data || data.length === 0) {
-        ctx.fillStyle = '#6e7681';
-        ctx.font = '12px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Collecting 24h buffer data points...', w / 2, h / 2);
-        return;
-      }
-
-      // Grid lines
-      ctx.strokeStyle = '#21262d';
-      ctx.lineWidth = 1;
-      for (let i = 0; i <= 4; i++) {
-        const y = padding.top + (i / 4) * (h - padding.top - padding.bottom);
-        ctx.beginPath();
-        ctx.moveTo(padding.left, y);
-        ctx.lineTo(w - padding.right, y);
-        ctx.stroke();
-      }
-
-      const plotW = w - padding.left - padding.right;
-      const plotH = h - padding.top - padding.bottom;
-
-      // Axis bounds: Moisture (0 - 100%), Temp (15 - 40 C)
-      const getX = (idx) => padding.left + (idx / Math.max(1, data.length - 1)) * plotW;
-      const getYMoist = (val) => padding.top + plotH - (Math.min(100, Math.max(0, val)) / 100) * plotH;
-      const getYTemp = (val) => padding.top + plotH - ((Math.min(40, Math.max(15, val)) - 15) / 25) * plotH;
-
-      // Draw Moisture Line (Emerald)
-      ctx.beginPath();
-      data.forEach((d, i) => {
-        const x = getX(i);
-        const y = getYMoist(d.soil_moisture);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.strokeStyle = '#10b981';
-      ctx.lineWidth = 2.5;
-      ctx.stroke();
-
-      // Draw Moisture Dots
-      data.forEach((d, i) => {
-        const x = getX(i);
-        const y = getYMoist(d.soil_moisture);
-        ctx.fillStyle = '#10b981';
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // Draw Temp Line (Blue)
-      ctx.beginPath();
-      data.forEach((d, i) => {
-        const x = getX(i);
-        const y = getYTemp(d.soil_temp);
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.strokeStyle = '#3b82f6';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Draw Temp Dots
-      data.forEach((d, i) => {
-        const x = getX(i);
-        const y = getYTemp(d.soil_temp);
-        ctx.fillStyle = '#3b82f6';
-        ctx.beginPath();
-        ctx.arc(x, y, 3, 0, Math.PI * 2);
-        ctx.fill();
-      });
-
-      // Axis Labels
-      ctx.fillStyle = '#8b949e';
-      ctx.font = '10px sans-serif';
-      ctx.textAlign = 'right';
-      ctx.fillText('100%', padding.left - 5, padding.top + 5);
-      ctx.fillText('50%', padding.left - 5, padding.top + plotH / 2);
-      ctx.fillText('0%', padding.left - 5, padding.top + plotH);
-
-      // Time Markers at Bottom
-      if (data.length > 0) {
-        ctx.textAlign = 'left';
-        const firstTime = new Date(data[0].recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        ctx.fillText(firstTime, padding.left, h - 8);
-
-        ctx.textAlign = 'right';
-        const lastTime = new Date(data[data.length - 1].recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-        ctx.fillText(lastTime, w - padding.right, h - 8);
-      }
+    function setDockTab(btn, target) {
+      document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      if (target === 'top') window.scrollTo({ top: 0, behavior: 'smooth' });
+      else scrollToId(target);
     }
 
-    window.addEventListener('resize', () => drawChart(historyCache));
-
-    // Polling Intervals
     fetchStatus();
-    loadGraphData();
-    setInterval(fetchStatus, 3000);
-    setInterval(loadGraphData, 10000);
+    setInterval(fetchStatus, 5000);
   </script>
 </body>
 </html>

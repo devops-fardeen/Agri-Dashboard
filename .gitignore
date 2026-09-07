@@ -36,6 +36,7 @@ __pycache__/
 *.db
 *.db-journal
 *.db-wal
+*.db-shm
 
 # System & IDE files
 .DS_Store

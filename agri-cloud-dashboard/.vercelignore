@@ -1,0 +1,7 @@
+.git
+node_modules
+.next
+.env*.local
+.system_generated
+.tempmediaStorage
+scratch

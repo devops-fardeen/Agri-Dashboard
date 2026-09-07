@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { mongodbAdapter } from "better-auth/adapters/mongodb";
 import { MongoClient } from "mongodb";
+import { hashPassword, verifyPassword } from "./password";
 
 if (!process.env.MONGODB_URI) {
   throw new Error("Missing MONGODB_URI");
@@ -13,6 +14,11 @@ export const auth = betterAuth({
   database: mongodbAdapter(db),
   emailAndPassword: {
     enabled: true,
+    minPasswordLength: 6,
+    password: {
+      hash: hashPassword,
+      verify: verifyPassword,
+    },
   },
   socialProviders: {
     google: {

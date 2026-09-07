@@ -1,7 +1,8 @@
 import os
 from datetime import datetime, timezone
 from typing import Optional
-from fastapi import FastAPI, HTTPException, Path, Body
+import requests
+from fastapi import FastAPI, HTTPException, Path, Body, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -10,10 +11,13 @@ import database
 # Initialize SQLite database schema
 database.init_db()
 
+AI_SERVICE_URL = os.getenv("AI_SERVICE_URL", "http://127.0.0.1:5000")
+AI_RESULTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dashboard-ai-modals", "results")
+
 app = FastAPI(
     title="AgriSmart Local Edge Station",
-    description="Tier 2: Offline Local Gateway & Direct Hotspot Controller",
-    version="2.0.0"
+    description="Tier 2: Offline Local Gateway & Direct Hotspot Controller with 4 AI Vision Models",
+    version="2.1.0"
 )
 
 # Allow local intranet and cross-origin requests
@@ -35,18 +39,27 @@ INDEX_FILE = os.path.join(STATIC_DIR, "index.html")
 class RoverCommandRequest(BaseModel):
     action: str
 
+class AIDetectionRequest(BaseModel):
+    node_id: str = "NODE_01"
+    model_name: str
+    detection_label: str
+    confidence: float
+    image_path: Optional[str] = None
+    metadata_json: Optional[str] = None
+
 # ----------------------------------------------------------------------
 # API ENDPOINTS
 # ----------------------------------------------------------------------
 
 @app.get("/api/edge/status")
 def get_edge_status():
-    """Returns the comprehensive status: telemetry, actuators, stats, rover, and cached weather."""
+    """Returns the comprehensive status: telemetry, actuators, stats, rover, cached weather, and latest AI summary."""
     telemetry = database.get_latest_telemetry()
     actuators = database.get_all_actuators()
     stats = database.get_edge_stats()
     rover = database.get_rover_state()
     weather = database.get_cached_weather()
+    ai_summary = database.get_latest_ai_summary()
     
     return {
         "success": True,
@@ -59,7 +72,8 @@ def get_edge_status():
         "telemetry": telemetry,
         "rover": rover,
         "weather": weather,
-        "stats": stats
+        "stats": stats,
+        "ai": ai_summary
     }
 
 @app.get("/api/edge/weather")
@@ -147,6 +161,100 @@ def get_history(zoneId: Optional[str] = None, zone_id: Optional[str] = None, lim
         "zone_id": target_zone,
         "data": records
     }
+
+# ----------------------------------------------------------------------
+# AI CROP VISION & DIAGNOSTICS ENDPOINTS (4 ONNX Models)
+# ----------------------------------------------------------------------
+
+@app.get("/api/edge/ai/latest")
+def get_ai_latest(node_id: Optional[str] = None):
+    """Returns the latest summary and recent detections from the 4 AI models."""
+    summary = database.get_latest_ai_summary(node_id=node_id)
+    recent = database.get_latest_ai_detections(node_id=node_id, limit=10)
+    return {
+        "success": True,
+        "node_id": node_id or "ALL_NODES",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "summary": summary,
+        "recent_detections": recent
+    }
+
+@app.post("/api/edge/ai/detection")
+def record_ai_detection(payload: AIDetectionRequest):
+    """Directly records a single AI detection event into SQLite."""
+    row_id = database.log_ai_detection(
+        node_id=payload.node_id,
+        model_name=payload.model_name,
+        detection_label=payload.detection_label,
+        confidence=payload.confidence,
+        image_path=payload.image_path,
+        metadata_json=payload.metadata_json
+    )
+    return {
+        "success": True,
+        "id": row_id,
+        "message": "AI detection recorded in local edge buffer"
+    }
+
+@app.post("/api/edge/ai/upload")
+async def upload_and_diagnose(
+    image: UploadFile = File(...),
+    node_id: str = Form("NODE_01")
+):
+    """
+    Ingests a camera frame from Node 1 or Node 2, forwards it to the 4-model AI inference
+    engine (dashboard-ai-modals), logs detection results into SQLite, and returns diagnosis.
+    """
+    image_bytes = await image.read()
+    filename = image.filename or "frame.jpg"
+    
+    # Forward to AI engine at dashboard-ai-modals:5000/upload
+    try:
+        files = {"image": (filename, image_bytes, image.content_type or "image/jpeg")}
+        ai_res = requests.post(f"{AI_SERVICE_URL}/upload", files=files, timeout=25.0)
+        
+        if ai_res.status_code == 200:
+            ai_data = ai_res.json()
+            results = ai_data.get("results", {})
+            
+            # Log bundle into SQLite
+            inserted_ids = database.log_ai_inference_bundle(
+                node_id=node_id,
+                results=results,
+                image_filename=ai_data.get("image", filename)
+            )
+            
+            summary = database.get_latest_ai_summary(node_id=node_id)
+            
+            return {
+                "success": True,
+                "node_id": node_id,
+                "blur_score": ai_data.get("blur_score", 0),
+                "results": results,
+                "recorded_ids": inserted_ids,
+                "summary": summary,
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"AI Engine returned status {ai_res.status_code}: {ai_res.text}"
+            }
+    except requests.exceptions.RequestException as e:
+        # Fallback if AI service is starting up or offline
+        return {
+            "success": False,
+            "error": f"AI Engine service unreachable at {AI_SERVICE_URL} ({str(e)})",
+            "offline_mode": True
+        }
+
+@app.get("/api/edge/ai/image/latest")
+def get_latest_annotated_image():
+    """Returns the most recent annotated inference image from the AI worker."""
+    latest_img_path = os.path.join(AI_RESULTS_DIR, "latest.jpg")
+    if os.path.exists(latest_img_path):
+        return FileResponse(latest_img_path, media_type="image/jpeg")
+    raise HTTPException(status_code=404, detail="No annotated image available yet")
 
 # ----------------------------------------------------------------------
 # SERVE LOCAL OFFLINE DASHBOARD

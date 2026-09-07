@@ -1,12 +1,22 @@
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700", "800"],
+});
 
 export const metadata: Metadata = {
-  title: "AgriSmart Cloud Central",
-  description: "Smart Farming Assistant & Gateway Telemetry Dashboard",
+  title: "AgriSmart Cloud Central — Smart Agriculture Ecosystem",
+  description: "Next-gen precision farming dashboard with custom earth & slate warm palette.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  themeColor: "#f7f2ed",
 };
 
 export default function RootLayout({
@@ -15,9 +25,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" className="light" suppressHydrationWarning>
       <body
-        className={`${inter.className} min-h-screen bg-[#0a0e14] text-[#f0f6fc] antialiased`}
+        className={`${jakarta.className} min-h-screen bg-[#f7f2ed] text-[#10232a] antialiased selection:bg-[#b58863] selection:text-white`}
         suppressHydrationWarning
       >
         {children}

@@ -8,7 +8,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-zinc-800/80 bg-[#101620]/90 backdrop-blur-xl p-6 text-zinc-100 shadow-xl",
+        "rounded-3xl border border-[#8eb69b]/40 bg-white/90 backdrop-blur-xl p-6 text-[#051f20] shadow-lg shadow-[#163832]/5",
         className
       )}
       {...props}
@@ -34,7 +34,7 @@ export function CardTitle({
 }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn("text-lg font-semibold leading-none tracking-tight", className)}
+      className={cn("text-lg font-black text-[#051f20] leading-none tracking-tight", className)}
       {...props}
     />
   );
@@ -46,7 +46,7 @@ export function CardDescription({
 }: React.HTMLAttributes<HTMLParagraphElement>) {
   return (
     <p
-      className={cn("text-sm text-zinc-400 leading-relaxed", className)}
+      className={cn("text-sm text-[#163832] font-medium leading-relaxed", className)}
       {...props}
     />
   );

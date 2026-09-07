@@ -12,6 +12,7 @@ logger = logging.getLogger("sync_worker")
 
 CLOUD_BASE_URL = os.getenv("CLOUD_BASE_URL", "http://localhost:3000")
 CLOUD_SYNC_URL = os.getenv("CLOUD_SYNC_URL", f"{CLOUD_BASE_URL}/api/telemetry/sync")
+CLOUD_AI_SYNC_URL = os.getenv("CLOUD_AI_SYNC_URL", f"{CLOUD_BASE_URL}/api/ai/sync")
 CLOUD_COMMANDS_URL = os.getenv("CLOUD_COMMANDS_URL", f"{CLOUD_BASE_URL}/api/commands")
 EDGE_SYNC_KEY = os.getenv("EDGE_SYNC_KEY", "dashboard@agri1")
 BATCH_SIZE = int(os.getenv("SYNC_BATCH_SIZE", "20"))
@@ -22,13 +23,20 @@ WEATHER_LONGITUDE = float(os.getenv("FARM_LONGITUDE", "80.9462"))
 class CloudSyncWorker:
     """
     Bidirectional synchronization worker:
-    1. Edge Push: Batches and pushes local SQLite telemetry and physical actuator states to Tier 3 Cloud.
+    1. Edge Push: Batches and pushes local SQLite telemetry, AI detections, and physical actuator states to Tier 3 Cloud.
     2. Cloud Pull: Drains pending commands from Tier 3 Cloud, executes them locally in SQLite, and acknowledges back.
     3. Storage Management: Performs 24-hour rolling local storage pruning on synced records.
     4. Offline Weather Cache: Fetches and caches 7-day Open-Meteo weather forecasts.
     """
-    def __init__(self, cloud_url: str = CLOUD_SYNC_URL, commands_url: str = CLOUD_COMMANDS_URL, sync_key: str = EDGE_SYNC_KEY):
+    def __init__(
+        self,
+        cloud_url: str = CLOUD_SYNC_URL,
+        ai_sync_url: str = CLOUD_AI_SYNC_URL,
+        commands_url: str = CLOUD_COMMANDS_URL,
+        sync_key: str = EDGE_SYNC_KEY
+    ):
         self.cloud_url = cloud_url
+        self.ai_sync_url = ai_sync_url
         self.commands_url = commands_url
         self.sync_key = sync_key
         self.running = False
@@ -179,6 +187,57 @@ class CloudSyncWorker:
             
         return 0
 
+    def sync_ai_batch(self) -> int:
+        """
+        Edge Push for AI Vision Detections (Local SQLite -> Cloud MongoDB Atlas):
+        Pulls batch of unsynced AI detections from SQLite and posts to Tier 3 /api/ai/sync.
+        """
+        unsynced = database.get_unsynced_ai_detections(limit=BATCH_SIZE)
+        if not unsynced:
+            return 0
+            
+        ids = [r["id"] for r in unsynced]
+        payload = []
+        for r in unsynced:
+            meta = {}
+            if r.get("metadata_json"):
+                try:
+                    meta = json.loads(r["metadata_json"])
+                except Exception:
+                    meta = {}
+            payload.append({
+                "nodeId": r["node_id"],
+                "modelName": r["model_name"],
+                "detectionLabel": r["detection_label"],
+                "confidence": r["confidence"],
+                "imagePath": r.get("image_path"),
+                "metadata": meta,
+                "recordedAt": r["created_at"]
+            })
+            
+        headers = {
+            "Content-Type": "application/json",
+            "x-edge-sync-key": self.sync_key
+        }
+        
+        try:
+            response = requests.post(
+                self.ai_sync_url,
+                json=payload,
+                headers=headers,
+                timeout=6.0
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("success"):
+                    marked = database.mark_ai_detections_synced(ids)
+                    logger.info(f"Synced batch of {marked} AI detection events to Tier 3 Cloud.")
+                    database.prune_synced_ai_detections(retention_hours=24)
+                    return marked
+        except Exception as e:
+            logger.debug(f"AI sync offline/buffering: {e}")
+        return 0
+
     def check_and_update_weather_cache(self):
         """7-Day Offline Weather Cache updater."""
         if not database.is_weather_stale(max_age_hours=24):
@@ -262,7 +321,13 @@ class CloudSyncWorker:
                     if count <= 0:
                         break
                         
-                # 3. Weather Cache freshness check
+                # 3. Edge Push: Drain unsynced AI detections to cloud
+                while self.running:
+                    ai_count = self.sync_ai_batch()
+                    if ai_count <= 0:
+                        break
+
+                # 4. Weather Cache freshness check
                 self.check_and_update_weather_cache()
                 
             except Exception as e:
