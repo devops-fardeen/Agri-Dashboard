@@ -2281,7 +2281,41 @@
       }
     }
 
-    setLang('en');
+    function setLang(lang) {
+      setLanguage(lang);
+    }
+
+    // Active Rover Pulse to keep connection alive even with legacy watchdog firmware
+    let roverKeepAliveTimer = null;
+    let activeRoverAction = 'STOP';
+
+    function startRoverKeepAlive(action) {
+      activeRoverAction = action;
+      if (roverKeepAliveTimer) clearInterval(roverKeepAliveTimer);
+      if (action === 'STOP' || action === 'AUTO_OFF') return;
+
+      roverKeepAliveTimer = setInterval(() => {
+        if (activeRoverAction && activeRoverAction !== 'STOP' && activeRoverAction !== 'AUTO_OFF') {
+          const roverIp = getRoverIp();
+          // Send lightweight heartbeat ping
+          try {
+            fetch(`http://${roverIp}/heartbeat`, { mode: 'no-cors', signal: AbortSignal.timeout(800) }).catch(()=>{});
+          } catch(e) {}
+        } else {
+          clearInterval(roverKeepAliveTimer);
+          roverKeepAliveTimer = null;
+        }
+      }, 1000); // 1-second pulse prevents any 3-second timeout!
+    }
+
+    // Wrap sendRoverCmd to update keepalive
+    const _origSendRoverCmd = sendRoverCmd;
+    sendRoverCmd = async function(action) {
+      startRoverKeepAlive(action);
+      return _origSendRoverCmd(action);
+    };
+
+    setLanguage('en');
     fetchStatus();
     setInterval(fetchStatus, 5000);
   </script>

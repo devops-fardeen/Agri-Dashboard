@@ -33,6 +33,7 @@ app.add_middleware(
 
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 INDEX_FILE = os.path.join(STATIC_DIR, "index.html")
+_rover_heartbeat_active = False
 
 # ----------------------------------------------------------------------
 # PYDANTIC MODELS
@@ -234,6 +235,22 @@ def send_rover_command(payload: RoverCommandRequest):
                 pass
 
         threading.Thread(target=dispatch_rover_http, args=(rover_ip, rover_cmd), daemon=True).start()
+
+        # Start continuous heartbeat thread while running to prevent watchdog timeout on legacy firmware
+        global _rover_heartbeat_active
+        if rover_cmd in ["forward", "backward", "left", "right", "auto_on"]:
+            _rover_heartbeat_active = True
+            def keepalive_worker(ip: str):
+                import time
+                while _rover_heartbeat_active:
+                    time.sleep(1.0)
+                    try:
+                        requests.get(f"http://{ip}/heartbeat", timeout=1.0)
+                    except Exception:
+                        pass
+            threading.Thread(target=keepalive_worker, args=(rover_ip,), daemon=True).start()
+        else:
+            _rover_heartbeat_active = False
 
     return {
         "success": True,
