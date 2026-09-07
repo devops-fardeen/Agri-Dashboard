@@ -302,7 +302,6 @@ void handleCommand() {
   } else if (command == "auto_on" || command == "auto") {
     autoMode = true;
     autoTurning = false;
-    stopMotors();
     currentMovement = "AUTO";
   } else if (command == "auto_off") {
     autoMode = false;
@@ -469,12 +468,14 @@ void loop() {
     return;
   }
 
-  // Safety Watchdog (Auto-stop if Pi does not send heartbeat)
-  if (millis() - lastPiHeartbeat > PI_TIMEOUT) {
-    stopMotors();
-    autoMode = false;
-    autoTurning = false;
-    currentMovement = "SAFETY STOP";
+  // Safety Watchdog for Manual Drive (auto-stops manual motors if command drops for >3s)
+  if (!autoMode) {
+    if (millis() - lastPiHeartbeat > PI_TIMEOUT) {
+      if (currentMovement != "STOP" && currentMovement != "SAFETY STOP") {
+        stopMotors();
+        currentMovement = "SAFETY STOP";
+      }
+    }
   }
 
   // Autonomous Mode execution

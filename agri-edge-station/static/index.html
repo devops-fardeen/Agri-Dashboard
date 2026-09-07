@@ -1269,7 +1269,7 @@
       <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.65); padding: 8px 12px; border-radius: 14px; margin-bottom: 8px; border: 1px solid rgba(142,182,155,0.35); font-size: 11px;">
         <span style="color: #163832; font-weight: 600;">⚡ Speed: <strong id="valRoverSpeed">180</strong></span>
         <input type="range" min="80" max="255" value="180" step="5" style="width: 100px; accent-color: #235347;" onchange="setRoverSpeed(this.value)">
-        <input type="text" id="roverIpInput" placeholder="Rover IP" value="192.168.43.150" style="width: 90px; font-size: 10px; padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(142,182,155,0.5); text-align: center;">
+        <input type="text" id="roverIpInput" placeholder="Rover IP" value="10.202.46.196" oninput="onRoverIpChanged(this.value)" style="width: 95px; font-size: 10px; padding: 2px 6px; border-radius: 8px; border: 1px solid rgba(142,182,155,0.5); text-align: center;">
       </div>
 
       <div style="display: flex; justify-content: space-between; font-size: 11px; border-top: 1px solid rgba(142,182,155,0.3); padding-top: 8px;">
@@ -1565,11 +1565,23 @@
 
     let roverAutoState = false;
 
+    function getRoverIp() {
+      const ipInput = document.getElementById('roverIpInput');
+      let ip = (ipInput ? ipInput.value.trim() : '') || localStorage.getItem('rover_ip') || '10.202.46.196';
+      if (ipInput && !ipInput.value) ipInput.value = ip;
+      return ip;
+    }
+
+    function onRoverIpChanged(val) {
+      if (val && val.trim()) {
+        localStorage.setItem('rover_ip', val.trim());
+      }
+    }
+
     async function sendRoverCmd(action) {
       const el = document.getElementById('roverActionTxt');
       if (el) el.innerText = action;
-      const ipInput = document.getElementById('roverIpInput');
-      const roverIp = ipInput ? ipInput.value.trim() : '192.168.43.150';
+      const roverIp = getRoverIp();
 
       try {
         await fetch('/api/edge/rover/command', {
@@ -1596,8 +1608,7 @@
     async function setRoverSpeed(val) {
       const speedLbl = document.getElementById('valRoverSpeed');
       if (speedLbl) speedLbl.innerText = val;
-      const ipInput = document.getElementById('roverIpInput');
-      const roverIp = ipInput ? ipInput.value.trim() : '192.168.43.150';
+      const roverIp = getRoverIp();
       try {
         await fetch(`/api/edge/rover/command`, {
           method: 'POST',
@@ -1606,6 +1617,35 @@
         });
       } catch(e) {}
     }
+
+    // Live Rover Telemetry Fetcher
+    async function pollRoverHardware() {
+      const roverIp = getRoverIp();
+      if (!roverIp) return;
+      try {
+        const res = await fetch(`http://${roverIp}/telemetry`, { signal: AbortSignal.timeout(1500) });
+        if (res.ok) {
+          const data = await res.json();
+          const battLbl = document.getElementById('roverBatteryLbl');
+          const distLbl = document.getElementById('roverDistTxt');
+          const actionLbl = document.getElementById('roverActionTxt');
+          
+          if (battLbl && data.battery_voltage) {
+            battLbl.innerText = `🔋 ${data.battery_voltage.toFixed(1)}V (${data.battery_percent || 84}%)`;
+          }
+          if (distLbl && data.distance_cm !== undefined) {
+            distLbl.innerText = `Obstacle: ${data.distance_cm.toFixed(0)}cm`;
+          }
+          if (actionLbl && data.movement) {
+            actionLbl.innerText = data.movement;
+          }
+        }
+      } catch (e) {
+        // Silent catch for intranet fetch
+      }
+    }
+
+    setInterval(pollRoverHardware, 3000);
 
     function renderDynamicWeather(forecast) {
       const container = document.getElementById('weatherRow');
