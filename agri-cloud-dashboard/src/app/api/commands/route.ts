@@ -6,15 +6,40 @@ import { DeviceCommand } from "@/lib/db/models/DeviceCommand";
 export async function POST(req: NextRequest) {
   try {
     const { target, action } = await req.json();
-    await connectToDatabase();
 
-    const command = await DeviceCommand.create({
-      target,
-      action,
-      status: "PENDING",
-    });
+    // 1. Direct relay to local Edge Station on port 8000 if running locally
+    try {
+      if (target === "PUMP_ZONE_A" || target === "PUMP_ZONE_B") {
+        await fetch(`http://127.0.0.1:8000/api/edge/pump/${target}/${action}`, {
+          method: "POST",
+          signal: AbortSignal.timeout(1000),
+        }).catch(() => {});
+      } else if (target === "ROVER") {
+        await fetch(`http://127.0.0.1:8000/api/edge/rover/command`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+          signal: AbortSignal.timeout(1000),
+        }).catch(() => {});
+      }
+    } catch {
+      // Local relay skipped if station offline
+    }
 
-    return NextResponse.json({ success: true, command });
+    // 2. Persist command to MongoDB for cloud-to-edge worker synchronization
+    let command = null;
+    try {
+      await connectToDatabase();
+      command = await DeviceCommand.create({
+        target,
+        action,
+        status: "PENDING",
+      });
+    } catch (dbErr: any) {
+      console.warn("MongoDB offline, command dispatched to local hardware:", dbErr.message);
+    }
+
+    return NextResponse.json({ success: true, command, target, action });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

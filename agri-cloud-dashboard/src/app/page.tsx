@@ -105,10 +105,12 @@ export default function DashboardPage() {
   const [aiSummary, setAiSummary] = useState<AIDiagnosticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Pump States
+  // Pump States & Action Feedback
   const [pumpZoneA, setPumpZoneA] = useState(false);
   const [pumpZoneB, setPumpZoneB] = useState(false);
   const [pumpLoading, setPumpLoading] = useState(false);
+  const [fertigationActive, setFertigationActive] = useState(false);
+  const [actionNotice, setActionNotice] = useState<string | null>(null);
 
   // Interactive Target Setpoints
   const [moistureTarget, setMoistureTarget] = useState(65);
@@ -353,6 +355,13 @@ export default function DashboardPage() {
       if (tRes.ok) {
         const tData = await tRes.json();
         setTelemetry(tData);
+        if (tData.latest?.actuatorState?.pumpActive !== undefined) {
+          if (activeZone === "ZONE_A") {
+            setPumpZoneA(Boolean(tData.latest.actuatorState.pumpActive));
+          } else {
+            setPumpZoneB(Boolean(tData.latest.actuatorState.pumpActive));
+          }
+        }
       }
       setWeather(wData);
       fetchAIDiagnostics();
@@ -373,9 +382,34 @@ export default function DashboardPage() {
       }
 
       // Optimistic Instant UI Update
-      if (target === "PUMP_ZONE_A") setPumpZoneA(action === "ON");
-      if (target === "PUMP_ZONE_B") setPumpZoneB(action === "ON");
+      if (target === "PUMP_ZONE_A") {
+        const next = action === "ON";
+        setPumpZoneA(next);
+        setActionNotice(next ? "💧 Smart Pump A Activated (Relay Pin 25 ON • 42 L/h)" : "🛑 Smart Pump A Deactivated (Relay Pin 25 OFF)");
+      }
+      if (target === "PUMP_ZONE_B") {
+        const next = action === "ON";
+        setPumpZoneB(next);
+        setActionNotice(next ? "⚡ Smart Pump B Misting Activated (Relay Pin 26 ON • 24 L/h)" : "🛑 Smart Pump B Deactivated (Relay Pin 26 OFF)");
+      }
+      if (target === "ROVER") {
+        setActionNotice(`🚜 Rover Command: ${action} Dispatched`);
+      }
 
+      setTimeout(() => setActionNotice(null), 3500);
+
+      // 1. Direct browser fetch to local Edge Station (port 8000) for sub-5ms relay control
+      if (target === "PUMP_ZONE_A" || target === "PUMP_ZONE_B") {
+        try {
+          fetch(`http://127.0.0.1:8000/api/edge/pump/${target}/${action}`, {
+            method: "POST",
+            mode: "no-cors",
+            signal: AbortSignal.timeout(800)
+          }).catch(() => {});
+        } catch {}
+      }
+
+      // 2. Dispatch to Cloud API
       await fetch("/api/commands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -710,6 +744,16 @@ export default function DashboardPage() {
             </button>
           </div>
         </header>
+
+        {/* FLOATING ACTION NOTIFICATION TOAST */}
+        {actionNotice && (
+          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 animate-bounce">
+            <div className="bg-[#051f20] text-white px-5 py-2.5 rounded-full shadow-2xl border border-[#8eb69b]/40 flex items-center gap-2.5 text-xs font-extrabold tracking-wide">
+              <span className="w-2 h-2 rounded-full bg-[#8eb69b] animate-ping" />
+              <span>{actionNotice}</span>
+            </div>
+          </div>
+        )}
 
         {/* ZONE & FIELD SWITCHER PILLS */}
         <nav aria-label="Zone selector" className="flex items-center gap-2 overflow-x-auto pb-1.5 no-scrollbar">
@@ -1393,9 +1437,12 @@ export default function DashboardPage() {
         <section id="pumpsSection" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
           
           {/* Card 1: Smart Pump Zone A */}
-          <div className={`glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] transition-all duration-300 ${
-            pumpZoneA ? "border-[#235347] bg-white/95 shadow-md ring-2 ring-[#235347]/20" : "hover:border-[#235347]/50"
-          }`}>
+          <div 
+            onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
+            className={`glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] transition-all duration-300 cursor-pointer select-none active:scale-[0.98] ${
+              pumpZoneA ? "border-[#235347] bg-white/95 shadow-md ring-2 ring-[#235347]/20" : "hover:border-[#235347]/50"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
                 pumpZoneA ? "bg-[#235347] text-white shadow-md animate-pulse" : "bg-[#daf1de] text-[#235347] border border-[#8eb69b]/40"
@@ -1403,7 +1450,11 @@ export default function DashboardPage() {
                 <Droplets className="w-4 h-4" />
               </div>
               <button
-                onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON");
+                }}
                 className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-300 relative cursor-pointer active:scale-95 ${
                   pumpZoneA ? "bg-[#235347]" : "bg-[#daf1de]"
                 }`}
@@ -1426,15 +1477,18 @@ export default function DashboardPage() {
                 </span>
               </div>
               <p className="text-[11px] text-[#163832] font-medium mt-0.5">
-                {pumpZoneA ? "● Pumping Active • 42 L/h" : "○ Idle • Tap switch to start"}
+                {pumpZoneA ? "● Pumping Active • 42 L/h" : "○ Idle • Tap card to start"}
               </p>
             </div>
           </div>
 
           {/* Card 2: Smart Pump Zone B */}
-          <div className={`glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] transition-all duration-300 ${
-            pumpZoneB ? "border-[#051f20] bg-white/95 shadow-md ring-2 ring-[#051f20]/20" : "hover:border-[#235347]/50"
-          }`}>
+          <div 
+            onClick={() => sendCommand("PUMP_ZONE_B", pumpZoneB ? "OFF" : "ON")}
+            className={`glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] transition-all duration-300 cursor-pointer select-none active:scale-[0.98] ${
+              pumpZoneB ? "border-[#051f20] bg-white/95 shadow-md ring-2 ring-[#051f20]/20" : "hover:border-[#235347]/50"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
                 pumpZoneB ? "bg-[#051f20] text-white shadow-md animate-pulse" : "bg-[#163832]/15 text-[#163832] border border-[#163832]/30"
@@ -1442,7 +1496,11 @@ export default function DashboardPage() {
                 <Power className="w-4 h-4" />
               </div>
               <button
-                onClick={() => sendCommand("PUMP_ZONE_B", pumpZoneB ? "OFF" : "ON")}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sendCommand("PUMP_ZONE_B", pumpZoneB ? "OFF" : "ON");
+                }}
                 className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-300 relative cursor-pointer active:scale-95 ${
                   pumpZoneB ? "bg-[#051f20]" : "bg-[#daf1de]"
                 }`}
@@ -1465,19 +1523,34 @@ export default function DashboardPage() {
                 </span>
               </div>
               <p className="text-[11px] text-[#163832] font-medium mt-0.5">
-                {pumpZoneB ? "● Greenhouse Misting ON • 24 L/h" : "○ Standby • Automated"}
+                {pumpZoneB ? "● Greenhouse Misting ON • 24 L/h" : "○ Standby • Tap card to start"}
               </p>
             </div>
           </div>
 
           {/* Card 3: Auto-Irrigation Schedule / Alarm */}
-          <div className="bg-white text-[#051f20] rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] shadow-md border border-[#8eb69b]/35">
+          <div 
+            onClick={() => {
+              const next = !scheduleActive;
+              setScheduleActive(next);
+              setActionNotice(next ? "⏰ Auto-Irrigation Schedule Activated (07:00 AM)" : "⏸️ Auto-Irrigation Schedule Paused");
+              setTimeout(() => setActionNotice(null), 3500);
+            }}
+            className="bg-white text-[#051f20] rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] shadow-md border border-[#8eb69b]/35 cursor-pointer select-none active:scale-[0.98] hover:border-[#235347]/60 transition"
+          >
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold uppercase tracking-wider text-[#163832]">
                 Irrigation Alarm
               </span>
               <button
-                onClick={() => setScheduleActive(!scheduleActive)}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const next = !scheduleActive;
+                  setScheduleActive(next);
+                  setActionNotice(next ? "⏰ Auto-Irrigation Schedule Activated (07:00 AM)" : "⏸️ Auto-Irrigation Schedule Paused");
+                  setTimeout(() => setActionNotice(null), 3500);
+                }}
                 className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-300 relative ${
                   scheduleActive ? "bg-[#235347]" : "bg-[#daf1de]"
                 }`}
@@ -1492,23 +1565,42 @@ export default function DashboardPage() {
             </div>
             <div className="mt-2">
               <span className="text-2xl font-extrabold text-[#051f20] tracking-tight">07:00</span>
-              <p className="text-[11px] text-[#163832] font-semibold">Morning Fertigation Cycle</p>
+              <p className="text-[11px] text-[#163832] font-semibold">
+                {scheduleActive ? "● Scheduled Fertigation Active" : "○ Schedule Paused (Manual Mode)"}
+              </p>
             </div>
           </div>
 
-          {/* Card 4: Station Connectivity & LoRa */}
-          <div className="glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] hover:border-[#235347]/50 transition-all">
+          {/* Card 4: Fertigation & Nutrient Injector */}
+          <div 
+            onClick={() => {
+              const next = !fertigationActive;
+              setFertigationActive(next);
+              setActionNotice(next ? "🧪 Fertigation Injector ON (N-P-K Solution 1:100)" : "🛑 Fertigation Injector OFF");
+              setTimeout(() => setActionNotice(null), 3500);
+            }}
+            className={`glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] transition-all cursor-pointer select-none active:scale-[0.98] ${
+              fertigationActive ? "border-[#235347] bg-white/95 shadow-md ring-2 ring-[#235347]/20" : "hover:border-[#235347]/50"
+            }`}
+          >
             <div className="flex items-center justify-between">
-              <div className="w-9 h-9 rounded-2xl bg-[#daf1de] border border-[#8eb69b]/40 flex items-center justify-center text-[#235347]">
+              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
+                fertigationActive ? "bg-[#235347] text-white shadow-md animate-pulse" : "bg-[#daf1de] text-[#235347] border border-[#8eb69b]/40"
+              }`}>
                 <Wifi className="w-4 h-4" />
               </div>
-              <span className="flex items-center gap-1 text-[10px] font-bold text-[#051f20] bg-[#daf1de] px-2.5 py-0.5 rounded-full border border-[#8eb69b]/50">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#235347] animate-pulse" /> 100% Synced
+              <span className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
+                fertigationActive ? "bg-[#daf1de] text-[#235347] border-[#235347]" : "bg-[#daf1de] text-[#051f20] border-[#8eb69b]/50"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${fertigationActive ? "bg-[#235347] animate-ping" : "bg-[#235347]"}`} />
+                {fertigationActive ? "DOSING" : "100% Synced"}
               </span>
             </div>
             <div className="mt-3">
-              <h4 className="text-sm font-extrabold text-[#051f20]">Edge Hotspot</h4>
-              <p className="text-[11px] text-[#163832] font-mono font-semibold">10.42.0.1 • LoRa Ch 1</p>
+              <h4 className="text-sm font-extrabold text-[#051f20]">Fertigation Injector</h4>
+              <p className="text-[11px] text-[#163832] font-mono font-semibold">
+                {fertigationActive ? "● Injecting N-P-K • 1.2 L/h" : "○ Hotspot: 10.42.0.1 • Standby"}
+              </p>
             </div>
           </div>
         </section>

@@ -1101,7 +1101,7 @@
     <div id="pumps" class="grid-md-2" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px;">
       
       <!-- Smart Pump A Card -->
-      <div class="glass-panel action-card pump-card" id="cardPumpA">
+      <div class="glass-panel action-card pump-card" id="cardPumpA" onclick="togglePump('PUMP_ZONE_A')" style="cursor: pointer; user-select: none;">
         <div class="card-top">
           <div style="display: flex; align-items: center; gap: 10px;">
             <div class="pump-icon" id="iconPumpA">
@@ -1112,7 +1112,7 @@
               <p style="font-size: 10px; color: #163832; font-weight: 600;" id="lblPumpASub">Main Crop Drip Line</p>
             </div>
           </div>
-          <button class="switch-toggle" id="switchPumpA" onclick="togglePump('PUMP_ZONE_A')" aria-label="Toggle Pump A">
+          <button class="switch-toggle" id="switchPumpA" onclick="event.stopPropagation(); togglePump('PUMP_ZONE_A')" aria-label="Toggle Pump A">
             <div class="switch-knob"></div>
           </button>
         </div>
@@ -1127,7 +1127,7 @@
       </div>
 
       <!-- Smart Pump B Card -->
-      <div class="glass-panel action-card pump-card" id="cardPumpB">
+      <div class="glass-panel action-card pump-card" id="cardPumpB" onclick="togglePump('PUMP_ZONE_B')" style="cursor: pointer; user-select: none;">
         <div class="card-top">
           <div style="display: flex; align-items: center; gap: 10px;">
             <div class="pump-icon" id="iconPumpB">
@@ -1138,7 +1138,7 @@
               <p style="font-size: 10px; color: #163832; font-weight: 600;" id="lblPumpBSub">Misting & Foliar Spray</p>
             </div>
           </div>
-          <button class="switch-toggle" id="switchPumpB" onclick="togglePump('PUMP_ZONE_B')" aria-label="Toggle Pump B">
+          <button class="switch-toggle" id="switchPumpB" onclick="event.stopPropagation(); togglePump('PUMP_ZONE_B')" aria-label="Toggle Pump B">
             <div class="switch-knob"></div>
           </button>
         </div>
@@ -1574,6 +1574,25 @@
     }
 
     async function togglePump(target) {
+      const isA = target === 'PUMP_ZONE_A';
+      const card = document.getElementById(isA ? 'cardPumpA' : 'cardPumpB');
+      const sw = document.getElementById(isA ? 'switchPumpA' : 'switchPumpB');
+      const stat = document.getElementById(isA ? 'pumpAStatus' : 'pumpBStatus');
+      const dot = document.getElementById(isA ? 'dotPumpA' : 'dotPumpB');
+      const flow = document.getElementById(isA ? 'pumpAFlow' : 'pumpBFlow');
+
+      // Optimistic Instant UI Update
+      const currentlyActive = card ? card.classList.contains('active') : false;
+      const nextActive = !currentlyActive;
+      if (card) card.classList.toggle('active', nextActive);
+      if (sw) sw.classList.toggle('active', nextActive);
+      if (stat) stat.innerText = nextActive ? (isA ? '● Pumping Active' : '● Misting Active') : 'Standby / Off';
+      if (dot) {
+        dot.style.background = nextActive ? '#235347' : '#8eb69b';
+        dot.style.animation = nextActive ? 'pulse 1.5s infinite' : 'none';
+      }
+      if (flow) flow.innerText = nextActive ? (isA ? '4.8 L/min' : '2.4 L/min') : '0.0 L/min';
+
       try {
         const res = await fetch(`/api/edge/pump/${target}/TOGGLE`, { method: 'POST' });
         const data = await res.json();
@@ -1581,11 +1600,7 @@
           fetchStatus();
         }
       } catch (err) {
-        const isA = target === 'PUMP_ZONE_A';
-        const card = document.getElementById(isA ? 'cardPumpA' : 'cardPumpB');
-        const sw = document.getElementById(isA ? 'switchPumpA' : 'switchPumpB');
-        if (card) card.classList.toggle('active');
-        if (sw) sw.classList.toggle('active');
+        console.log('Pump toggle fallback offline:', err);
       }
     }
 
