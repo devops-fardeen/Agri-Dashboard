@@ -7,6 +7,9 @@ export interface TelemetryReading {
   humidity: number; // percentage (0 - 100%)
   soilPh?: number; // 0 - 14
   batteryLevel?: number; // percentage (0 - 100%)
+  rainDetected?: boolean; // Physical rain sensor Pin 27
+  rainIntensity?: number; // 0 - 100%
+  rainStatus?: "NO_RAIN" | "LIGHT_RAIN" | "HEAVY_RAIN";
   timestamp: string | Date;
 }
 

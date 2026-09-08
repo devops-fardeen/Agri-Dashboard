@@ -836,6 +836,9 @@
       <button class="glass-pill zone-pill-btn" onclick="scrollToId('weatherSection')">
         🌤️ <span id="lblWeatherPill">Weather</span>
       </button>
+      <button class="glass-pill zone-pill-btn" onclick="scrollToId('rainSensorSection')">
+        🌧️ <span id="lblRainPill">Rain Sensor</span>
+      </button>
       <button class="glass-pill zone-pill-btn" onclick="scrollToId('alertSection')">
         ⚠️ <span id="lblAlertPill">Alerts</span>
       </button>
@@ -1037,6 +1040,61 @@
         </div>
       </div>
 
+    </div>
+
+    <!-- 3.5 HARDWARE RAIN SENSOR REAL-TIME TELEMETRY WIDGET (GPIO PIN 27) -->
+    <div class="glass-panel-glow" id="rainSensorSection" style="padding: 20px; margin-bottom: 14px; position: relative; overflow: hidden;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div id="rainIconBox" style="width: 32px; height: 32px; border-radius: 12px; background: #daf1de; color: #235347; display:flex; align-items:center; justify-content:center; font-size: 16px; border: 1px solid rgba(142,182,155,0.5);">
+            🌧️
+          </div>
+          <div>
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <h3 style="font-size: 14px; font-weight: 800; color: #051f20;" id="lblRainTitle">Live Rain Sensor Telemetry</h3>
+              <span style="font-size: 9px; font-family: monospace; font-weight: 800; background: #daf1de; color: #051f20; padding: 1px 6px; border-radius: 4px; border: 1px solid rgba(142,182,155,0.5);">PIN 27</span>
+            </div>
+            <p style="font-size: 10px; color: #163832; font-weight: 600;" id="lblRainSub">Master ESP32 precipitation detector & irrigation interlock</p>
+          </div>
+        </div>
+        <span id="rainLiveBadge" style="font-size: 10px; font-weight: 700; color: #051f20; background: #daf1de; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(142,182,155,0.45);">
+          ☀️ SENSOR DRY
+        </span>
+      </div>
+
+      <!-- Main Rain Status Banner -->
+      <div id="rainBannerBox" style="background: rgba(255,255,255,0.8); border: 1px solid rgba(142,182,155,0.4); border-radius: 16px; padding: 12px 14px; margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span id="rainBigEmoji" style="font-size: 24px;">☀️</span>
+          <div>
+            <h4 style="font-size: 12px; font-weight: 800; color: #051f20;" id="lblRainStateHeading">No Precipitation • Sensor Plate Dry</h4>
+            <p style="font-size: 10px; color: #163832;" id="lblRainStateDetail">GPIO 27 is HIGH (Open Circuit). Automated irrigation operates normally.</p>
+          </div>
+        </div>
+        <span id="rainInterlockBadge" style="font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 9999px; background: #daf1de; color: #235347; white-space: nowrap;">
+          DRIP READY
+        </span>
+      </div>
+
+      <!-- 4 Micro Telemetry Metrics -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px;">
+        <div style="background: #ffffff; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(142,182,155,0.35);">
+          <span style="font-size: 9px; font-weight: 700; color: #163832; text-transform: uppercase; display: block;" id="lblRainPinLogic">Pin Logic</span>
+          <strong style="font-size: 12px; color: #051f20;" id="valRainLogic">HIGH (3.3V)</strong>
+        </div>
+        <div style="background: #ffffff; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(142,182,155,0.35);">
+          <span style="font-size: 9px; font-weight: 700; color: #163832; text-transform: uppercase; display: block;" id="lblRainPrecip">Precipitation</span>
+          <strong style="font-size: 12px; color: #051f20;" id="valRainPrecip">None (Clear)</strong>
+        </div>
+        <div style="background: #ffffff; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(142,182,155,0.35);">
+          <span style="font-size: 9px; font-weight: 700; color: #163832; text-transform: uppercase; display: block;" id="lblRainInterlock">Interlock Lock</span>
+          <strong style="font-size: 12px; color: #235347;" id="valRainInterlock">Disengaged</strong>
+        </div>
+        <div style="background: #ffffff; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(142,182,155,0.35);">
+          <span style="font-size: 9px; font-weight: 700; color: #163832; text-transform: uppercase; display: block;" id="lblRainEco">Eco Saving</span>
+          <strong style="font-size: 12px; color: #235347;" id="valRainEco">Standard</strong>
+        </div>
+      </div>
     </div>
 
     <!-- 4. SMART PUMP A & SMART PUMP B CONTROLLERS -->
@@ -1759,9 +1817,22 @@
       const t = (data.telemetry && (data.telemetry[currentZone] || data.telemetry)) || {};
       const zoneName = currentZone === 'ZONE_A' ? (i18n[currentLang].fieldA || 'Field A') : (i18n[currentLang].fieldB || 'Field B');
       
-      // 1. Soil Moisture Checks
+      // 1. Hardware Rain Sensor Check
+      const isRaining = Boolean(t.rain_detected);
+      if (isRaining) {
+        alerts.push({
+          type: 'critical',
+          icon: '🌧️',
+          title: `Physical Rain Sensor Active (Pin 27)`,
+          sub: `Precipitation detected on Master ESP32 in ${zoneName}. Drip irrigation locked to avoid waterlogging.`,
+          action: currentZone === 'ZONE_A' ? 'PUMP_ZONE_A' : 'PUMP_ZONE_B',
+          actionLabel: 'Halt Pump'
+        });
+      }
+
+      // 2. Soil Moisture Checks
       const moist = t.soil_moisture !== undefined ? Number(t.soil_moisture) : 64;
-      if (moist < 45) {
+      if (moist < 45 && !isRaining) {
         alerts.push({
           type: 'warning',
           icon: '💧',
@@ -1914,6 +1985,74 @@
           const envHumid = t.ambient_humidity !== undefined ? Math.round(Number(t.ambient_humidity)) : 64;
           const elEnvHumid = document.getElementById('valEnvHumid');
           if (elEnvHumid) elEnvHumid.innerText = `DHT11 Humidity: ${envHumid}%`;
+
+          // Rain Sensor Real-Time Display Update (GPIO 27)
+          const isRaining = Boolean(t.rain_detected);
+          const elRainBadge = document.getElementById('rainLiveBadge');
+          const elRainIconBox = document.getElementById('rainIconBox');
+          const elRainBannerBox = document.getElementById('rainBannerBox');
+          const elRainBigEmoji = document.getElementById('rainBigEmoji');
+          const elRainStateHeading = document.getElementById('lblRainStateHeading');
+          const elRainStateDetail = document.getElementById('lblRainStateDetail');
+          const elRainInterlockBadge = document.getElementById('rainInterlockBadge');
+          const elValRainLogic = document.getElementById('valRainLogic');
+          const elValRainPrecip = document.getElementById('valRainPrecip');
+          const elValRainInterlock = document.getElementById('valRainInterlock');
+          const elValRainEco = document.getElementById('valRainEco');
+
+          if (elRainBadge) {
+            if (isRaining) {
+              elRainBadge.innerText = '🌧️ RAIN DETECTED';
+              elRainBadge.style.background = '#e0f2fe';
+              elRainBadge.style.color = '#0369a1';
+              elRainBadge.style.borderColor = '#7dd3fc';
+              if (elRainIconBox) {
+                elRainIconBox.style.background = '#0284c7';
+                elRainIconBox.style.color = '#fff';
+              }
+              if (elRainBannerBox) {
+                elRainBannerBox.style.background = 'rgba(224,242,254,0.7)';
+                elRainBannerBox.style.borderColor = '#38bdf8';
+              }
+              if (elRainBigEmoji) elRainBigEmoji.innerText = '🌧️';
+              if (elRainStateHeading) elRainStateHeading.innerText = 'Precipitation Active • Rain Detected';
+              if (elRainStateDetail) elRainStateDetail.innerText = 'GPIO 27 LOW (Conductive Bridge). Rain-delay interlock engaged: drip irrigation paused.';
+              if (elRainInterlockBadge) {
+                elRainInterlockBadge.innerText = 'INTERLOCK ACTIVE';
+                elRainInterlockBadge.style.background = '#fee2e2';
+                elRainInterlockBadge.style.color = '#991b1b';
+              }
+              if (elValRainLogic) elValRainLogic.innerText = 'LOW (0.2V)';
+              if (elValRainPrecip) { elValRainPrecip.innerText = 'Raining'; elValRainPrecip.style.color = '#0284c7'; }
+              if (elValRainInterlock) { elValRainInterlock.innerText = 'Engaged (Locked)'; elValRainInterlock.style.color = '#dc2626'; }
+              if (elValRainEco) elValRainEco.innerText = '+100% Saved';
+            } else {
+              elRainBadge.innerText = '☀️ SENSOR DRY';
+              elRainBadge.style.background = '#daf1de';
+              elRainBadge.style.color = '#051f20';
+              elRainBadge.style.borderColor = 'rgba(142,182,155,0.45)';
+              if (elRainIconBox) {
+                elRainIconBox.style.background = '#daf1de';
+                elRainIconBox.style.color = '#235347';
+              }
+              if (elRainBannerBox) {
+                elRainBannerBox.style.background = 'rgba(255,255,255,0.8)';
+                elRainBannerBox.style.borderColor = 'rgba(142,182,155,0.4)';
+              }
+              if (elRainBigEmoji) elRainBigEmoji.innerText = '☀️';
+              if (elRainStateHeading) elRainStateHeading.innerText = 'No Precipitation • Sensor Plate Dry';
+              if (elRainStateDetail) elRainStateDetail.innerText = 'GPIO 27 HIGH (Open Circuit). Automated irrigation operates normally.';
+              if (elRainInterlockBadge) {
+                elRainInterlockBadge.innerText = 'DRIP READY';
+                elRainInterlockBadge.style.background = '#daf1de';
+                elRainInterlockBadge.style.color = '#235347';
+              }
+              if (elValRainLogic) elValRainLogic.innerText = 'HIGH (3.3V)';
+              if (elValRainPrecip) { elValRainPrecip.innerText = 'None (Clear)'; elValRainPrecip.style.color = '#051f20'; }
+              if (elValRainInterlock) { elValRainInterlock.innerText = 'Disengaged'; elValRainInterlock.style.color = '#235347'; }
+              if (elValRainEco) elValRainEco.innerText = 'Standard';
+            }
+          }
         }
 
         // 2. Evaluate Real-Time Farm Alerts

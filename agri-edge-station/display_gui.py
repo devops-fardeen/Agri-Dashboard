@@ -1183,6 +1183,10 @@ class AgriSmartDisplayGUI:
                 elif alert_type == "NUTRITION":
                     return self.t("alert_nutrient_deficiency", label=lbl, node=node), self.AMBER_ALERT_BG, self.AMBER_WARN, self.AMBER_ALERT_BORDER
 
+        # 1.5 Physical Rain Sensor Alert
+        if (za and za.get("rain_detected")) or (zb and zb.get("rain_detected")):
+            return "🌧️ Master ESP32 Rain Sensor Active (Pin 27) — Irrigation Paused", self.RED_ALERT_BG, self.RED_ACTIVE, self.RED_ALERT_BORDER
+
         # 2. Moisture Alerts
         if za and za.get("soil_moisture", 100) < 35.0:
             return self.t("alert_low_moist_a"), self.AMBER_ALERT_BG, self.AMBER_WARN, self.AMBER_ALERT_BORDER

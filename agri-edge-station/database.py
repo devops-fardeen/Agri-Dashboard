@@ -33,10 +33,17 @@ def init_db():
                 light_lux REAL DEFAULT 0.0,
                 barometric_pressure REAL DEFAULT 1013.25,
                 pump_active INTEGER DEFAULT 0,
+                rain_detected INTEGER DEFAULT 0,
                 synced_to_cloud INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             );
         """)
+
+        # Safe automatic migration for existing database instances
+        try:
+            cursor.execute("ALTER TABLE telemetry ADD COLUMN rain_detected INTEGER DEFAULT 0;")
+        except Exception:
+            pass # Already exists
         
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_synced ON telemetry(synced_to_cloud, id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_zone_rec ON telemetry(zone_id, recorded_at DESC);")
@@ -162,7 +169,8 @@ def log_telemetry(
     light_lux: float = 0.0,
     barometric_pressure: float = 1013.25,
     node_id: str = "EDGE_STATION_PI",
-    recorded_at: Optional[str] = None
+    recorded_at: Optional[str] = None,
+    rain_detected: int = 0
 ) -> int:
     """Logs a new sensor reading into the local offline SQLite buffer."""
     if not recorded_at:
@@ -174,14 +182,15 @@ def log_telemetry(
             INSERT INTO telemetry (
                 zone_id, node_id, recorded_at, soil_moisture, soil_temp,
                 ambient_temp, ambient_humidity, light_lux, barometric_pressure,
-                pump_active, synced_to_cloud
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                pump_active, rain_detected, synced_to_cloud
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (
             zone_id, node_id, recorded_at,
             round(soil_moisture, 2), round(soil_temp, 2),
             round(ambient_temp, 2), round(ambient_humidity, 2),
             round(light_lux, 2), round(barometric_pressure, 2),
-            1 if pump_active else 0
+            1 if pump_active else 0,
+            1 if rain_detected else 0
         ))
         conn.commit()
         return cursor.lastrowid

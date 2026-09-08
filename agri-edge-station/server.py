@@ -54,6 +54,7 @@ class IngestTelemetryRequest(BaseModel):
     light_lux: Optional[float] = 0.0
     barometric_pressure: Optional[float] = 1013.25
     pump_active: Optional[int] = 0
+    rain_detected: Optional[bool] = False
 
 class AIDetectionRequest(BaseModel):
     node_id: str = "NODE_01"
@@ -79,7 +80,8 @@ def ingest_telemetry(payload: IngestTelemetryRequest):
         pump_active=payload.pump_active or 0,
         light_lux=payload.light_lux or 0.0,
         barometric_pressure=payload.barometric_pressure or 1013.25,
-        node_id=payload.node_id
+        node_id=payload.node_id,
+        rain_detected=1 if payload.rain_detected else 0
     )
     return {
         "success": True,

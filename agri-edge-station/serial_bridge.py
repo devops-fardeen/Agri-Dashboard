@@ -135,7 +135,8 @@ class MasterSerialBridge:
                         ambient_humidity=hum,
                         pump_active=1 if pump_a_on else 0,
                         light_lux=0.0,
-                        barometric_pressure=1013.25
+                        barometric_pressure=1013.25,
+                        rain_detected=1 if is_rain else 0
                     )
                 except Exception as ex:
                     logger.warning(f"Failed to parse telemetry line '{line}': {ex}")

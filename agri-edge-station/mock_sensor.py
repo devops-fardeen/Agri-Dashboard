@@ -22,7 +22,8 @@ class FieldSensorSimulator:
             "ambient_temp": 28.2,
             "ambient_humidity": 64.0,
             "light_lux": 1450.0,
-            "pressure": 1013.2
+            "pressure": 1013.2,
+            "rain_detected": 0
         }
         # Baseline state for Zone B
         self.state_b = {
@@ -31,10 +32,12 @@ class FieldSensorSimulator:
             "ambient_temp": 28.6,
             "ambient_humidity": 61.5,
             "light_lux": 1520.0,
-            "pressure": 1013.0
+            "pressure": 1013.0,
+            "rain_detected": 0
         }
         self.running = False
         self._thread = None
+        self._cycle_count = 0
 
     def _tick_zone(self, zone_id: str, state: dict, pump_active: bool) -> dict:
         # Moisture dynamics
@@ -71,6 +74,7 @@ class FieldSensorSimulator:
         pump_b = bool(actuators.get("PUMP_ZONE_B", 0))
         
         now_iso = datetime.now(timezone.utc).isoformat()
+        self._cycle_count += 1
         
         # Update and log Zone A
         self._tick_zone("ZONE_A", self.state_a, pump_a)
@@ -83,6 +87,7 @@ class FieldSensorSimulator:
             pump_active=1 if pump_a else 0,
             light_lux=self.state_a["light_lux"],
             barometric_pressure=self.state_a["pressure"],
+            rain_detected=self.state_a["rain_detected"],
             recorded_at=now_iso
         )
         
@@ -97,12 +102,13 @@ class FieldSensorSimulator:
             pump_active=1 if pump_b else 0,
             light_lux=self.state_b["light_lux"],
             barometric_pressure=self.state_b["pressure"],
+            rain_detected=self.state_b["rain_detected"],
             recorded_at=now_iso
         )
         
         logger.info(
-            f"Sample logged -> Zone A: {self.state_a['soil_moisture']:.1f}% (Pump: {'ON' if pump_a else 'OFF'}) | "
-            f"Zone B: {self.state_b['soil_moisture']:.1f}% (Pump: {'ON' if pump_b else 'OFF'}) [IDs: {row_a}, {row_b}]"
+            f"Sample logged -> Zone A: {self.state_a['soil_moisture']:.1f}% (Pump: {'ON' if pump_a else 'OFF'}, Rain: {bool(self.state_a['rain_detected'])}) | "
+            f"Zone B: {self.state_b['soil_moisture']:.1f}% (Pump: {'ON' if pump_b else 'OFF'}, Rain: {bool(self.state_b['rain_detected'])}) [IDs: {row_a}, {row_b}]"
         )
 
     def start_loop(self, interval_seconds: float = 5.0):

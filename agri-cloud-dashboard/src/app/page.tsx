@@ -30,6 +30,11 @@ import {
   Clock,
   Home,
   Sun,
+  CloudRain,
+  CloudDrizzle,
+  Umbrella,
+  Waves,
+  CheckCircle2,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -114,6 +119,9 @@ export default function DashboardPage() {
   const [roverAction, setRoverAction] = useState<string>("STOP");
   const [roverSending, setRoverSending] = useState(false);
   const [roverBattery, setRoverBattery] = useState(88);
+
+  // Hardware Rain Sensor Simulation Override (null = follow live telemetry)
+  const [simulatedRain, setSimulatedRain] = useState<boolean | null>(null);
 
   // Weather Condition Icon Helper
   const getWeatherIcon = (condition: string, rainProb: number) => {
@@ -323,7 +331,12 @@ export default function DashboardPage() {
     canopyTemperature: 26.2,
     ambientHumidity: 62,
     airTemperature: 27.5,
+    rainDetected: false,
+    rainIntensity: 0,
+    rainStatus: "NO_RAIN",
   };
+
+  const isRaining = simulatedRain !== null ? simulatedRain : Boolean(latest.rainDetected);
 
   const historyList = Array.isArray(telemetry?.history) ? telemetry.history : [];
   const chartData = historyList.map((d: any) => ({
@@ -331,6 +344,7 @@ export default function DashboardPage() {
     moisture: d.telemetry?.soilMoisture ?? 60,
     temp: d.telemetry?.soilTemperature ?? 23,
     humidity: d.telemetry?.ambientHumidity ?? 65,
+    rain: d.telemetry?.rainDetected ? 100 : 0,
   }));
 
   const currentMoisture = latest.soilMoisture ?? 64;
@@ -340,7 +354,22 @@ export default function DashboardPage() {
     const list: FarmAlert[] = [];
     const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-    // 1. Flood & Severe Precipitation
+    // 1. Hardware Rain Sensor Active Alert (ESP32 Pin 27)
+    if (isRaining) {
+      list.push({
+        id: "hw-rain-sensor",
+        type: "CRITICAL",
+        title: "🌧️ Live Rain Sensor Active (ESP32 Pin 27)",
+        message: "Master ESP32 detected active rainfall. Auto-irrigation suspended to protect roots from over-saturation.",
+        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
+        timestamp: now,
+        actionText: pumpZoneA || pumpZoneB ? "Halt Running Pumps" : undefined,
+        actionTarget: pumpZoneA ? "PUMP_ZONE_A" : "PUMP_ZONE_B",
+        actionCmd: "OFF",
+      });
+    }
+
+    // 2. Flood & Severe Precipitation Forecast
     if (weather?.floodRisk) {
       list.push({
         id: "weather-flood",
@@ -352,8 +381,8 @@ export default function DashboardPage() {
       });
     }
 
-    // 2. Soil Moisture Warnings
-    if (currentMoisture < 45) {
+    // 3. Soil Moisture Warnings
+    if (currentMoisture < 45 && !isRaining) {
       list.push({
         id: "low-moist",
         type: "WARNING",
@@ -376,7 +405,7 @@ export default function DashboardPage() {
       });
     }
 
-    // 3. Heat & Frost Stress
+    // 4. Heat & Frost Stress
     const tempVal = latest.airTemperature || latest.soilTemperature || 24;
     if (tempVal > 36) {
       list.push({
@@ -401,7 +430,7 @@ export default function DashboardPage() {
       });
     }
 
-    // 4. AI Vision Model Diagnostics
+    // 5. AI Vision Model Diagnostics
     if (aiSummary?.disease?.detectionLabel && aiSummary.disease.detectionLabel !== "Healthy Foliage") {
       list.push({
         id: "ai-disease",
@@ -435,7 +464,7 @@ export default function DashboardPage() {
       });
     }
 
-    // 5. Rover Battery
+    // 6. Rover Battery
     if (roverBattery < 20) {
       list.push({
         id: "rover-bat",
@@ -464,6 +493,12 @@ export default function DashboardPage() {
   const scrollToWeather = () => {
     setCurrentTab("weather");
     const el = document.getElementById("weatherSection");
+    if (el) el.scrollIntoView({ behavior: "smooth" });
+  };
+
+  const scrollToRainSensor = () => {
+    setCurrentTab("gauges");
+    const el = document.getElementById("rainSensorSection");
     if (el) el.scrollIntoView({ behavior: "smooth" });
   };
 
@@ -573,6 +608,17 @@ export default function DashboardPage() {
           >
             <CloudSun className="w-3.5 h-3.5 text-[#235347]" />
             <span>🌤️ 7-Day Forecast</span>
+          </button>
+          <button
+            onClick={scrollToRainSensor}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold glass-pill transition-all whitespace-nowrap ${
+              isRaining
+                ? "bg-cyan-500/20 text-cyan-900 border border-cyan-400 font-extrabold shadow-sm animate-pulse"
+                : "text-[#163832] hover:text-[#051f20]"
+            }`}
+          >
+            <CloudRain className={`w-3.5 h-3.5 ${isRaining ? "text-cyan-600 animate-bounce" : "text-[#235347]"}`} />
+            <span>{isRaining ? "🌧️ Rain Sensor (ACTIVE)" : "🌧️ Rain Sensor (Dry)"}</span>
           </button>
           <button
             onClick={scrollToAlerts}
@@ -1056,6 +1102,159 @@ export default function DashboardPage() {
         </section>
 
         {/* ========================================================================= */}
+        {/* HARDWARE RAIN SENSOR REAL-TIME TELEMETRY WIDGET (GPIO PIN 27) */}
+        {/* ========================================================================= */}
+        <section id="rainSensorSection" className="glass-panel-glow rounded-[28px] p-5 sm:p-6 space-y-4 transition-all relative overflow-hidden">
+          {/* Ambient Rain Glow */}
+          <div className={`absolute -top-10 -right-10 w-52 h-52 rounded-full blur-3xl pointer-events-none transition-all duration-700 ${
+            isRaining ? "bg-cyan-400/25 animate-pulse" : "bg-[#8eb69b]/20"
+          }`} />
+
+          {/* Widget Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+            <div className="flex items-center gap-3">
+              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-md transition-all duration-500 ${
+                isRaining 
+                  ? "bg-gradient-to-tr from-[#0284c7] via-[#0369a1] to-[#075985] text-white shadow-cyan-500/25 ring-2 ring-cyan-400/50" 
+                  : "bg-gradient-to-tr from-[#051f20] to-[#235347] text-[#daf1de]"
+              }`}>
+                {isRaining ? (
+                  <CloudRain className="w-6 h-6 text-cyan-200 animate-bounce" />
+                ) : (
+                  <Sun className="w-6 h-6 text-[#8eb69b]" />
+                )}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base sm:text-lg font-extrabold text-[#051f20] tracking-tight">
+                    Live Rain Sensor Telemetry
+                  </h3>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#daf1de] text-[#051f20] font-bold border border-[#8eb69b]/40">
+                    ESP32 PIN 27
+                  </span>
+                </div>
+                <p className="text-xs text-[#163832] font-semibold">
+                  Active precipitation detection & automated drip pump safety interlock
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className={`text-xs font-extrabold px-3.5 py-1.5 rounded-full border shadow-sm flex items-center gap-2 transition-all ${
+                isRaining
+                  ? "bg-cyan-500/15 text-cyan-900 border-cyan-400/50 ring-2 ring-cyan-400/20 animate-pulse"
+                  : "bg-[#daf1de] text-[#051f20] border-[#8eb69b]/60"
+              }`}>
+                <span className={`w-2.5 h-2.5 rounded-full ${isRaining ? "bg-cyan-500 animate-ping" : "bg-[#235347]"}`} />
+                {isRaining ? "🌧️ RAIN DETECTED (ACTIVE LOW)" : "☀️ SENSOR DRY (CLEAR)"}
+              </span>
+            </div>
+          </div>
+
+          {/* Visual Status Banner Card */}
+          <div className={`rounded-2xl p-4 sm:p-5 border transition-all duration-500 relative overflow-hidden ${
+            isRaining
+              ? "bg-gradient-to-r from-[#0369a1]/15 via-cyan-50/70 to-white/90 border-cyan-400/60 shadow-md"
+              : "bg-gradient-to-r from-white/90 via-[#daf1de]/40 to-white/90 border-[#8eb69b]/40 shadow-sm"
+          }`}>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 shadow-inner ${
+                  isRaining ? "bg-cyan-500 text-white" : "bg-[#daf1de] text-[#235347]"
+                }`}>
+                  {isRaining ? "🌧️" : "🌱"}
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h4 className="text-sm font-extrabold text-[#051f20]">
+                      {isRaining ? "Precipitation Event in Progress" : "No Rain Detected • Moisture Plate Dry"}
+                    </h4>
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
+                      isRaining ? "bg-cyan-100 text-cyan-800 border border-cyan-300" : "bg-[#daf1de] text-[#235347]"
+                    }`}>
+                      {isRaining ? "Interlock Engaged" : "Drip Ready"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#163832] leading-relaxed">
+                    {isRaining
+                      ? "Rain sensor probe has established a conductive bridge on Master ESP32 Pin 27. Auto-irrigation is automatically suspended to prevent root waterlogging and preserve water."
+                      : "Capacitive / resistive sensor plate is dry (GPIO 27 HIGH). All automated scheduled fertigation and drip irrigation cycles operate normally."}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quick Test / Manual Sim Controls */}
+              <div className="flex items-center gap-2 self-end md:self-center flex-shrink-0">
+                <button
+                  onClick={() => setSimulatedRain((prev) => (prev === null ? !Boolean(latest?.rainDetected) : !prev))}
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold glass-pill text-[#051f20] hover:border-[#235347] active:scale-95 transition flex items-center gap-1.5 shadow-xs"
+                  title="Toggle Rain Simulation"
+                >
+                  <span>🧪</span>
+                  <span>{simulatedRain === null ? "Test Rain Toggle" : (isRaining ? "Simulate Dry" : "Simulate Rain")}</span>
+                </button>
+                {simulatedRain !== null && (
+                  <button
+                    onClick={() => setSimulatedRain(null)}
+                    className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold text-[#163832] hover:text-[#051f20] transition"
+                    title="Reset to Real Hardware Data"
+                  >
+                    Reset
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 4 Sensor Micro-Metric Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+            <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[#8eb69b]/35 space-y-1 shadow-xs">
+              <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#163832]/80">
+                <span>Hardware Logic</span>
+                <Radio className="w-3.5 h-3.5 text-[#235347]" />
+              </div>
+              <p className="text-sm font-extrabold text-[#051f20]">
+                {isRaining ? "LOW (Active)" : "HIGH (Standby)"}
+              </p>
+              <p className="text-[10px] text-[#163832] font-semibold">Master ESP32 GPIO 27</p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[#8eb69b]/35 space-y-1 shadow-xs">
+              <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#163832]/80">
+                <span>Precipitation State</span>
+                <Droplets className="w-3.5 h-3.5 text-[#235347]" />
+              </div>
+              <p className={`text-sm font-extrabold ${isRaining ? "text-cyan-700" : "text-[#051f20]"}`}>
+                {isRaining ? "Raining (Active)" : "Dry / Clear"}
+              </p>
+              <p className="text-[10px] text-[#163832] font-semibold">Instant Telemetry Ingest</p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[#8eb69b]/35 space-y-1 shadow-xs">
+              <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#163832]/80">
+                <span>Irrigation Safety</span>
+                <ShieldCheck className="w-3.5 h-3.5 text-[#235347]" />
+              </div>
+              <p className={`text-sm font-extrabold ${isRaining ? "text-[#be123c]" : "text-[#235347]"}`}>
+                {isRaining ? "Auto-Paused" : "Nominal / Active"}
+              </p>
+              <p className="text-[10px] text-[#163832] font-semibold">Anti-Waterlogging Lock</p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[#8eb69b]/35 space-y-1 shadow-xs">
+              <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#163832]/80">
+                <span>Water Conservation</span>
+                <Sprout className="w-3.5 h-3.5 text-[#235347]" />
+              </div>
+              <p className="text-sm font-extrabold text-[#235347]">
+                {isRaining ? "+100% Conserved" : "Standard Efficiency"}
+              </p>
+              <p className="text-[10px] text-[#163832] font-semibold">Smart Eco-Drain Link</p>
+            </div>
+          </div>
+        </section>
+
+        {/* ========================================================================= */}
         {/* GRID OF COMPACT ACTION CARDS */}
         {/* ========================================================================= */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
@@ -1392,6 +1591,19 @@ export default function DashboardPage() {
             title="Sensors & Gauges"
           >
             <Sun className="w-5 h-5" />
+          </button>
+
+          <button
+            onClick={scrollToRainSensor}
+            className={`p-2 rounded-full transition-all relative ${
+              isRaining ? "bg-cyan-600 text-white shadow-md animate-pulse" : "text-[#163832] hover:text-[#051f20]"
+            }`}
+            title="Rain Sensor"
+          >
+            <CloudRain className="w-5 h-5" />
+            {isRaining && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-cyan-300 rounded-full animate-ping" />
+            )}
           </button>
 
           <button

@@ -59,7 +59,9 @@ class CloudSyncWorker:
                     "ambientTemp": r["ambient_temp"],
                     "ambientHumidity": r["ambient_humidity"],
                     "lightLux": r.get("light_lux", 0.0),
-                    "barometricPressure": r.get("barometric_pressure", 1013.25)
+                    "barometricPressure": r.get("barometric_pressure", 1013.25),
+                    "rainDetected": bool(r.get("rain_detected", 0)),
+                    "rainStatus": "HEAVY_RAIN" if bool(r.get("rain_detected", 0)) else "NO_RAIN"
                 },
                 "actuatorState": {
                     "pumpActive": bool(r.get("pump_active", 0)),

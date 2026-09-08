@@ -10,6 +10,9 @@ export interface ITelemetryDocument extends Document {
     ambientHumidity: number; // %
     lightLux?: number;       // Lux
     barometricPressure?: number; // hPa
+    rainDetected?: boolean;  // Master Node Pin 27 Rain Sensor
+    rainIntensity?: number;  // 0 - 100%
+    rainStatus?: "NO_RAIN" | "LIGHT_RAIN" | "HEAVY_RAIN";
   };
   actuatorState: {
     pumpActive: boolean;
@@ -36,6 +39,9 @@ const TelemetrySchema = new Schema<ITelemetryDocument>(
       ambientHumidity: { type: Number, required: true },
       lightLux: { type: Number },
       barometricPressure: { type: Number },
+      rainDetected: { type: Boolean, default: false },
+      rainIntensity: { type: Number, default: 0 },
+      rainStatus: { type: String, enum: ["NO_RAIN", "LIGHT_RAIN", "HEAVY_RAIN"], default: "NO_RAIN" },
     },
     actuatorState: {
       pumpActive: { type: Boolean, default: false },
