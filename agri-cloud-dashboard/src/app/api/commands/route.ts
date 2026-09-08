@@ -5,7 +5,8 @@ import { DeviceCommand } from "@/lib/db/models/DeviceCommand";
 // DASHBOARD: Post new pump or rover action
 export async function POST(req: NextRequest) {
   try {
-    const { target, action } = await req.json();
+    const { target, action, rover_ip } = await req.json();
+    const roverIp = rover_ip || "10.84.122.196";
 
     // 1. Direct relay to local Edge Station on port 8000 if running locally
     try {
@@ -15,10 +16,28 @@ export async function POST(req: NextRequest) {
           signal: AbortSignal.timeout(1000),
         }).catch(() => {});
       } else if (target === "ROVER") {
+        const cmdMap: Record<string, string> = {
+          MOVE_FORWARD: "forward",
+          FORWARD: "forward",
+          MOVE_BACKWARD: "backward",
+          BACKWARD: "backward",
+          MOVE_LEFT: "left",
+          LEFT: "left",
+          MOVE_RIGHT: "right",
+          RIGHT: "right",
+          STOP: "stop",
+          AUTO_ON: "auto_on",
+          AUTO_OFF: "auto_off",
+        };
+        const moveCmd = cmdMap[action] || "stop";
+        // Direct Rover ESP32 Web Server dispatch
+        fetch(`http://${roverIp}/cmd?move=${moveCmd}`, { signal: AbortSignal.timeout(1200) }).catch(() => {});
+
+        // Local Edge Gateway dispatch
         await fetch(`http://127.0.0.1:8000/api/edge/rover/command`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action }),
+          body: JSON.stringify({ action, rover_ip: roverIp }),
           signal: AbortSignal.timeout(1000),
         }).catch(() => {});
       }

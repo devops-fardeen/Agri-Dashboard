@@ -117,10 +117,11 @@ export default function DashboardPage() {
   const [tempGoal, setTempGoal] = useState(24);
   const [scheduleActive, setScheduleActive] = useState(true);
 
-  // Rover Control State
+  // Rover Control State & Target ESP32 IP
   const [roverAction, setRoverAction] = useState<string>("STOP");
   const [roverSending, setRoverSending] = useState(false);
   const [roverBattery, setRoverBattery] = useState(88);
+  const [roverIp, setRoverIp] = useState("10.84.122.196");
 
   // Hardware Rain Sensor Simulation Override (null = follow live telemetry)
   const [simulatedRain, setSimulatedRain] = useState<boolean | null>(null);
@@ -398,7 +399,7 @@ export default function DashboardPage() {
 
       setTimeout(() => setActionNotice(null), 3500);
 
-      // 1. Direct browser fetch to local Edge Station (port 8000) for sub-5ms relay control
+      // 1. Direct browser fetch to local Edge Station or ESP32 for sub-5ms control
       if (target === "PUMP_ZONE_A" || target === "PUMP_ZONE_B") {
         try {
           fetch(`http://127.0.0.1:8000/api/edge/pump/${target}/${action}`, {
@@ -407,13 +408,35 @@ export default function DashboardPage() {
             signal: AbortSignal.timeout(800)
           }).catch(() => {});
         } catch {}
+      } else if (target === "ROVER") {
+        const cmdMap: Record<string, string> = {
+          MOVE_FORWARD: "forward",
+          FORWARD: "forward",
+          MOVE_BACKWARD: "backward",
+          BACKWARD: "backward",
+          MOVE_LEFT: "left",
+          LEFT: "left",
+          MOVE_RIGHT: "right",
+          RIGHT: "right",
+          STOP: "stop",
+          AUTO_ON: "auto_on",
+          AUTO_OFF: "auto_off"
+        };
+        const directCmd = cmdMap[action] || "stop";
+        // Direct browser-to-ESP32 Web Server fetch
+        try {
+          fetch(`http://${roverIp}/cmd?move=${directCmd}`, {
+            mode: "no-cors",
+            signal: AbortSignal.timeout(1000)
+          }).catch(() => {});
+        } catch {}
       }
 
-      // 2. Dispatch to Cloud API
+      // 2. Dispatch to Cloud API & Local Gateway
       await fetch("/api/commands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target, action }),
+        body: JSON.stringify({ target, action, rover_ip: roverIp }),
       });
     } catch (err) {
       console.error("Command failed:", err);
@@ -1823,6 +1846,14 @@ export default function DashboardPage() {
                 <h3 className="text-sm font-extrabold text-[#051f20]">Field Scout Rover</h3>
               </div>
               <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={roverIp}
+                  onChange={(e) => setRoverIp(e.target.value.trim())}
+                  placeholder="Rover IP"
+                  className="w-24 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-white/80 border border-[#8eb69b]/50 text-[#051f20] text-center focus:outline-none focus:ring-1 focus:ring-[#235347]"
+                  title="Rover ESP32 IP Address"
+                />
                 <span className="flex items-center gap-1 text-xs text-[#051f20] font-bold bg-[#daf1de] px-2.5 py-0.5 rounded-full border border-[#8eb69b]/50">
                   <BatteryCharging className="w-3.5 h-3.5 text-[#235347]" /> {roverBattery}%
                 </span>
