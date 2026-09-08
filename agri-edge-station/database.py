@@ -639,19 +639,44 @@ def get_latest_ai_summary(node_id: Optional[str] = None) -> Dict[str, Any]:
     with get_connection() as conn:
         cursor = conn.cursor()
         for model in ["disease", "pest", "nutrition", "stage"]:
+            row = None
             if node_id:
-                cursor.execute("""
-                    SELECT * FROM ai_detections 
-                    WHERE model_name = ? AND node_id = ?
-                    ORDER BY id DESC LIMIT 1
-                """, (model, node_id))
-            else:
+                n_up = node_id.upper()
+                if n_up in ["NODE_01", "ZONE_A", "FIELD_A"]:
+                    node_list = ("NODE_01", "ZONE_A", "PHONE_ZONE_A", "ROVER_PHONE_01", "ROVER_MANUAL_CAM", "EDGE_STATION_PI")
+                    placeholders = ",".join("?" for _ in node_list)
+                    cursor.execute(f"""
+                        SELECT * FROM ai_detections 
+                        WHERE model_name = ? AND node_id IN ({placeholders})
+                        ORDER BY id DESC LIMIT 1
+                    """, (model, *node_list))
+                    row = cursor.fetchone()
+                elif n_up in ["NODE_02", "ZONE_B", "FIELD_B"]:
+                    node_list = ("NODE_02", "ZONE_B", "PHONE_ZONE_B", "SLAVE_01")
+                    placeholders = ",".join("?" for _ in node_list)
+                    cursor.execute(f"""
+                        SELECT * FROM ai_detections 
+                        WHERE model_name = ? AND node_id IN ({placeholders})
+                        ORDER BY id DESC LIMIT 1
+                    """, (model, *node_list))
+                    row = cursor.fetchone()
+                else:
+                    cursor.execute("""
+                        SELECT * FROM ai_detections 
+                        WHERE model_name = ? AND node_id = ?
+                        ORDER BY id DESC LIMIT 1
+                    """, (model, node_id))
+                    row = cursor.fetchone()
+
+            # Fallback to latest farm overall detection if node-specific is missing
+            if not row:
                 cursor.execute("""
                     SELECT * FROM ai_detections 
                     WHERE model_name = ?
                     ORDER BY id DESC LIMIT 1
                 """, (model,))
-            row = cursor.fetchone()
+                row = cursor.fetchone()
+
             if row:
                 d = dict(row)
                 summary[model] = d
@@ -660,16 +685,16 @@ def get_latest_ai_summary(node_id: Optional[str] = None) -> Dict[str, Any]:
                 label_lower = d["detection_label"].lower()
                 conf = d["confidence"]
                 
-                if model == "disease" and "healthy" not in label_lower and "no disease" not in label_lower and conf >= 0.40:
+                if model == "disease" and "healthy" not in label_lower and "no disease" not in label_lower and conf >= 0.35:
                     summary["alerts"].append({
                         "type": "DISEASE",
-                        "severity": "critical" if any(k in label_lower for k in ["blight", "virus", "mold"]) else "warning",
+                        "severity": "critical" if any(k in label_lower for k in ["blight", "virus", "mold", "rot", "spot"]) else "warning",
                         "label": d["detection_label"],
                         "confidence": conf,
                         "node_id": d["node_id"],
                         "created_at": d["created_at"]
                     })
-                elif model == "pest" and "no pest" not in label_lower and conf >= 0.35:
+                elif model == "pest" and "no pest" not in label_lower and "none" not in label_lower and "healthy" not in label_lower and conf >= 0.30:
                     summary["alerts"].append({
                         "type": "PEST",
                         "severity": "warning",
@@ -678,10 +703,10 @@ def get_latest_ai_summary(node_id: Optional[str] = None) -> Dict[str, Any]:
                         "node_id": d["node_id"],
                         "created_at": d["created_at"]
                     })
-                elif model == "nutrition" and "healthy" not in label_lower and conf >= 0.45:
+                elif model == "nutrition" and "healthy" not in label_lower and "optimal" not in label_lower and "balanced" not in label_lower and conf >= 0.40:
                     summary["alerts"].append({
                         "type": "NUTRITION",
-                        "severity": "warning",
+                        "severity": "advisory",
                         "label": d["detection_label"],
                         "confidence": conf,
                         "node_id": d["node_id"],

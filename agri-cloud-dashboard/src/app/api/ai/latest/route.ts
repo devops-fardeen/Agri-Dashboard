@@ -12,13 +12,28 @@ export async function GET(req: NextRequest) {
 
     const filter: Record<string, any> = {};
     if (nodeId) {
-      filter.nodeId = nodeId;
+      const nUpper = nodeId.toUpperCase();
+      if (nUpper === "NODE_01" || nUpper === "ZONE_A" || nUpper === "FIELD_A") {
+        filter.nodeId = { $in: ["NODE_01", "ZONE_A", "PHONE_ZONE_A", "ROVER_PHONE_01", "ROVER_MANUAL_CAM", "EDGE_STATION_PI"] };
+      } else if (nUpper === "NODE_02" || nUpper === "ZONE_B" || nUpper === "FIELD_B") {
+        filter.nodeId = { $in: ["NODE_02", "ZONE_B", "PHONE_ZONE_B", "SLAVE_01"] };
+      } else {
+        filter.nodeId = nodeId;
+      }
     }
 
-    const detections = await AIDetection.find(filter)
+    let detections = await AIDetection.find(filter)
       .sort({ recordedAt: -1 })
       .limit(limit)
       .lean();
+
+    // If no detections found for specific node/zone, fallback to latest overall farm detections
+    if (detections.length === 0) {
+      detections = await AIDetection.find({})
+        .sort({ recordedAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     // Group latest detection per model
     const latestPerModel: Record<string, any> = {
@@ -37,6 +52,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       success: true,
       summary: latestPerModel,
+      models: latestPerModel,
       history: detections,
       timestamp: new Date().toISOString(),
     });

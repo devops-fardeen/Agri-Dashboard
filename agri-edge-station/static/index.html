@@ -1291,6 +1291,15 @@
           <p style="font-size: 12px; font-weight: 800; color: #051f20; margin-top: 4px;" id="ai4Label">Stage 3: Flowering</p>
           <div class="ai-bar"><div class="ai-bar-fill" id="ai4Bar" style="width: 98%; background: #051f20;"></div></div>
         </div>
+      <!-- QUICK TEST / CROP INFECTION SCAN PRESETS -->
+      <div style="margin-top: 14px; padding: 10px 12px; border-radius: 16px; background: rgba(218,241,222,0.4); border: 1px solid rgba(142,182,155,0.4); display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px;">
+        <span style="font-size: 11px; font-weight: 700; color: #163832;">📸 Camera Detection Simulation:</span>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+          <button onclick="simulateEdgeAIDetection('Early Blight (Alternaria solani)', 'No Pests Detected', 'Balanced N-P-K')" style="padding: 4px 10px; font-size: 10px; font-weight: 800; border-radius: 8px; background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; cursor: pointer;">🦠 Blight Infection</button>
+          <button onclick="simulateEdgeAIDetection('Healthy Foliage', 'Aphids Infestation', 'Balanced N-P-K')" style="padding: 4px 10px; font-size: 10px; font-weight: 800; border-radius: 8px; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; cursor: pointer;">🐛 Aphids Pest</button>
+          <button onclick="simulateEdgeAIDetection('Healthy Foliage', 'No Pests Detected', 'Potassium Deficiency')" style="padding: 4px 10px; font-size: 10px; font-weight: 800; border-radius: 8px; background: #fefce8; color: #854d0e; border: 1px solid #fef08a; cursor: pointer;">🧪 Potassium Def</button>
+          <button onclick="simulateEdgeAIDetection('Healthy Foliage', 'No Pests Detected', 'Balanced N-P-K')" style="padding: 4px 10px; font-size: 10px; font-weight: 800; border-radius: 8px; background: #daf1de; color: #235347; border: 1px solid rgba(142,182,155,0.6); cursor: pointer;">🌱 Clear / Healthy</button>
+        </div>
       </div>
     </div>
 
@@ -1872,28 +1881,42 @@
 
       // 3. AI Crop Vision Diagnostics
       if (data.ai) {
-        if (data.ai.disease && data.ai.disease.detection_label && data.ai.disease.detection_label !== 'Healthy Foliage') {
+        const dObj = data.ai.disease;
+        const dLabel = dObj ? (dObj.detection_label || dObj.detectionLabel || dObj.name || '') : '';
+        const dLower = dLabel.toLowerCase();
+        if (dLabel && !dLower.includes('healthy') && !dLower.includes('no disease')) {
+          const isCritical = dLower.includes('blight') || dLower.includes('rot') || dLower.includes('virus') || dLower.includes('mold') || dLower.includes('spot');
           alerts.push({
-            type: 'critical',
+            type: isCritical ? 'critical' : 'warning',
             icon: '🦠',
-            title: `AI Crop Alert: ${data.ai.disease.detection_label}`,
-            sub: `Detected with ${Math.round((data.ai.disease.confidence || 0.95)*100)}% confidence in ${zoneName}. Fungicide treatment advised.`
+            title: `AI Crop Alert: ${dLabel}`,
+            sub: `Detected with ${Math.round((dObj.confidence || 0.95)*100)}% confidence in ${zoneName}. ${isCritical ? 'Fungicide spray advised. Prune infected foliage.' : 'Isolate affected cluster and monitor lesions.'}`,
+            action: isCritical ? 'PUMP_ZONE_B' : undefined,
+            actionLabel: isCritical ? 'Start Misting Spray' : undefined
           });
         }
-        if (data.ai.pest && data.ai.pest.detection_label && data.ai.pest.detection_label !== 'No Pests Detected') {
+
+        const pObj = data.ai.pest;
+        const pLabel = pObj ? (pObj.detection_label || pObj.detectionLabel || pObj.name || '') : '';
+        const pLower = pLabel.toLowerCase();
+        if (pLabel && !pLower.includes('no pest') && !pLower.includes('none') && !pLower.includes('healthy')) {
           alerts.push({
             type: 'warning',
             icon: '🐛',
-            title: `AI Pest Alert: ${data.ai.pest.detection_label}`,
-            sub: `Scout detected pests (${Math.round((data.ai.pest.confidence || 0.94)*100)}% confidence). Deploy biological pest control.`
+            title: `AI Pest Alert: ${pLabel}`,
+            sub: `Scout camera detected ${pLabel} (${Math.round((pObj.confidence || 0.94)*100)}% confidence) in ${zoneName}. Deploy biological pest control or sticky traps.`
           });
         }
-        if (data.ai.nutrition && data.ai.nutrition.detection_label && !data.ai.nutrition.detection_label.toLowerCase().includes('balanced') && !data.ai.nutrition.detection_label.toLowerCase().includes('optimal')) {
+
+        const nObj = data.ai.nutrition;
+        const nLabel = nObj ? (nObj.detection_label || nObj.detectionLabel || nObj.name || '') : '';
+        const nLower = nLabel.toLowerCase();
+        if (nLabel && !nLower.includes('balanced') && !nLower.includes('optimal') && !nLower.includes('healthy')) {
           alerts.push({
             type: 'advisory',
             icon: '🧪',
-            title: `Nutrient Advisory: ${data.ai.nutrition.detection_label}`,
-            sub: `Foliar spectrum indicates nutrient deficiency. Adjust N-P-K injector dosage.`
+            title: `Nutrient Advisory: ${nLabel}`,
+            sub: `Foliar spectrum indicates ${nLabel}. Adjust N-P-K injector dosage and check root pH.`
           });
         }
       }
@@ -2421,7 +2444,35 @@
       // Generate Agronomist Treatment Plan
       renderTreatmentPlan(d.name, p.name, n.name, s.name);
       
-      // Also update alerts hub
+      // Update local state cache immediately and trigger instant alert evaluation (0ms delay)
+      const liveAiSummary = {
+        disease: {
+          detection_label: d.name || 'Healthy Foliage',
+          confidence: d.confidence || 0.96
+        },
+        pest: {
+          detection_label: p.name || 'No Pests Detected',
+          confidence: p.confidence || 0.94
+        },
+        nutrition: {
+          detection_label: n.name || 'Balanced N-P-K',
+          confidence: n.confidence || 0.91
+        },
+        stage: {
+          detection_label: s.name || 'Stage 3: Flowering',
+          confidence: s.confidence || 0.98
+        }
+      };
+
+      stateCache = {
+        ...stateCache,
+        ai: liveAiSummary
+      };
+
+      // Immediately evaluate and render live alerts in the Alert Widget
+      evaluateAlerts(stateCache);
+
+      // Also trigger a background sync to refresh all edge states
       fetchStatus();
     }
 
@@ -2505,6 +2556,22 @@
       startRoverKeepAlive(action);
       return _origSendRoverCmd(action);
     };
+
+    function simulateEdgeAIDetection(disease, pest, nutrition, stage) {
+      const simData = {
+        success: true,
+        blur_score: 95.0,
+        results: {
+          disease: [{ name: disease, confidence: 0.96 }],
+          pest: [{ name: pest, confidence: 0.94 }],
+          nutrition: [{ name: nutrition, confidence: 0.91 }],
+          stage: [{ name: stage || "Stage 3: Flowering", confidence: 0.98 }]
+        }
+      };
+      renderAIInferenceResults(simData);
+      const alertSec = document.getElementById('alertSection');
+      if (alertSec) alertSec.scrollIntoView({ behavior: 'smooth' });
+    }
 
     setLanguage('en');
     fetchStatus();

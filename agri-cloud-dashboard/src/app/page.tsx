@@ -246,7 +246,7 @@ export default function DashboardPage() {
       const res = await fetch(`/api/ai/latest?nodeId=${node}`);
       if (res.ok) {
         const json = await res.json();
-        setAiSummary(json.models);
+        setAiSummary(json.summary || json.models || null);
       }
     } catch (e) {
       console.error("AI diagnostics fetch error:", e);
@@ -431,34 +431,60 @@ export default function DashboardPage() {
     }
 
     // 5. AI Vision Model Diagnostics
-    if (aiSummary?.disease?.detectionLabel && aiSummary.disease.detectionLabel !== "Healthy Foliage") {
+    // A. Crop Disease / Plant Infection Alert
+    const diseaseObj = aiSummary?.disease;
+    const diseaseLabel = diseaseObj?.detectionLabel || diseaseObj?.detection_label || diseaseObj?.name || "";
+    const diseaseConfidence = diseaseObj?.confidence ?? 0.95;
+    const diseaseLower = diseaseLabel.toLowerCase();
+
+    if (diseaseLabel && !diseaseLower.includes("healthy") && !diseaseLower.includes("no disease")) {
+      const isCritical = diseaseLower.includes("blight") || diseaseLower.includes("rot") || diseaseLower.includes("virus") || diseaseLower.includes("mold") || diseaseLower.includes("spot");
       list.push({
         id: "ai-disease",
-        type: "CRITICAL",
-        title: `AI Crop Alert: ${aiSummary.disease.detectionLabel}`,
-        message: `Camera detected ${aiSummary.disease.detectionLabel} with ${Math.round((aiSummary.disease.confidence || 0.95) * 100)}% confidence. Fungicide treatment recommended.`,
+        type: isCritical ? "CRITICAL" : "WARNING",
+        title: `🦠 Plant Disease Alert: ${diseaseLabel}`,
+        message: `Edge camera AI detected ${diseaseLabel} with ${Math.round(diseaseConfidence * 100)}% confidence in ${activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B"}. ${
+          isCritical 
+            ? "Immediate bio-fungicide spray recommended. Prune infected foliage and halt overhead misting." 
+            : "Monitor leaf lesions closely and isolate affected plant cluster."
+        }`,
         zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
         timestamp: now,
+        actionText: isCritical ? "Start Misting Spray" : undefined,
+        actionTarget: "PUMP_ZONE_B",
+        actionCmd: "ON",
       });
     }
 
-    if (aiSummary?.pest?.detectionLabel && aiSummary.pest.detectionLabel !== "No Pests Detected") {
+    // B. Crop Pest / Insect Scout Alert
+    const pestObj = aiSummary?.pest;
+    const pestLabel = pestObj?.detectionLabel || pestObj?.detection_label || pestObj?.name || "";
+    const pestConfidence = pestObj?.confidence ?? 0.94;
+    const pestLower = pestLabel.toLowerCase();
+
+    if (pestLabel && !pestLower.includes("no pest") && !pestLower.includes("none") && !pestLower.includes("healthy")) {
       list.push({
         id: "ai-pest",
         type: "WARNING",
-        title: `AI Pest Alert: ${aiSummary.pest.detectionLabel}`,
-        message: `Pest activity identified (${Math.round((aiSummary.pest.confidence || 0.94) * 100)}% confidence). Deploy biological pest control or sticky traps.`,
+        title: `🐛 AI Pest Scout: ${pestLabel}`,
+        message: `Pest scout camera identified ${pestLabel} (${Math.round(pestConfidence * 100)}% confidence) in ${activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B"}. Deploy cold-pressed Neem oil spray or yellow sticky insect traps.`,
         zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
         timestamp: now,
       });
     }
 
-    if (aiSummary?.nutrition?.detectionLabel && !aiSummary.nutrition.detectionLabel.toLowerCase().includes("optimal") && !aiSummary.nutrition.detectionLabel.toLowerCase().includes("balanced")) {
+    // C. Foliar Nutrient Deficiency Advisory
+    const nutrObj = aiSummary?.nutrition;
+    const nutrLabel = nutrObj?.detectionLabel || nutrObj?.detection_label || nutrObj?.name || "";
+    const nutrConfidence = nutrObj?.confidence ?? 0.91;
+    const nutrLower = nutrLabel.toLowerCase();
+
+    if (nutrLabel && !nutrLower.includes("optimal") && !nutrLower.includes("balanced") && !nutrLower.includes("healthy")) {
       list.push({
         id: "ai-nutr",
         type: "ADVISORY",
-        title: `Nutrient Advisory: ${aiSummary.nutrition.detectionLabel}`,
-        message: `Foliar spectrum indicates nutrient imbalance. Verify N-P-K injector levels.`,
+        title: `🧪 Nutrient Advisory: ${nutrLabel}`,
+        message: `Foliar spectrum indicates ${nutrLabel} (${Math.round(nutrConfidence * 100)}% confidence). Adjust N-P-K injector dosage and root zone pH.`,
         zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
         timestamp: now,
       });
@@ -1374,66 +1400,180 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-extrabold text-[#051f20]">4 AI Vision Models Diagnostics</h3>
-                  <p className="text-xs text-[#163832] font-semibold">Edge station automated crop camera inference</p>
+                  <p className="text-xs text-[#163832] font-semibold">Real-time edge camera crop health inference</p>
                 </div>
               </div>
-              <span className="text-[11px] font-bold text-[#051f20] bg-[#daf1de] px-3 py-1 rounded-full border border-[#8eb69b]/50">
-                Edge AI Active
-              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={fetchAIDiagnostics}
+                  className="px-2.5 py-1 rounded-full text-[10px] font-bold glass-pill text-[#051f20] hover:border-[#235347] active:scale-95 transition flex items-center gap-1"
+                  title="Refresh AI Data"
+                >
+                  <RefreshCw className="w-3 h-3 text-[#235347]" />
+                  <span>Sync AI</span>
+                </button>
+                <span className="text-[11px] font-bold text-[#051f20] bg-[#daf1de] px-3 py-1 rounded-full border border-[#8eb69b]/50 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-[#235347] animate-pulse" />
+                  Edge AI Active
+                </span>
+              </div>
             </div>
 
             {/* 4 Diagnosis Mini-Cards */}
             <div className="grid grid-cols-2 gap-2.5">
-              <div className="p-3.5 rounded-2xl bg-white border border-[#8eb69b]/35 space-y-1.5 shadow-sm">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-[#163832] font-semibold">1. Disease Model</span>
-                  <span className="text-[#235347] font-extrabold">96%</span>
-                </div>
-                <p className="text-xs font-bold text-[#051f20] truncate">
-                  {aiSummary?.disease?.detectionLabel || "Healthy Foliage"}
-                </p>
-                <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-[#235347] h-full rounded-full" style={{ width: "96%" }} />
-                </div>
-              </div>
+              {/* 1. Disease Model */}
+              {(() => {
+                const dLabel = aiSummary?.disease?.detectionLabel || aiSummary?.disease?.detection_label || aiSummary?.disease?.name || "Healthy Foliage";
+                const isInf = dLabel && !dLabel.toLowerCase().includes("healthy") && !dLabel.toLowerCase().includes("no disease");
+                const conf = Math.round((aiSummary?.disease?.confidence || 0.96) * 100);
+                return (
+                  <div className={`p-3.5 rounded-2xl border space-y-1.5 shadow-sm transition-all ${
+                    isInf ? "bg-gradient-to-br from-white via-[#fff1f2] to-white border-[#fca5a5]" : "bg-white border-[#8eb69b]/35"
+                  }`}>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#163832] font-semibold">1. Disease Model</span>
+                      <span className={`font-extrabold ${isInf ? "text-[#be123c]" : "text-[#235347]"}`}>{conf}%</span>
+                    </div>
+                    <p className={`text-xs font-bold truncate ${isInf ? "text-[#be123c]" : "text-[#051f20]"}`}>
+                      {isInf ? `⚠️ ${dLabel}` : `🌱 ${dLabel}`}
+                    </p>
+                    <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${isInf ? "bg-[#be123c]" : "bg-[#235347]"}`} style={{ width: `${conf}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
 
-              <div className="p-3.5 rounded-2xl bg-white border border-[#8eb69b]/35 space-y-1.5 shadow-sm">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-[#163832] font-semibold">2. Pest Scout</span>
-                  <span className="text-[#235347] font-extrabold">94%</span>
-                </div>
-                <p className="text-xs font-bold text-[#051f20] truncate">
-                  {aiSummary?.pest?.detectionLabel || "No Pests Detected"}
-                </p>
-                <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-[#235347] h-full rounded-full" style={{ width: "94%" }} />
-                </div>
-              </div>
+              {/* 2. Pest Scout */}
+              {(() => {
+                const pLabel = aiSummary?.pest?.detectionLabel || aiSummary?.pest?.detection_label || aiSummary?.pest?.name || "No Pests Detected";
+                const isPest = pLabel && !pLabel.toLowerCase().includes("no pest") && !pLabel.toLowerCase().includes("none") && !pLabel.toLowerCase().includes("healthy");
+                const conf = Math.round((aiSummary?.pest?.confidence || 0.94) * 100);
+                return (
+                  <div className={`p-3.5 rounded-2xl border space-y-1.5 shadow-sm transition-all ${
+                    isPest ? "bg-gradient-to-br from-white via-[#fffbeb] to-white border-[#fde68a]" : "bg-white border-[#8eb69b]/35"
+                  }`}>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#163832] font-semibold">2. Pest Scout</span>
+                      <span className={`font-extrabold ${isPest ? "text-[#d97706]" : "text-[#235347]"}`}>{conf}%</span>
+                    </div>
+                    <p className={`text-xs font-bold truncate ${isPest ? "text-[#b45309]" : "text-[#051f20]"}`}>
+                      {isPest ? `🐛 ${pLabel}` : `🛡️ ${pLabel}`}
+                    </p>
+                    <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
+                      <div className={`h-full rounded-full transition-all duration-500 ${isPest ? "bg-[#d97706]" : "bg-[#235347]"}`} style={{ width: `${conf}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
 
-              <div className="p-3.5 rounded-2xl bg-white border border-[#8eb69b]/35 space-y-1.5 shadow-sm">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-[#163832] font-semibold">3. Nutrition Balance</span>
-                  <span className="text-[#8eb69b] font-extrabold">91%</span>
-                </div>
-                <p className="text-xs font-bold text-[#051f20] truncate">
-                  {aiSummary?.nutrition?.detectionLabel || "Optimal N-P-K"}
-                </p>
-                <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-[#8eb69b] h-full rounded-full" style={{ width: "91%" }} />
-                </div>
-              </div>
+              {/* 3. Nutrition Balance */}
+              {(() => {
+                const nLabel = aiSummary?.nutrition?.detectionLabel || aiSummary?.nutrition?.detection_label || aiSummary?.nutrition?.name || "Optimal N-P-K";
+                const isDef = nLabel && !nLabel.toLowerCase().includes("optimal") && !nLabel.toLowerCase().includes("balanced") && !nLabel.toLowerCase().includes("healthy");
+                const conf = Math.round((aiSummary?.nutrition?.confidence || 0.91) * 100);
+                return (
+                  <div className={`p-3.5 rounded-2xl border space-y-1.5 shadow-sm transition-all ${
+                    isDef ? "bg-gradient-to-br from-white via-[#fefce8] to-white border-[#fef08a]" : "bg-white border-[#8eb69b]/35"
+                  }`}>
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#163832] font-semibold">3. Nutrition Balance</span>
+                      <span className="text-[#8eb69b] font-extrabold">{conf}%</span>
+                    </div>
+                    <p className="text-xs font-bold text-[#051f20] truncate">
+                      {isDef ? `🧪 ${nLabel}` : `✨ ${nLabel}`}
+                    </p>
+                    <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-[#8eb69b] h-full rounded-full transition-all duration-500" style={{ width: `${conf}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
 
-              <div className="p-3.5 rounded-2xl bg-white border border-[#8eb69b]/35 space-y-1.5 shadow-sm">
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-[#163832] font-semibold">4. Growth Stage</span>
-                  <span className="text-[#051f20] font-extrabold">98%</span>
-                </div>
-                <p className="text-xs font-bold text-[#051f20] truncate">
-                  {aiSummary?.stage?.detectionLabel || "Stage 3: Flowering"}
-                </p>
-                <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
-                  <div className="bg-[#051f20] h-full rounded-full" style={{ width: "98%" }} />
-                </div>
+              {/* 4. Growth Stage */}
+              {(() => {
+                const sLabel = aiSummary?.stage?.detectionLabel || aiSummary?.stage?.detection_label || aiSummary?.stage?.name || "Stage 3: Flowering";
+                const conf = Math.round((aiSummary?.stage?.confidence || 0.98) * 100);
+                return (
+                  <div className="p-3.5 rounded-2xl bg-white border border-[#8eb69b]/35 space-y-1.5 shadow-sm">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="text-[#163832] font-semibold">4. Growth Stage</span>
+                      <span className="text-[#051f20] font-extrabold">{conf}%</span>
+                    </div>
+                    <p className="text-xs font-bold text-[#051f20] truncate">
+                      🌸 {sLabel}
+                    </p>
+                    <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-[#051f20] h-full rounded-full transition-all duration-500" style={{ width: `${conf}%` }} />
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Quick Test / Live Camera Simulation Toolbar */}
+            <div className="p-2.5 rounded-2xl bg-[#daf1de]/40 border border-[#8eb69b]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-[11px] text-[#163832] font-semibold">
+                <span>📸</span>
+                <span>Camera Detection Simulation:</span>
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <button
+                  onClick={() => {
+                    setAiSummary({
+                      disease: { detectionLabel: "Early Blight (Alternaria solani)", confidence: 0.97, modelName: "disease" },
+                      pest: { detectionLabel: "No Pests Detected", confidence: 0.94, modelName: "pest" },
+                      nutrition: { detectionLabel: "Balanced N-P-K", confidence: 0.91, modelName: "nutrition" },
+                      stage: { detectionLabel: "Stage 3: Flowering", confidence: 0.98, modelName: "stage" },
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#fff1f2] text-[#be123c] border border-[#fca5a5] hover:bg-[#ffe4e6] active:scale-95 transition"
+                  title="Simulate Early Blight Detection"
+                >
+                  🦠 Blight Infection
+                </button>
+                <button
+                  onClick={() => {
+                    setAiSummary({
+                      disease: { detectionLabel: "Healthy Foliage", confidence: 0.96, modelName: "disease" },
+                      pest: { detectionLabel: "Aphids Infestation", confidence: 0.95, modelName: "pest" },
+                      nutrition: { detectionLabel: "Balanced N-P-K", confidence: 0.91, modelName: "nutrition" },
+                      stage: { detectionLabel: "Stage 3: Flowering", confidence: 0.98, modelName: "stage" },
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#fffbeb] text-[#b45309] border border-[#fde68a] hover:bg-[#fef3c7] active:scale-95 transition"
+                  title="Simulate Aphids Pest Detection"
+                >
+                  🐛 Aphids Pest
+                </button>
+                <button
+                  onClick={() => {
+                    setAiSummary({
+                      disease: { detectionLabel: "Healthy Foliage", confidence: 0.96, modelName: "disease" },
+                      pest: { detectionLabel: "No Pests Detected", confidence: 0.94, modelName: "pest" },
+                      nutrition: { detectionLabel: "Potassium Deficiency", confidence: 0.89, modelName: "nutrition" },
+                      stage: { detectionLabel: "Stage 3: Flowering", confidence: 0.98, modelName: "stage" },
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#fefce8] text-[#854d0e] border border-[#fef08a] hover:bg-[#fef9c3] active:scale-95 transition"
+                  title="Simulate Potassium Deficiency"
+                >
+                  🧪 Potassium Def
+                </button>
+                <button
+                  onClick={() => {
+                    setAiSummary({
+                      disease: { detectionLabel: "Healthy Foliage", confidence: 0.98, modelName: "disease" },
+                      pest: { detectionLabel: "No Pests Detected", confidence: 0.96, modelName: "pest" },
+                      nutrition: { detectionLabel: "Optimal N-P-K", confidence: 0.95, modelName: "nutrition" },
+                      stage: { detectionLabel: "Stage 3: Flowering", confidence: 0.99, modelName: "stage" },
+                    });
+                  }}
+                  className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-[#daf1de] text-[#235347] border border-[#8eb69b]/60 hover:bg-[#8eb69b]/30 active:scale-95 transition"
+                  title="Reset to All Healthy"
+                >
+                  🌱 Clear / Healthy
+                </button>
               </div>
             </div>
           </div>
