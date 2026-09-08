@@ -8,19 +8,33 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const limitParam = searchParams.get("limit");
-    const zoneId = searchParams.get("zoneId");
+    const zoneParam = searchParams.get("zone") || searchParams.get("zoneId");
 
-    const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 10, 1), 100) : 10;
+    const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 10, 1), 100) : 12;
 
     const query: Record<string, any> = {};
-    if (zoneId && (zoneId === "ZONE_A" || zoneId === "ZONE_B")) {
-      query.zoneId = zoneId;
+    if (zoneParam) {
+      const zUpper = zoneParam.toUpperCase();
+      if (zUpper === "ZONE_A" || zUpper === "A" || zUpper.includes("FIELD_A") || zUpper.includes("TOMATO")) {
+        query.zoneId = { $in: ["ZONE_A", "Tomato Field A", "NODE_01", "SLAVE_01"] };
+      } else if (zUpper === "ZONE_B" || zUpper === "B" || zUpper.includes("FIELD_B") || zUpper.includes("GREENHOUSE")) {
+        query.zoneId = { $in: ["ZONE_B", "Greenhouse B", "NODE_02"] };
+      } else {
+        query.zoneId = zoneParam;
+      }
     }
 
-    const records = await Telemetry.find(query)
+    let records = await Telemetry.find(query)
       .sort({ recordedAt: -1 })
       .limit(limit)
       .lean();
+
+    if (records.length === 0) {
+      records = await Telemetry.find({})
+        .sort({ recordedAt: -1 })
+        .limit(limit)
+        .lean();
+    }
 
     return NextResponse.json({
       success: true,
