@@ -108,8 +108,12 @@ class MasterSerialBridge:
 
     def _parse_line(self, line: str):
         """
-        Parses structured format: DATA,<temp>,<humidity>,<soilPercent>,<soilRaw>,<RAIN/NO_RAIN>
+        Parses structured format:
+        1. Full Telemetry: DATA,<temp>,<humidity>,<soilPercent>,<soilRaw>,<RAIN/NO_RAIN>
+        2. Periodic Rain Status: RAIN_STATUS:RAIN or RAIN_STATUS:NO_RAIN
         """
+        import mock_sensor
+
         if line.startswith("DATA,"):
             parts = line.split(",")
             if len(parts) >= 6:
@@ -120,6 +124,7 @@ class MasterSerialBridge:
                     soil_raw = int(parts[4])
                     is_rain = parts[5].strip() == "RAIN"
 
+                    mock_sensor.set_rain_detected(is_rain)
                     logger.info(f"📥 [MASTER ESP32 INGEST] Temp: {temp}°C | Humidity: {hum}% | Soil: {soil_pct}% (Raw: {soil_raw}) | Rain: {is_rain}")
                     
                     # Log into SQLite telemetry database
@@ -140,8 +145,30 @@ class MasterSerialBridge:
                     )
                 except Exception as ex:
                     logger.warning(f"Failed to parse telemetry line '{line}': {ex}")
+
+        elif "RAIN_STATUS:" in line or line in ["RAIN", "NO_RAIN", "RAIN_DETECTED"]:
+            is_rain = "RAIN" in line and "NO_RAIN" not in line
+            mock_sensor.set_rain_detected(is_rain)
+            logger.info(f"🌧️ [MASTER ESP32 HARDWARE RAIN SENSOR] Rain Active: {is_rain}")
+            
+            # Immediately update latest telemetry record with live rain status
+            latest_a = database.get_latest_telemetry("ZONE_A") or {}
+            database.log_telemetry(
+                zone_id="ZONE_A",
+                node_id="MASTER_ESP32_RAIN",
+                soil_moisture=latest_a.get("soil_moisture", 62.0),
+                soil_temp=latest_a.get("soil_temp", 24.0),
+                ambient_temp=latest_a.get("ambient_temp", 28.0),
+                ambient_humidity=latest_a.get("ambient_humidity", 65.0),
+                pump_active=latest_a.get("pump_active", 0),
+                light_lux=latest_a.get("light_lux", 0.0),
+                barometric_pressure=latest_a.get("barometric_pressure", 1013.25),
+                rain_detected=1 if is_rain else 0
+            )
+
         elif "PUMP" in line or "SLAVE" in line or "MASTER" in line:
             logger.info(f"📟 [ESP32 LOG] {line}")
+
 
     def _sync_actuators(self):
         """Sends PUMP1_ON / PUMP1_OFF / PUMP2_ON / PUMP2_OFF when states change."""

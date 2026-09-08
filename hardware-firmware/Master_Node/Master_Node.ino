@@ -27,12 +27,21 @@ typedef struct {
 SensorData slaveData;
 
 // =====================================================
+// =====================================================
+// GLOBAL VARIABLES & TIMERS
+// =====================================================
+unsigned long lastRainSample = 0;
+const unsigned long RAIN_SAMPLE_INTERVAL = 1000; // Sample rain sensor every 1 second
+int lastRainState = -1; // -1: uninitialized, 0: NO_RAIN, 1: RAIN
+
+// =====================================================
 // ESP-NOW RECEIVE CALLBACK
 // =====================================================
 void onDataRecv(const esp_now_recv_info_t *info, const uint8_t *incomingData, int len) {
   if (len == sizeof(SensorData)) {
     memcpy(&slaveData, incomingData, sizeof(slaveData));
 
+    // Active LOW: Rain on sensor plate grounds the comparator DO pin to LOW
     bool raining = (digitalRead(RAIN_PIN) == LOW);
 
     // Send structured serial packet to Raspberry Pi 5 Gateway
@@ -66,7 +75,8 @@ void setup() {
   Serial.println("   AGRISMART MASTER NODE (ESP32)");
   Serial.println("=====================================");
 
-  pinMode(RAIN_PIN, INPUT);
+  // Digital Rain Sensor (Active LOW on FC-37 / YL-83 comparator)
+  pinMode(RAIN_PIN, INPUT_PULLUP);
   pinMode(RELAY1_PIN, OUTPUT);
   pinMode(RELAY2_PIN, OUTPUT);
 
@@ -90,9 +100,26 @@ void setup() {
 }
 
 // =====================================================
-// MAIN LOOP: READ COMMANDS FROM RASPBERRY PI
+// MAIN LOOP: READ COMMANDS & PERIODIC SENSOR BROADCAST
 // =====================================================
 void loop() {
+  unsigned long now = millis();
+
+  // 1. Continuous Periodic Rain Sensor Broadcast (Every 1000ms)
+  // Ensures Raspberry Pi edge gateway receives live rain telemetry even without slave node
+  if (now - lastRainSample >= RAIN_SAMPLE_INTERVAL) {
+    lastRainSample = now;
+    int currentRain = (digitalRead(RAIN_PIN) == LOW) ? 1 : 0;
+    
+    if (currentRain == 1) {
+      Serial.println("RAIN_STATUS:RAIN");
+    } else {
+      Serial.println("RAIN_STATUS:NO_RAIN");
+    }
+    lastRainState = currentRain;
+  }
+
+  // 2. Read Commands from Raspberry Pi
   if (Serial.available()) {
     String command = Serial.readStringUntil('\n');
     command.trim();
@@ -113,7 +140,11 @@ void loop() {
       digitalWrite(RELAY1_PIN, RELAY_OFF);
       digitalWrite(RELAY2_PIN, RELAY_OFF);
       Serial.println("ALL_PUMPS_OFF_ACK");
+    } else if (command == "GET_RAIN") {
+      bool raining = (digitalRead(RAIN_PIN) == LOW);
+      Serial.println(raining ? "RAIN_STATUS:RAIN" : "RAIN_STATUS:NO_RAIN");
     }
   }
   delay(20);
 }
+

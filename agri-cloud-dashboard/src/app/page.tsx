@@ -1406,53 +1406,8 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 4 Sensor Micro-Metric Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
-            <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[#8eb69b]/35 space-y-1 shadow-xs">
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#163832]/80">
-                <span>Hardware Logic</span>
-                <Radio className="w-3.5 h-3.5 text-[#235347]" />
-              </div>
-              <p className="text-sm font-extrabold text-[#051f20]">
-                {isRaining ? "LOW (Active)" : "HIGH (Standby)"}
-              </p>
-              <p className="text-[10px] text-[#163832] font-semibold">Master ESP32 GPIO 27</p>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[#8eb69b]/35 space-y-1 shadow-xs">
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#163832]/80">
-                <span>Precipitation State</span>
-                <Droplets className="w-3.5 h-3.5 text-[#235347]" />
-              </div>
-              <p className={`text-sm font-extrabold ${isRaining ? "text-cyan-700" : "text-[#051f20]"}`}>
-                {isRaining ? "Raining (Active)" : "Dry / Clear"}
-              </p>
-              <p className="text-[10px] text-[#163832] font-semibold">Instant Telemetry Ingest</p>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[#8eb69b]/35 space-y-1 shadow-xs">
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#163832]/80">
-                <span>Irrigation Safety</span>
-                <ShieldCheck className="w-3.5 h-3.5 text-[#235347]" />
-              </div>
-              <p className={`text-sm font-extrabold ${isRaining ? "text-[#be123c]" : "text-[#235347]"}`}>
-                {isRaining ? "Auto-Paused" : "Nominal / Active"}
-              </p>
-              <p className="text-[10px] text-[#163832] font-semibold">Anti-Waterlogging Lock</p>
-            </div>
-
-            <div className="p-3.5 rounded-2xl bg-white/80 backdrop-blur-sm border border-[#8eb69b]/35 space-y-1 shadow-xs">
-              <div className="flex items-center justify-between text-[10px] uppercase font-bold text-[#163832]/80">
-                <span>Water Conservation</span>
-                <Sprout className="w-3.5 h-3.5 text-[#235347]" />
-              </div>
-              <p className="text-sm font-extrabold text-[#235347]">
-                {isRaining ? "+100% Conserved" : "Standard Efficiency"}
-              </p>
-              <p className="text-[10px] text-[#163832] font-semibold">Smart Eco-Drain Link</p>
-            </div>
-          </div>
         </section>
+
 
         {/* ========================================================================= */}
         {/* GRID OF COMPACT ACTION CARDS (SMART PUMPS & ALARMS) */}

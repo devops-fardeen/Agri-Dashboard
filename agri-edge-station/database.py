@@ -98,8 +98,22 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ai_node_rec ON ai_detections(node_id, created_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_ai_model ON ai_detections(model_name, created_at DESC);")
         
-        # Seed default actuator relays if missing
+        # 6. Farm Location / Settings Table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS farm_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+        """)
+        
+        # Seed default farm settings if missing
         now_iso = datetime.now(timezone.utc).isoformat()
+        cursor.execute("INSERT OR IGNORE INTO farm_settings (key, value, updated_at) VALUES ('location_name', 'Lucknow Farm Zone', ?)", (now_iso,))
+        cursor.execute("INSERT OR IGNORE INTO farm_settings (key, value, updated_at) VALUES ('latitude', '26.8467', ?)", (now_iso,))
+        cursor.execute("INSERT OR IGNORE INTO farm_settings (key, value, updated_at) VALUES ('longitude', '80.9462', ?)", (now_iso,))
+        
+        # Seed default actuator relays if missing
         cursor.execute("""
             INSERT OR IGNORE INTO actuators (target, state, updated_at)
             VALUES ('PUMP_ZONE_A', 0, ?)
@@ -131,17 +145,19 @@ def init_db():
             today_dt = datetime.now(timezone.utc)
             day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
             default_days = [
-                {"date": (today_dt + timedelta(days=0)).strftime("%Y-%m-%d"), "day_name": "Today", "temp_max": 28.5, "temp_min": 21.0, "rain_prob": 0, "condition": "Sunny", "weather_code": 0},
-                {"date": (today_dt + timedelta(days=1)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=1)).weekday()], "temp_max": 27.0, "temp_min": 20.0, "rain_prob": 10, "condition": "Partly Cloudy", "weather_code": 2},
-                {"date": (today_dt + timedelta(days=2)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=2)).weekday()], "temp_max": 25.0, "temp_min": 19.5, "rain_prob": 65, "condition": "Rain", "weather_code": 61},
-                {"date": (today_dt + timedelta(days=3)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=3)).weekday()], "temp_max": 29.0, "temp_min": 22.0, "rain_prob": 5, "condition": "Sunny", "weather_code": 0},
-                {"date": (today_dt + timedelta(days=4)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=4)).weekday()], "temp_max": 28.0, "temp_min": 21.0, "rain_prob": 15, "condition": "Partly Cloudy", "weather_code": 1},
-                {"date": (today_dt + timedelta(days=5)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=5)).weekday()], "temp_max": 30.5, "temp_min": 23.0, "rain_prob": 20, "condition": "Sunny", "weather_code": 0},
-                {"date": (today_dt + timedelta(days=6)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=6)).weekday()], "temp_max": 27.5, "temp_min": 20.5, "rain_prob": 40, "condition": "Showers", "weather_code": 80},
+                {"date": (today_dt + timedelta(days=0)).strftime("%Y-%m-%d"), "day_name": "Today", "temp_max": 28.5, "temp_min": 21.0, "rain_prob": 0, "condition": "Sunny", "weather_code": 0, "precip_sum": 0.0},
+                {"date": (today_dt + timedelta(days=1)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=1)).weekday()], "temp_max": 27.0, "temp_min": 20.0, "rain_prob": 10, "condition": "Partly Cloudy", "weather_code": 2, "precip_sum": 0.0},
+                {"date": (today_dt + timedelta(days=2)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=2)).weekday()], "temp_max": 25.0, "temp_min": 19.5, "rain_prob": 65, "condition": "Rain", "weather_code": 61, "precip_sum": 2.5},
+                {"date": (today_dt + timedelta(days=3)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=3)).weekday()], "temp_max": 29.0, "temp_min": 22.0, "rain_prob": 5, "condition": "Sunny", "weather_code": 0, "precip_sum": 0.0},
+                {"date": (today_dt + timedelta(days=4)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=4)).weekday()], "temp_max": 28.0, "temp_min": 21.0, "rain_prob": 15, "condition": "Partly Cloudy", "weather_code": 1, "precip_sum": 0.1},
+                {"date": (today_dt + timedelta(days=5)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=5)).weekday()], "temp_max": 30.5, "temp_min": 23.0, "rain_prob": 20, "condition": "Sunny", "weather_code": 0, "precip_sum": 0.0},
+                {"date": (today_dt + timedelta(days=6)).strftime("%Y-%m-%d"), "day_name": day_names[(today_dt + timedelta(days=6)).weekday()], "temp_max": 27.5, "temp_min": 20.5, "rain_prob": 40, "condition": "Showers", "weather_code": 80, "precip_sum": 1.2},
             ]
             default_payload = json.dumps({
+                "location_name": "Lucknow Farm Zone",
                 "latitude": 26.8467,
                 "longitude": 80.9462,
+                "is_live": False,
                 "cached_at": now_iso,
                 "days": default_days
             })
@@ -428,11 +444,41 @@ def update_rover_command(action: str) -> Dict[str, Any]:
     return get_rover_state()
 
 # ----------------------------------------------------------------------
-# WEATHER CACHE METHODS
+# WEATHER CACHE & FARM LOCATION METHODS
 # ----------------------------------------------------------------------
 
+def get_farm_location() -> Dict[str, Any]:
+    """Returns the current farm location metadata (name, lat, lon)."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM farm_settings")
+        rows = cursor.fetchall()
+        settings = {r["key"]: r["value"] for r in rows}
+        return {
+            "location_name": settings.get("location_name", "Lucknow Farm Zone"),
+            "latitude": float(settings.get("latitude", "26.8467")),
+            "longitude": float(settings.get("longitude", "80.9462")),
+        }
+
+def update_farm_location(location_name: str, latitude: float, longitude: float) -> Dict[str, Any]:
+    """Updates farm location in SQLite and returns new settings."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for k, v in [("location_name", location_name.strip()), ("latitude", str(latitude)), ("longitude", str(longitude))]:
+            cursor.execute("""
+                INSERT INTO farm_settings (key, value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(key) DO UPDATE SET
+                    value = excluded.value,
+                    updated_at = excluded.updated_at
+            """, (k, v, now_iso))
+        conn.commit()
+    return get_farm_location()
+
 def get_cached_weather() -> Optional[Dict[str, Any]]:
-    """Returns the cached 7-day weather forecast dictionary if present."""
+    """Returns the cached 7-day weather forecast dictionary with age & location metadata."""
+    loc = get_farm_location()
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT fetched_at, forecast_json FROM weather_cache WHERE id = 1")
@@ -440,17 +486,42 @@ def get_cached_weather() -> Optional[Dict[str, Any]]:
         if row and row["forecast_json"]:
             try:
                 data = json.loads(row["forecast_json"])
+                fetched_time = datetime.fromisoformat(row["fetched_at"])
+                if fetched_time.tzinfo is None:
+                    fetched_time = fetched_time.replace(tzinfo=timezone.utc)
+                now = datetime.now(timezone.utc)
+                age_minutes = round(max(0.0, (now - fetched_time).total_seconds() / 60.0), 1)
+                is_stale = age_minutes > 60.0
+
                 return {
                     "fetched_at": row["fetched_at"],
+                    "age_minutes": age_minutes,
+                    "is_stale": is_stale,
+                    "is_live": bool(data.get("is_live", False)),
+                    "location": {
+                        "location_name": data.get("location_name", loc["location_name"]),
+                        "latitude": data.get("latitude", loc["latitude"]),
+                        "longitude": data.get("longitude", loc["longitude"])
+                    },
                     "forecast": data
                 }
             except Exception:
                 return None
         return None
 
-def save_cached_weather(forecast_data: Dict[str, Any]) -> bool:
+def save_cached_weather(forecast_data: Dict[str, Any], is_live: bool = True) -> bool:
     """Saves a 7-day weather forecast JSON to SQLite."""
     now_iso = datetime.now(timezone.utc).isoformat()
+    loc = get_farm_location()
+    if "location_name" not in forecast_data:
+        forecast_data["location_name"] = loc["location_name"]
+    if "latitude" not in forecast_data:
+        forecast_data["latitude"] = loc["latitude"]
+    if "longitude" not in forecast_data:
+        forecast_data["longitude"] = loc["longitude"]
+    forecast_data["is_live"] = is_live
+    forecast_data["cached_at"] = now_iso
+
     json_str = json.dumps(forecast_data)
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -464,8 +535,8 @@ def save_cached_weather(forecast_data: Dict[str, Any]) -> bool:
         conn.commit()
         return True
 
-def is_weather_stale(max_age_hours: int = 24) -> bool:
-    """Checks if the weather cache is missing or older than max_age_hours."""
+def is_weather_stale(max_age_minutes: int = 30) -> bool:
+    """Checks if the weather cache is missing or older than max_age_minutes."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT fetched_at FROM weather_cache WHERE id = 1")
@@ -478,8 +549,8 @@ def is_weather_stale(max_age_hours: int = 24) -> bool:
             if fetched_time.tzinfo is None:
                 fetched_time = fetched_time.replace(tzinfo=timezone.utc)
             now = datetime.now(timezone.utc)
-            age = (now - fetched_time).total_seconds() / 3600.0
-            return age >= max_age_hours
+            age_min = (now - fetched_time).total_seconds() / 60.0
+            return age_min >= max_age_minutes
         except Exception:
             return True
 
@@ -623,6 +694,171 @@ def get_latest_ai_detections(node_id: Optional[str] = None, limit: int = 10) -> 
         rows = cursor.fetchall()
         return [dict(r) for r in rows]
 
+def get_agronomic_treatment(category: str, label: str) -> Dict[str, Any]:
+    """Provides professional AI Agronomist diagnostic treatments and action triggers."""
+    l = label.lower()
+    
+    if category == "disease":
+        if "healthy" in l or "no disease" in l or "none" in l:
+            return {
+                "treatment": "Healthy plant foliage. No fungal or bacterial pathogen observed.",
+                "action": None,
+                "action_label": None,
+                "severity": "nominal"
+            }
+        elif "septoria" in l:
+            return {
+                "treatment": "Foliar bio-fungicide (Bacillus subtilis) spray recommended. Prune lower infected leaves to prevent soil-splash spore spread.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Start Misting Spray",
+                "severity": "warning"
+            }
+        elif "early blight" in l or "alternaria" in l:
+            return {
+                "treatment": "Apply copper hydroxide / chlorothalonil fungicide spray immediately. Sanitize tools and maintain drip irrigation to keep canopy dry.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Start Misting Spray",
+                "severity": "critical"
+            }
+        elif "late blight" in l or "phytophthora" in l:
+            return {
+                "treatment": "High-risk pathogen! Apply systemic fungicide (Metalaxyl + Mancozeb). Suspend overhead misting and remove heavily infected vines.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Start Fungicide Spray",
+                "severity": "critical"
+            }
+        elif "bacterial spot" in l or "xanthomonas" in l:
+            return {
+                "treatment": "Apply fixed copper + Mancozeb bactericide spray. Avoid handling wet foliage to limit bacterial dissemination.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Start Bactericide Spray",
+                "severity": "critical"
+            }
+        elif "powdery mildew" in l:
+            return {
+                "treatment": "Apply potassium bicarbonate or wettable sulfur spray. Increase ventilation schedule (06:00 - 19:00).",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Start Sulfur Spray",
+                "severity": "warning"
+            }
+        elif "leaf mold" in l:
+            return {
+                "treatment": "Reduce relative humidity below 80%. Apply copper-based fungicide and increase exhaust fan ventilation.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Start Foliar Treatment",
+                "severity": "warning"
+            }
+        elif "virus" in l or "curl" in l:
+            return {
+                "treatment": "Viral infection detected. Target insect vectors (whiteflies/aphids) immediately and rogue infected plants.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Target Vectors",
+                "severity": "critical"
+            }
+        else:
+            return {
+                "treatment": f"Foliar pathogen observed ({label}). Spray broad-spectrum organic bio-fungicide and inspect plant cluster.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Start Misting Spray",
+                "severity": "warning"
+            }
+
+    elif category == "pest":
+        if "no pest" in l or "none" in l or "healthy" in l:
+            return {
+                "treatment": "No active insect pests detected on crop foliage.",
+                "action": None,
+                "action_label": None,
+                "severity": "nominal"
+            }
+        elif "aphid" in l:
+            return {
+                "treatment": "Scouted colony on leaf undersides. Apply 0.5% cold-pressed neem oil foliar spray or release predatory ladybird beetles.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Apply Neem Spray",
+                "severity": "warning"
+            }
+        elif "mite" in l:
+            return {
+                "treatment": "Spider mites detected in dry canopy. Initiate canopy misting (Pump B) to raise humidity and apply wettable sulfur.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Start Canopy Misting",
+                "severity": "warning"
+            }
+        elif "whitefly" in l:
+            return {
+                "treatment": "Whitefly swarm detected. Deploy yellow sticky cards along row and apply Beauveria bassiana bio-insecticide.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Apply Bio-Pesticide",
+                "severity": "warning"
+            }
+        elif "caterpillar" in l or "worm" in l or "borer" in l or "armyworm" in l:
+            return {
+                "treatment": "Foliar chewers detected. Apply Bacillus thuringiensis (Bt) kurstaki spray during evening hours.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Apply Bt Spray",
+                "severity": "critical"
+            }
+        else:
+            return {
+                "treatment": f"Pest activity identified ({label}). Apply biological neem oil spray and install insect monitoring cards.",
+                "action": "PUMP_ZONE_B",
+                "action_label": "Apply Pest Control",
+                "severity": "warning"
+            }
+
+    elif category == "nutrition":
+        if "balanced" in l or "optimal" in l or "healthy" in l:
+            return {
+                "treatment": "Foliar nutrient profile balanced (N-P-K nominal).",
+                "action": None,
+                "action_label": None,
+                "severity": "nominal"
+            }
+        elif "nitrogen" in l or "n deficiency" in l:
+            return {
+                "treatment": "Lower foliage chlorosis (yellowing) detected. Inject Calcium Nitrate (19:19:19) solution via Drip Line A.",
+                "action": "PUMP_ZONE_A",
+                "action_label": "Start Drip Fertigation",
+                "severity": "advisory"
+            }
+        elif "potassium" in l or "k deficiency" in l:
+            return {
+                "treatment": "Leaf margin scorch detected. Apply 1% Potassium Nitrate (KNO3) foliar spray and balance soil pH.",
+                "action": "PUMP_ZONE_A",
+                "action_label": "Inject Potassium",
+                "severity": "advisory"
+            }
+        elif "iron" in l or "chlorosis" in l:
+            return {
+                "treatment": "Interveinal chlorosis observed. Drench soil with Chelated Iron (Fe-EDDHA) and check root zone alkalinity.",
+                "action": "PUMP_ZONE_A",
+                "action_label": "Drench Iron Chelate",
+                "severity": "advisory"
+            }
+        elif "phosphorus" in l:
+            return {
+                "treatment": "Purpling of stems/undersides. Inject Monoammonium Phosphate (MAP) fertigation.",
+                "action": "PUMP_ZONE_A",
+                "action_label": "Adjust Phosphate",
+                "severity": "advisory"
+            }
+        else:
+            return {
+                "treatment": f"Nutrient imbalance detected ({label}). Adjust N-P-K injector dosage in fertigation header.",
+                "action": "PUMP_ZONE_A",
+                "action_label": "Adjust Fertigation",
+                "severity": "advisory"
+            }
+            
+    return {
+        "treatment": f"Plant health observation: {label}.",
+        "action": None,
+        "action_label": None,
+        "severity": "nominal"
+    }
+
+
 def get_latest_ai_summary(node_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Returns the latest diagnosed state for each of the 4 models:
@@ -643,7 +879,7 @@ def get_latest_ai_summary(node_id: Optional[str] = None) -> Dict[str, Any]:
             if node_id:
                 n_up = node_id.upper()
                 if n_up in ["NODE_01", "ZONE_A", "FIELD_A"]:
-                    node_list = ("NODE_01", "ZONE_A", "PHONE_ZONE_A", "ROVER_PHONE_01", "ROVER_MANUAL_CAM", "EDGE_STATION_PI")
+                    node_list = ("NODE_01", "ZONE_A", "PHONE_ZONE_A", "ROVER_PHONE_01", "ROVER_MANUAL_CAM", "ROVER_FIELD_SCOUT", "EDGE_STATION_PI")
                     placeholders = ",".join("?" for _ in node_list)
                     cursor.execute(f"""
                         SELECT * FROM ai_detections 
@@ -679,41 +915,66 @@ def get_latest_ai_summary(node_id: Optional[str] = None) -> Dict[str, Any]:
 
             if row:
                 d = dict(row)
+                label = d.get("detection_label", "Unknown")
+                conf = d.get("confidence", 0.0)
+                n_id = d.get("node_id", "ROVER_SCOUT")
+                label_lower = label.lower()
+                
+                # Attach agronomist treatment plan
+                rx = get_agronomic_treatment(model, label)
+                d["treatment"] = rx["treatment"]
+                d["action"] = rx["action"]
+                d["action_label"] = rx["action_label"]
+                d["severity"] = rx["severity"]
+                
                 summary[model] = d
                 
                 # Check for actionable alerts
-                label_lower = d["detection_label"].lower()
-                conf = d["confidence"]
-                
                 if model == "disease" and "healthy" not in label_lower and "no disease" not in label_lower and conf >= 0.35:
                     summary["alerts"].append({
                         "type": "DISEASE",
-                        "severity": "critical" if any(k in label_lower for k in ["blight", "virus", "mold", "rot", "spot"]) else "warning",
-                        "label": d["detection_label"],
+                        "severity": rx["severity"],
+                        "icon": "🦠",
+                        "title": f"Plant Infection: {label}",
+                        "label": label,
                         "confidence": conf,
-                        "node_id": d["node_id"],
-                        "created_at": d["created_at"]
+                        "treatment": rx["treatment"],
+                        "action": rx["action"],
+                        "action_label": rx["action_label"],
+                        "node_id": n_id,
+                        "created_at": d.get("created_at")
                     })
                 elif model == "pest" and "no pest" not in label_lower and "none" not in label_lower and "healthy" not in label_lower and conf >= 0.30:
                     summary["alerts"].append({
                         "type": "PEST",
-                        "severity": "warning",
-                        "label": d["detection_label"],
+                        "severity": rx["severity"],
+                        "icon": "🐛",
+                        "title": f"Pest Infestation: {label}",
+                        "label": label,
                         "confidence": conf,
-                        "node_id": d["node_id"],
-                        "created_at": d["created_at"]
+                        "treatment": rx["treatment"],
+                        "action": rx["action"],
+                        "action_label": rx["action_label"],
+                        "node_id": n_id,
+                        "created_at": d.get("created_at")
                     })
                 elif model == "nutrition" and "healthy" not in label_lower and "optimal" not in label_lower and "balanced" not in label_lower and conf >= 0.40:
                     summary["alerts"].append({
                         "type": "NUTRITION",
-                        "severity": "advisory",
-                        "label": d["detection_label"],
+                        "severity": rx["severity"],
+                        "icon": "🧪",
+                        "title": f"Nutrient Stress: {label}",
+                        "label": label,
                         "confidence": conf,
-                        "node_id": d["node_id"],
-                        "created_at": d["created_at"]
+                        "treatment": rx["treatment"],
+                        "action": rx["action"],
+                        "action_label": rx["action_label"],
+                        "node_id": n_id,
+                        "created_at": d.get("created_at")
                     })
 
     return summary
+
 
 def get_unsynced_ai_detections(limit: int = 20) -> List[Dict[str, Any]]:
     """Fetches batch of unsynced AI detections (synced_to_cloud = 0)."""

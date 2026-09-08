@@ -8,11 +8,25 @@ import database
 logging.basicConfig(level=logging.INFO, format="[%(asctime)s] [MOCK_SENSOR] %(message)s")
 logger = logging.getLogger("mock_sensor")
 
+_current_rain_detected: int = 0
+
+def set_rain_detected(detected: bool):
+    """Sets the simulated/manual rain state."""
+    global _current_rain_detected
+    _current_rain_detected = 1 if detected else 0
+    logger.info(f"🌧️ Rain sensor state updated to: {'RAINING' if _current_rain_detected else 'DRY'}")
+
+def get_rain_detected() -> int:
+    """Returns the current simulated/manual rain state."""
+    global _current_rain_detected
+    return _current_rain_detected
+
 class FieldSensorSimulator:
     """
     Simulates field sensors for Zone A (Crops) and Zone B (Orchard).
     Reflects actuator dynamics: when a pump is ON, moisture rises;
     when OFF, natural evapotranspiration slowly depletes moisture.
+    Also reflects natural rain precipitation dynamics when rain is active.
     """
     def __init__(self):
         # Baseline state for Zone A
@@ -39,11 +53,15 @@ class FieldSensorSimulator:
         self._thread = None
         self._cycle_count = 0
 
-    def _tick_zone(self, zone_id: str, state: dict, pump_active: bool) -> dict:
+
+    def _tick_zone(self, zone_id: str, state: dict, pump_active: bool, is_raining: bool) -> dict:
         # Moisture dynamics
         if pump_active:
             # Active irrigation
             state["soil_moisture"] = min(88.0, state["soil_moisture"] + random.uniform(0.6, 1.2))
+        elif is_raining:
+            # Natural rainfall increases surface moisture
+            state["soil_moisture"] = min(92.0, state["soil_moisture"] + random.uniform(0.3, 0.7))
         else:
             # Natural depletion
             state["soil_moisture"] = max(28.0, state["soil_moisture"] - random.uniform(0.04, 0.12))
@@ -51,18 +69,24 @@ class FieldSensorSimulator:
         # Temperature fluctuations (+- 0.15 deg)
         state["soil_temp"] = round(state["soil_temp"] + random.uniform(-0.08, 0.08), 2)
         state["ambient_temp"] = round(state["ambient_temp"] + random.uniform(-0.12, 0.12), 2)
+        if is_raining:
+            state["ambient_temp"] = max(19.0, min(27.0, state["ambient_temp"]))
         
         # Clamp temperatures within realistic ranges
         state["soil_temp"] = max(18.0, min(35.0, state["soil_temp"]))
         state["ambient_temp"] = max(20.0, min(42.0, state["ambient_temp"]))
         
-        # Humidity fluctuations
-        state["ambient_humidity"] = round(state["ambient_humidity"] + random.uniform(-0.25, 0.25), 2)
-        state["ambient_humidity"] = max(30.0, min(95.0, state["ambient_humidity"]))
+        # Humidity fluctuations (higher when raining)
+        if is_raining:
+            state["ambient_humidity"] = min(98.0, round(state["ambient_humidity"] + random.uniform(0.2, 0.8), 2))
+        else:
+            state["ambient_humidity"] = round(state["ambient_humidity"] + random.uniform(-0.25, 0.25), 2)
+            state["ambient_humidity"] = max(30.0, min(95.0, state["ambient_humidity"]))
         
         # Light & pressure
-        state["light_lux"] = round(max(0.0, state["light_lux"] + random.uniform(-20.0, 20.0)), 1)
+        state["light_lux"] = round(max(0.0, (200.0 if is_raining else 1450.0) + random.uniform(-20.0, 20.0)), 1)
         state["pressure"] = round(state["pressure"] + random.uniform(-0.05, 0.05), 2)
+        state["rain_detected"] = 1 if is_raining else 0
         
         return state
 
@@ -73,11 +97,14 @@ class FieldSensorSimulator:
         pump_a = bool(actuators.get("PUMP_ZONE_A", 0))
         pump_b = bool(actuators.get("PUMP_ZONE_B", 0))
         
+        # Check current rain status
+        is_raining = bool(get_rain_detected())
+        
         now_iso = datetime.now(timezone.utc).isoformat()
         self._cycle_count += 1
         
         # Update and log Zone A
-        self._tick_zone("ZONE_A", self.state_a, pump_a)
+        self._tick_zone("ZONE_A", self.state_a, pump_a, is_raining)
         row_a = database.log_telemetry(
             zone_id="ZONE_A",
             soil_moisture=self.state_a["soil_moisture"],
@@ -87,12 +114,12 @@ class FieldSensorSimulator:
             pump_active=1 if pump_a else 0,
             light_lux=self.state_a["light_lux"],
             barometric_pressure=self.state_a["pressure"],
-            rain_detected=self.state_a["rain_detected"],
+            rain_detected=1 if is_raining else 0,
             recorded_at=now_iso
         )
         
         # Update and log Zone B
-        self._tick_zone("ZONE_B", self.state_b, pump_b)
+        self._tick_zone("ZONE_B", self.state_b, pump_b, is_raining)
         row_b = database.log_telemetry(
             zone_id="ZONE_B",
             soil_moisture=self.state_b["soil_moisture"],
@@ -102,14 +129,15 @@ class FieldSensorSimulator:
             pump_active=1 if pump_b else 0,
             light_lux=self.state_b["light_lux"],
             barometric_pressure=self.state_b["pressure"],
-            rain_detected=self.state_b["rain_detected"],
+            rain_detected=1 if is_raining else 0,
             recorded_at=now_iso
         )
         
         logger.info(
-            f"Sample logged -> Zone A: {self.state_a['soil_moisture']:.1f}% (Pump: {'ON' if pump_a else 'OFF'}, Rain: {bool(self.state_a['rain_detected'])}) | "
-            f"Zone B: {self.state_b['soil_moisture']:.1f}% (Pump: {'ON' if pump_b else 'OFF'}, Rain: {bool(self.state_b['rain_detected'])}) [IDs: {row_a}, {row_b}]"
+            f"Sample logged -> Zone A: {self.state_a['soil_moisture']:.1f}% (Pump: {'ON' if pump_a else 'OFF'}, Rain: {is_raining}) | "
+            f"Zone B: {self.state_b['soil_moisture']:.1f}% (Pump: {'ON' if pump_b else 'OFF'}, Rain: {is_raining}) [IDs: {row_a}, {row_b}]"
         )
+
 
     def start_loop(self, interval_seconds: float = 5.0):
         """Continuous simulation loop."""

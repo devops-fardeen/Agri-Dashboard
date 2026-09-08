@@ -241,18 +241,24 @@ class CloudSyncWorker:
         return 0
 
     def check_and_update_weather_cache(self):
-        """7-Day Offline Weather Cache updater."""
-        if not database.is_weather_stale(max_age_hours=24):
+        """7-Day Offline Weather Cache updater with online auto-sync and SQLite persistence."""
+        if not database.is_weather_stale(max_age_minutes=30):
             return
+
+        loc = database.get_farm_location()
+        lat = loc["latitude"]
+        lon = loc["longitude"]
+        loc_name = loc["location_name"]
 
         url = (
             f"https://api.open-meteo.com/v1/forecast?"
-            f"latitude={WEATHER_LATITUDE}&longitude={WEATHER_LONGITUDE}"
-            f"&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code"
+            f"latitude={lat}&longitude={lon}"
+            f"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation"
+            f"&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,uv_index_max"
             f"&timezone=auto"
         )
         try:
-            res = requests.get(url, timeout=5.0)
+            res = requests.get(url, timeout=4.0)
             if res.status_code == 200:
                 data = res.json()
                 daily = data.get("daily", {})
@@ -260,50 +266,73 @@ class CloudSyncWorker:
                 max_temps = daily.get("temperature_2m_max", [])
                 min_temps = daily.get("temperature_2m_min", [])
                 precip_probs = daily.get("precipitation_probability_max", [])
+                precip_sums = daily.get("precipitation_sum", [])
                 weather_codes = daily.get("weather_code", [])
+                uv_indices = daily.get("uv_index_max", [])
+                curr = data.get("current", {})
 
                 formatted_days = []
+                today_str = datetime.now().strftime("%Y-%m-%d")
                 for i in range(min(len(dates), 7)):
                     wcode = weather_codes[i] if i < len(weather_codes) else 0
-                    condition = self._interpret_wmo_code(wcode)
+                    condition, icon = self._interpret_wmo_code(wcode)
+                    d_date = dates[i]
+                    d_obj = datetime.fromisoformat(d_date)
+                    day_name = "Today" if (i == 0 or d_date == today_str) else d_obj.strftime("%a")
                     
                     formatted_days.append({
-                        "date": dates[i],
-                        "day_name": datetime.fromisoformat(dates[i]).strftime("%a"),
-                        "temp_max": max_temps[i] if i < len(max_temps) else 30.0,
-                        "temp_min": min_temps[i] if i < len(min_temps) else 20.0,
-                        "rain_prob": precip_probs[i] if i < len(precip_probs) else 0,
+                        "date": d_date,
+                        "day_name": day_name,
+                        "temp_max": round(max_temps[i], 1) if i < len(max_temps) else 30.0,
+                        "temp_min": round(min_temps[i], 1) if i < len(min_temps) else 20.0,
+                        "rain_prob": int(precip_probs[i]) if (i < len(precip_probs) and precip_probs[i] is not None) else 0,
+                        "precip_sum": round(precip_sums[i], 1) if (i < len(precip_sums) and precip_sums[i] is not None) else 0.0,
                         "weather_code": wcode,
-                        "condition": condition
+                        "condition": condition,
+                        "icon": icon,
+                        "uv_index": round(uv_indices[i], 1) if (i < len(uv_indices) and uv_indices[i] is not None) else 5.0
                     })
 
+                curr_wcode = curr.get("weather_code", 0)
+                curr_cond, curr_icon = self._interpret_wmo_code(curr_wcode)
+
                 forecast_payload = {
-                    "latitude": WEATHER_LATITUDE,
-                    "longitude": WEATHER_LONGITUDE,
+                    "location_name": loc_name,
+                    "latitude": lat,
+                    "longitude": lon,
+                    "is_live": True,
+                    "current": {
+                        "temperature": curr.get("temperature_2m", 28.0),
+                        "humidity": curr.get("relative_humidity_2m", 55.0),
+                        "wind_speed": curr.get("wind_speed_10m", 8.0),
+                        "precipitation": curr.get("precipitation", 0.0),
+                        "condition": curr_cond,
+                        "icon": curr_icon
+                    },
                     "cached_at": datetime.now(timezone.utc).isoformat(),
                     "days": formatted_days
                 }
-                database.save_cached_weather(forecast_payload)
-                logger.info(f"Updated 7-day offline weather cache ({len(formatted_days)} days stored in SQLite).")
+                database.save_cached_weather(forecast_payload, is_live=True)
+                logger.info(f"Updated 7-day live weather forecast for {loc_name} ({len(formatted_days)} days stored in SQLite).")
         except Exception as e:
-            logger.debug(f"Weather cache refresh skipped: {e}")
+            logger.debug(f"Weather cache refresh skipped (offline fallback): {e}")
 
-    def _interpret_wmo_code(self, code: int) -> str:
+    def _interpret_wmo_code(self, code: int) -> tuple:
         if code == 0:
-            return "Clear Sky"
+            return "Clear Sky", "☀️"
         elif code in [1, 2, 3]:
-            return "Partly Cloudy"
+            return "Partly Cloudy", "⛅"
         elif code in [45, 48]:
-            return "Foggy"
+            return "Foggy", "🌫️"
         elif code in [51, 53, 55]:
-            return "Drizzle"
+            return "Drizzle", "🌦️"
         elif code in [61, 63, 65]:
-            return "Rain"
+            return "Rain", "🌧️"
         elif code in [80, 81, 82]:
-            return "Showers"
+            return "Showers", "🌦️"
         elif code in [95, 96, 99]:
-            return "Thunderstorm"
-        return "Fair"
+            return "Thunderstorm", "⛈️"
+        return "Fair", "🌤️"
 
     def start_loop(self, interval_seconds: float = SYNC_INTERVAL):
         """Continuous bidirectional sync & command execution daemon loop."""
