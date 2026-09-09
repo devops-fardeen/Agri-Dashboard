@@ -1527,7 +1527,7 @@
           <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.85); padding: 8px 14px; border-radius: 16px; margin-bottom: 8px; border: 1.5px solid rgba(81,143,92,0.35); font-size: 11px; flex-wrap: wrap; gap: 8px;">
             <span style="color: var(--color-text-muted); font-weight: 600;">⚡ Speed: <strong id="valRoverSpeed" style="color: var(--color-text-main);">190</strong></span>
             <input id="roverSpeedSlider" type="range" min="60" max="255" value="190" step="5" style="width: 110px; accent-color: var(--color-fun-green);" oninput="setRoverSpeed(this.value)" onchange="setRoverSpeed(this.value)">
-            <input type="text" id="roverIpInput" placeholder="Rover IP" value="10.84.122.196" oninput="onRoverIpChanged(this.value)" style="width: 105px; font-size: 10px; padding: 4px 8px; border-radius: var(--radius-pill); border: 1.5px solid rgba(81,143,92,0.35); text-align: center;">
+            <input type="text" id="roverIpInput" placeholder="Rover IP" value="10.59.28.196" oninput="onRoverIpChanged(this.value)" style="width: 105px; font-size: 10px; padding: 4px 8px; border-radius: var(--radius-pill); border: 1.5px solid rgba(81,143,92,0.35); text-align: center;">
           </div>
 
           <!-- Manual Mode Camera Photo Capture Button -->
@@ -1951,8 +1951,8 @@
     function getRoverIp() {
       const ipInput = document.getElementById('roverIpInput');
       let stored = localStorage.getItem('rover_ip');
-      if (stored === '10.202.46.196' || !stored) {
-        stored = '10.84.122.196';
+      if (stored === '10.202.46.196' || stored === '10.84.122.196' || !stored) {
+        stored = '10.59.28.196';
         localStorage.setItem('rover_ip', stored);
       }
       let ip = (ipInput && ipInput.value ? ipInput.value.trim() : '') || stored;

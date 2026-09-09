@@ -6,7 +6,7 @@ import { DeviceCommand } from "@/lib/db/models/DeviceCommand";
 export async function POST(req: NextRequest) {
   try {
     const { target, action, rover_ip } = await req.json();
-    const roverIp = rover_ip || "10.84.122.196";
+    const roverIp = rover_ip || "10.59.28.196";
 
     // 1. Direct relay to local Edge Station on port 8000 if running locally
     try {

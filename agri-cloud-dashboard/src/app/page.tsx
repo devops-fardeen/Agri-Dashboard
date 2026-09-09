@@ -121,7 +121,7 @@ export default function DashboardPage() {
   const [roverAction, setRoverAction] = useState<string>("STOP");
   const [roverSending, setRoverSending] = useState(false);
   const [roverBattery, setRoverBattery] = useState(88);
-  const [roverIp, setRoverIp] = useState("10.84.122.196");
+  const [roverIp, setRoverIp] = useState("10.59.28.196");
 
   // Hardware Rain Sensor Simulation Override (null = follow live telemetry)
   const [simulatedRain, setSimulatedRain] = useState<boolean | null>(null);
