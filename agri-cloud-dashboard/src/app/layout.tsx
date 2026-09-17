@@ -5,18 +5,19 @@ import "./globals.css";
 const jakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-jakarta",
 });
 
 export const metadata: Metadata = {
   title: "AgriSmart Cloud Central — Smart Agriculture Ecosystem",
-  description: "Next-gen precision farming dashboard with custom earth & slate warm palette.",
+  description: "Next-gen precision farming dashboard with teal & mint modern bento design.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  themeColor: "#f7f2ed",
+  themeColor: "#EEF1F5",
 };
 
 export default function RootLayout({
@@ -25,9 +26,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="light" suppressHydrationWarning>
+    <html lang="en" className={`light ${jakarta.variable}`} suppressHydrationWarning>
       <body
-        className={`${jakarta.className} min-h-screen bg-[#f7f2ed] text-[#10232a] antialiased selection:bg-[#b58863] selection:text-white`}
+        className={`${jakarta.className} min-h-screen bg-[#EEF1F5] text-[#121417] antialiased selection:bg-[#121417] selection:text-white`}
         suppressHydrationWarning
       >
         {children}

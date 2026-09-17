@@ -199,9 +199,30 @@ def get_latest_rover_command():
         "battery": state.get("battery", 84)
     }
 
+@app.get("/api/edge/hardware")
+def get_hardware_diagnostics():
+    """Returns live hardware status from Master ESP32, LoRa Slave Nodes, and USB Serial Bridge."""
+    import serial_bridge
+    bridge = serial_bridge.get_serial_bridge()
+    if bridge:
+        return {
+            "success": True,
+            "status": bridge.get_hardware_status()
+        }
+    return {
+        "success": False,
+        "status": {
+            "serial_connected": False,
+            "hardware_streaming": False,
+            "last_packet_seconds_ago": None,
+            "master_sensors": {},
+            "slave_nodes": {}
+        }
+    }
+
 @app.get("/api/edge/status")
 def get_edge_status():
-    """Returns the comprehensive status: telemetry, actuators, stats, rover, cached weather, AI summary, and live tomato agronomy risk assessment."""
+    """Returns the comprehensive status: telemetry, actuators, stats, rover, cached weather, AI summary, live tomato agronomy risk assessment, and hardware diagnostics."""
     telemetry = database.get_latest_telemetry()
     actuators = database.get_all_actuators()
     stats = database.get_edge_stats()
@@ -209,6 +230,11 @@ def get_edge_status():
     weather = database.get_cached_weather()
     ai_summary = database.get_latest_ai_summary()
     
+    # Live hardware status
+    import serial_bridge
+    bridge = serial_bridge.get_serial_bridge()
+    hw_status = bridge.get_hardware_status() if bridge else {}
+
     # Calculate live tomato environmental risk assessment
     t_a = (telemetry.get("ZONE_A") if isinstance(telemetry, dict) else {}) or {}
     air_temp = float(t_a.get("ambient_temp", 28.2))
@@ -229,6 +255,7 @@ def get_edge_status():
         "success": True,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "edge_node": "EDGE_STATION_PI (Local AP: 10.42.0.1:8000)",
+        "hardware": hw_status,
         "actuators": {
             "PUMP_ZONE_A": actuators.get("PUMP_ZONE_A", 0),
             "PUMP_ZONE_B": actuators.get("PUMP_ZONE_B", 0),

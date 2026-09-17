@@ -15,35 +15,36 @@
   
   <style>
     /* ==========================================================================
-       1. THEME TOKENS & COLOR PALETTE (From Forest Green Reference Grading)
+       1. THEME TOKENS & COLOR PALETTE (Futuristic Soft-Bento Palette)
        ========================================================================== */
     :root {
-      /* User Specified Forest Green Palette */
-      --color-zia-olive: #042509;   /* Deepest Forest Obsidian Olive / Primary Dark */
-      --color-pine-green: #094217;  /* Rich Pine Green / Key Action & Indicators */
-      --color-fun-green: #165F39;   /* Vibrant Leaf Emerald / Primary Brand */
-      --color-middle-green: #518F5C;/* Sage Meadow Green / Borders & Accents */
-      --color-jaded-lime: #BCD5AC;  /* Soft Frosted Lime / Subtle Card Base */
+      --color-zia-olive: #121417;    /* Primary Charcoal Obsidian */
+      --color-pine-green: #121417;   /* Key Action */
+      --color-fun-green: #2E333A;    /* Slate Dark */
+      --color-middle-green: #5E6977; /* Slate Text */
+      --color-jaded-lime: #D6EBE7;   /* Soft Mint Card Accent */
+      --color-gold-accent: #FDE68A;  /* Golden Amber */
+      --color-lilac-accent: #E8DFF5; /* Pastel Lilac */
       
       /* High-Contrast Semantic Text & Backgrounds */
-      --color-text-main: #042509;
-      --color-text-muted: #165F39;
-      --color-text-light: #518F5C;
-      --color-bg-base: #F4F8F1;
+      --color-text-main: #121417;
+      --color-text-muted: #5E6977;
+      --color-text-light: #8E9BAA;
+      --color-bg-base: #EEF1F5;
       
       /* Radii & Geometry (Capsule Bento Aesthetic) */
       --radius-pill: 9999px;
-      --radius-card: 20px;
-      --radius-card-sm: 15px;
+      --radius-card: 26px;
+      --radius-card-sm: 18px;
       --radius-sm: 12px;
       
       /* Modern Glass Shadows */
-      --shadow-sm: 0 2px 8px rgba(4, 37, 9, 0.06);
-      --shadow-md: 0 8px 24px -3px rgba(4, 37, 9, 0.09), 0 2px 6px rgba(0, 0, 0, 0.02);
-      --shadow-lg: 0 16px 36px -6px rgba(4, 37, 9, 0.13), 0 4px 12px rgba(0, 0, 0, 0.03);
-      --shadow-glow-pine: 0 8px 22px -3px rgba(9, 66, 23, 0.38);
-      --shadow-glow-fun: 0 8px 22px -3px rgba(22, 95, 57, 0.35);
-      --shadow-glow-lime: 0 6px 18px -2px rgba(188, 213, 172, 0.45);
+      --shadow-sm: 0 2px 8px rgba(18, 20, 23, 0.04);
+      --shadow-md: 0 8px 24px -3px rgba(18, 20, 23, 0.08), 0 2px 6px rgba(0, 0, 0, 0.02);
+      --shadow-lg: 0 16px 36px -6px rgba(18, 20, 23, 0.12), 0 4px 12px rgba(0, 0, 0, 0.03);
+      --shadow-glow-pine: 0 8px 22px -3px rgba(18, 20, 23, 0.25);
+      --shadow-glow-fun: 0 8px 22px -3px rgba(214, 235, 231, 0.5);
+      --shadow-glow-lime: 0 6px 18px -2px rgba(214, 235, 231, 0.6);
     }
 
     /* ==========================================================================
@@ -69,11 +70,10 @@
       width: 100%;
       overflow-x: hidden;
       background-image: 
-        radial-gradient(circle at 12% 6%, rgba(22, 95, 57, 0.18), transparent 45%),
-        radial-gradient(circle at 90% 10%, rgba(188, 213, 172, 0.55), transparent 42%),
-        radial-gradient(circle at 15% 55%, rgba(81, 143, 92, 0.15), transparent 40%),
-        radial-gradient(circle at 88% 65%, rgba(9, 66, 23, 0.12), transparent 45%),
-        radial-gradient(circle at 50% 95%, rgba(188, 213, 172, 0.4), transparent 50%);
+        radial-gradient(circle at 12% 10%, rgba(214, 235, 231, 0.65), transparent 45%),
+        radial-gradient(circle at 88% 12%, rgba(232, 223, 245, 0.45), transparent 40%),
+        radial-gradient(circle at 50% 90%, rgba(214, 235, 231, 0.4), transparent 50%),
+        radial-gradient(circle at 85% 85%, rgba(226, 231, 237, 0.8), transparent 45%);
       background-attachment: fixed;
       display: flex;
       flex-direction: column;

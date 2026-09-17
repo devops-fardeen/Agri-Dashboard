@@ -107,6 +107,27 @@ class CloudSyncWorker:
                     elif target == "ROVER":
                         database.update_rover_command(action)
                         logger.info(f"Local Rover Command Updated: {action}")
+                        rover_ip = os.getenv("ROVER_IP", "10.59.28.196")
+                        cmd_map = {
+                            "MOVE_FORWARD": "forward",
+                            "FORWARD": "forward",
+                            "MOVE_BACKWARD": "backward",
+                            "BACKWARD": "backward",
+                            "MOVE_LEFT": "left",
+                            "LEFT": "left",
+                            "MOVE_RIGHT": "right",
+                            "RIGHT": "right",
+                            "STOP": "stop",
+                            "AUTO_ON": "auto_on",
+                            "AUTO_OFF": "auto_off"
+                        }
+                        rover_cmd = cmd_map.get(action, "stop")
+                        def dispatch_rover_http(ip: str, cmd: str):
+                            try:
+                                requests.get(f"http://{ip}/cmd?move={cmd}", timeout=1.5)
+                            except Exception:
+                                pass
+                        threading.Thread(target=dispatch_rover_http, args=(rover_ip, rover_cmd), daemon=True).start()
 
                     # Acknowledge execution back to Cloud
                     ack_res = requests.patch(

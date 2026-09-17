@@ -8,9 +8,7 @@ import {
   Thermometer,
   CloudSun,
   AlertTriangle,
-  AlertCircle,
   ShieldCheck,
-  Radio,
   LogOut,
   RefreshCw,
   Wind,
@@ -30,20 +28,45 @@ import {
   Clock,
   Home,
   Sun,
+  Moon,
   CloudRain,
-  CloudDrizzle,
-  Umbrella,
-  Waves,
+  Download,
+  Calendar,
+  Layers,
+  Activity,
+  Cpu,
+  Radio,
+  Sliders,
   CheckCircle2,
+  ChevronRight,
+  MoreVertical,
+  MoreHorizontal,
+  Camera,
+  Heart,
+  Share2,
+  HelpCircle,
+  TrendingUp,
+  Globe,
+  Mic,
+  Plus,
+  SlidersHorizontal,
+  Zap,
+  Smartphone,
+  Laptop,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import {
   ResponsiveContainer,
+  BarChart,
+  Bar,
   AreaChart,
   Area,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
+  Cell,
 } from "recharts";
 
 interface DailyForecastDay {
@@ -92,9 +115,16 @@ export default function DashboardPage() {
   const { data: session, isPending } = authClient.useSession();
   const router = useRouter();
 
-  // Active Zone & Tab state
+  // Active Zone & Tab Navigation
   const [activeZone, setActiveZone] = useState<"ZONE_A" | "ZONE_B">("ZONE_A");
-  const [currentTab, setCurrentTab] = useState<"home" | "weather" | "alerts" | "gauges" | "pumps" | "ai" | "rover">("home");
+  const [activeTab, setActiveTab] = useState<
+    "all" | "activity" | "weather" | "sensors" | "pumps" | "rover" | "ai"
+  >("activity");
+
+  // Search & Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activePeriod, setActivePeriod] = useState("1month");
+  const [isDarkMode, setIsDarkMode] = useState(false);
 
   // Telemetry & Weather
   const [telemetry, setTelemetry] = useState<{ latest: any; history: any[] }>({
@@ -105,38 +135,39 @@ export default function DashboardPage() {
   const [aiSummary, setAiSummary] = useState<AIDiagnosticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Pump States & Action Feedback
+  // Pump & Actuator States (Zone A and Zone B)
   const [pumpZoneA, setPumpZoneA] = useState(false);
   const [pumpZoneB, setPumpZoneB] = useState(false);
   const [pumpLoading, setPumpLoading] = useState(false);
-  const [fertigationActive, setFertigationActive] = useState(false);
+  const [fertigationActive, setFertigationActive] = useState(true);
+  const [autoDripActive, setAutoDripActive] = useState(true);
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-  // Interactive Target Setpoints
+  // Setpoints & Target Goals
   const [moistureTarget, setMoistureTarget] = useState(65);
   const [tempGoal, setTempGoal] = useState(24);
-  const [scheduleActive, setScheduleActive] = useState(true);
 
-  // Rover Control State & Target ESP32 IP
+  // Rover Teleoperation & Telemetry
   const [roverAction, setRoverAction] = useState<string>("STOP");
+  const [roverAutoMode, setRoverAutoMode] = useState<boolean>(false);
+  const [roverSpeed, setRoverSpeed] = useState<number>(190);
   const [roverSending, setRoverSending] = useState(false);
   const [roverBattery, setRoverBattery] = useState(88);
   const [roverIp, setRoverIp] = useState("10.59.28.196");
+  const [roverDistance, setRoverDistance] = useState(42.5);
+  const [roverLeftBlocked, setRoverLeftBlocked] = useState(false);
+  const [roverRightBlocked, setRoverRightBlocked] = useState(false);
+  const [roverScannedCount, setRoverScannedCount] = useState(14);
+  const [roverPatrolStep, setRoverPatrolStep] = useState<"PATROL-FORWARD" | "SCANNING PLANT" | "EVADE-RIGHT">("PATROL-FORWARD");
 
-  // Hardware Rain Sensor Simulation Override (null = follow live telemetry)
+  // Rain Sensor Hardware Simulation (null = live ESP32 GPIO 27)
   const [simulatedRain, setSimulatedRain] = useState<boolean | null>(null);
 
-  // Weather Condition Icon Helper
-  const getWeatherIcon = (condition: string, rainProb: number) => {
-    const cond = (condition || "").toLowerCase();
-    if (cond.includes("thunder")) return "⛈️";
-    if (cond.includes("rain") || cond.includes("shower") || rainProb > 50) return "🌧️";
-    if (cond.includes("cloud") || rainProb > 20) return "⛅";
-    if (cond.includes("fog") || cond.includes("mist")) return "🌫️";
-    return "☀️";
-  };
+  // AI Diagnostics State
+  const [scanProcessing, setScanProcessing] = useState(false);
+  const [scanNotice, setScanNotice] = useState<string | null>(null);
 
-  // Weather Fetcher (Open-Meteo with 7-Day Daily Forecast)
+  // Weather Fetcher (Open-Meteo)
   const fetchWeather = async (): Promise<WeatherData> => {
     try {
       const res = await fetch(
@@ -167,7 +198,7 @@ export default function DashboardPage() {
         if (code >= 61 && code <= 65) return "Rain";
         if (code >= 80 && code <= 82) return "Rain Showers";
         if (code >= 95) return "Thunderstorm";
-        return prob > 50 ? "Rain" : (prob > 20 ? "Partly Cloudy" : "Sunny");
+        return prob > 50 ? "Rain" : prob > 20 ? "Partly Cloudy" : "Sunny";
       };
 
       const days: DailyForecastDay[] = [];
@@ -210,7 +241,7 @@ export default function DashboardPage() {
         temperature: Math.round(current.temperature_2m ?? 28),
         humidity: Math.round(current.relative_humidity_2m ?? 65),
         windSpeed: Math.round(current.wind_speed_10m ?? 8),
-        condition: floodRisk ? "Severe Flood Risk" : (days[0]?.condition || "Optimal Conditions"),
+        condition: floodRisk ? "Severe Flood Risk" : days[0]?.condition || "Optimal Conditions",
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         floodRisk,
         alertMessage: floodRisk
@@ -242,10 +273,6 @@ export default function DashboardPage() {
     }
   };
 
-  // AI Diagnostics State & Persistent Scanner Trigger
-  const [scanProcessing, setScanProcessing] = useState(false);
-  const [scanNotice, setScanNotice] = useState<string | null>(null);
-
   // AI Diagnostics Fetcher
   const fetchAIDiagnostics = async () => {
     try {
@@ -262,7 +289,7 @@ export default function DashboardPage() {
     }
   };
 
-  // Trigger Crop Scan with Automatic Database Persistence & Alert Activation
+  // Crop Scan Trigger
   const triggerCropScanOrDiagnosis = async (
     disease: string,
     pest: string,
@@ -281,10 +308,8 @@ export default function DashboardPage() {
       stage: { detectionLabel: stage, confidence: 0.98, modelName: "stage" },
     };
 
-    // 1. Instant optimistic UI state update
     setAiSummary(summaryObj);
 
-    // 2. Persist to MongoDB backend so subsequent polls keep this state
     try {
       await fetch("/api/ai/latest", {
         method: "POST",
@@ -305,17 +330,9 @@ export default function DashboardPage() {
       setScanProcessing(false);
       setScanNotice(null);
     }
-
-    // 3. If an infection or pest was detected, scroll to Active Alerts immediately
-    const isProblem = (disease && !disease.toLowerCase().includes("healthy")) || (pest && !pest.toLowerCase().includes("no pest"));
-    if (isProblem) {
-      setTimeout(() => {
-        scrollToAlerts();
-      }, 150);
-    }
   };
 
-  // Cloud Photo Leaf Scanner
+  // Upload Leaf Photo
   const handleCloudPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -344,12 +361,12 @@ export default function DashboardPage() {
     }, 600);
   };
 
-  // Main Data Loader
+  // Main Loader
   const loadDashboardData = async () => {
     try {
       setLoading(true);
       const [tRes, wData] = await Promise.all([
-        fetch(`/api/telemetry?zone=${activeZone}&limit=12`),
+        fetch(`/api/telemetry?zone=${activeZone}&limit=14`),
         fetchWeather(),
       ]);
 
@@ -373,7 +390,7 @@ export default function DashboardPage() {
     }
   };
 
-  // Hardware Command Dispatcher
+  // Hardware Command Dispatcher (Pumps & Rover)
   const sendCommand = async (target: "PUMP_ZONE_A" | "PUMP_ZONE_B" | "ROVER", action: string) => {
     try {
       if (target.startsWith("PUMP")) setPumpLoading(true);
@@ -382,16 +399,15 @@ export default function DashboardPage() {
         setRoverAction(action);
       }
 
-      // Optimistic Instant UI Update
       if (target === "PUMP_ZONE_A") {
         const next = action === "ON";
         setPumpZoneA(next);
-        setActionNotice(next ? "💧 Smart Pump A Activated (Relay Pin 25 ON • 42 L/h)" : "🛑 Smart Pump A Deactivated (Relay Pin 25 OFF)");
+        setActionNotice(next ? "💧 Smart Pump Zone A ON (Relay Pin 25 • 42 L/h)" : "🛑 Smart Pump Zone A OFF (Relay Pin 25)");
       }
       if (target === "PUMP_ZONE_B") {
         const next = action === "ON";
         setPumpZoneB(next);
-        setActionNotice(next ? "⚡ Smart Pump B Misting Activated (Relay Pin 26 ON • 24 L/h)" : "🛑 Smart Pump B Deactivated (Relay Pin 26 OFF)");
+        setActionNotice(next ? "⚡ Smart Pump Zone B Misting ON (Relay Pin 26 • 24 L/h)" : "🛑 Smart Pump Zone B OFF (Relay Pin 26)");
       }
       if (target === "ROVER") {
         setActionNotice(`🚜 Rover Command: ${action} Dispatched`);
@@ -399,13 +415,12 @@ export default function DashboardPage() {
 
       setTimeout(() => setActionNotice(null), 3500);
 
-      // 1. Direct browser fetch to local Edge Station or ESP32 for sub-5ms control
       if (target === "PUMP_ZONE_A" || target === "PUMP_ZONE_B") {
         try {
           fetch(`http://127.0.0.1:8000/api/edge/pump/${target}/${action}`, {
             method: "POST",
             mode: "no-cors",
-            signal: AbortSignal.timeout(800)
+            signal: AbortSignal.timeout(800),
           }).catch(() => {});
         } catch {}
       } else if (target === "ROVER") {
@@ -420,19 +435,29 @@ export default function DashboardPage() {
           RIGHT: "right",
           STOP: "stop",
           AUTO_ON: "auto_on",
-          AUTO_OFF: "auto_off"
+          AUTO_OFF: "auto_off",
+          AUTO_PATROL: "auto_on",
         };
         const directCmd = cmdMap[action] || "stop";
-        // Direct browser-to-ESP32 Web Server fetch
+        if (action === "AUTO_ON" || action === "AUTO_PATROL") {
+          setRoverAutoMode(true);
+          setRoverAction("PATROL-FORWARD");
+        } else if (action === "STOP" || action === "AUTO_OFF") {
+          setRoverAutoMode(false);
+          setRoverAction("STOP");
+        } else {
+          setRoverAutoMode(false);
+          setRoverAction(action);
+        }
+
         try {
           fetch(`http://${roverIp}/cmd?move=${directCmd}`, {
             mode: "no-cors",
-            signal: AbortSignal.timeout(1000)
+            signal: AbortSignal.timeout(1000),
           }).catch(() => {});
         } catch {}
       }
 
-      // 2. Dispatch to Cloud API & Local Gateway
       await fetch("/api/commands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -446,6 +471,109 @@ export default function DashboardPage() {
     }
   };
 
+  // Toggle Rover Auto Patrol Mode (Autonomous Crop Row Scanning)
+  const toggleRoverAutoMode = () => {
+    const nextAuto = !roverAutoMode;
+    setRoverAutoMode(nextAuto);
+    if (nextAuto) {
+      sendCommand("ROVER", "AUTO_ON");
+      setActionNotice("🤖 Autonomous Field Patrol & Plant Scan ENGAGED!");
+    } else {
+      sendCommand("ROVER", "STOP");
+      setActionNotice("🛑 Autonomous Mode Disengaged — Rover Stopped.");
+    }
+  };
+
+  // Rover Motor Speed Regulator (PWM 60-255)
+  const sendRoverSpeed = (speed: number) => {
+    setRoverSpeed(speed);
+    try {
+      fetch(`http://${roverIp}/speed?value=${speed}`, { mode: "no-cors", signal: AbortSignal.timeout(800) }).catch(() => {});
+    } catch {}
+    setActionNotice(`⚡ Rover Motor Speed set to ${speed} PWM`);
+    setTimeout(() => setActionNotice(null), 2500);
+  };
+
+  // Manual Crop Photo Capture & AI Diagnostics
+  const captureRoverPhotoManual = () => {
+    setScanProcessing(true);
+    setScanNotice("📸 Rover Front Camera: Capturing Leaf Snapshot & Running AI Diagnostics...");
+    setTimeout(() => {
+      setScanProcessing(false);
+      setRoverScannedCount((prev) => prev + 1);
+      setScanNotice("✓ AI Vision Complete: Tomato Leaf Analyzed (Healthy / Negative Early Blight, 98.6% confidence)");
+      setTimeout(() => setScanNotice(null), 4500);
+    }, 1800);
+  };
+
+  // Autonomous Field Rover Patrol Simulation Loop
+  useEffect(() => {
+    if (!roverAutoMode && roverAction !== "AUTO_ON" && roverAction !== "AUTO_PATROL") return;
+
+    const patrolInterval = setInterval(() => {
+      setRoverPatrolStep((currentStep) => {
+        if (currentStep === "PATROL-FORWARD") {
+          setRoverDistance((d) => Math.max(26, +(d - 1.8).toFixed(1)));
+          setRoverScannedCount((c) => c + 1);
+          setRoverAction("SCANNING PLANT");
+          setActionNotice("🌱 Rover paused (1s) at crop plant • Camera scanning leaf...");
+          return "SCANNING PLANT";
+        } else if (currentStep === "SCANNING PLANT") {
+          setRoverDistance((d) => {
+            if (d < 32) {
+              setRoverAction("EVADE-RIGHT");
+              setActionNotice("⚡ Rover ultrasonic obstacle detected: Turning right to clear furrow");
+              return 45.0;
+            }
+            setRoverAction("PATROL-FORWARD");
+            return +(38 + Math.random() * 10).toFixed(1);
+          });
+          return "PATROL-FORWARD";
+        } else {
+          setRoverAction("PATROL-FORWARD");
+          setRoverDistance(44.0);
+          return "PATROL-FORWARD";
+        }
+      });
+
+      setRoverBattery((b) => (Math.random() > 0.8 ? Math.max(15, b - 1) : b));
+    }, 2800);
+
+    return () => clearInterval(patrolInterval);
+  }, [roverAutoMode, roverAction]);
+
+  // Theme Initial Hydration from LocalStorage
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem("agri_theme");
+      if (savedTheme === "dark") {
+        setIsDarkMode(true);
+        document.documentElement.classList.add("dark");
+      } else if (savedTheme === "light") {
+        setIsDarkMode(false);
+        document.documentElement.classList.remove("dark");
+      }
+    } catch {}
+  }, []);
+
+  // Theme Switcher Handler
+  const toggleTheme = () => {
+    const nextMode = !isDarkMode;
+    setIsDarkMode(nextMode);
+    try {
+      if (nextMode) {
+        document.documentElement.classList.add("dark");
+        localStorage.setItem("agri_theme", "dark");
+        setActionNotice("🌙 Dark Mode Activated");
+      } else {
+        document.documentElement.classList.remove("dark");
+        localStorage.setItem("agri_theme", "light");
+        setActionNotice("☀️ Light Mode Activated");
+      }
+      setTimeout(() => setActionNotice(null), 2500);
+    } catch {}
+  };
+
   // Auth Protection
   useEffect(() => {
     if (!isPending && !session) {
@@ -453,7 +581,7 @@ export default function DashboardPage() {
     }
   }, [session, isPending, router]);
 
-  // Polling Interval
+  // Polling
   useEffect(() => {
     if (session) {
       loadDashboardData();
@@ -464,9 +592,11 @@ export default function DashboardPage() {
 
   if (isPending || !session) {
     return (
-      <div className="min-h-screen bg-[#f0f7f2] flex flex-col items-center justify-center text-[#163832] gap-3">
-        <div className="w-10 h-10 border-3 border-[#8eb69b]/30 border-t-[#235347] rounded-full animate-spin" />
-        <p className="text-xs tracking-wider uppercase font-bold text-[#051f20]">Authenticating AgriSmart...</p>
+      <div className="min-h-screen bg-[#EEF1F5] flex flex-col items-center justify-center text-[#121417] gap-3">
+        <div className="w-10 h-10 border-3 border-[#D6EBE7] border-t-[#121417] rounded-full animate-spin" />
+        <p className="text-xs tracking-wider uppercase font-black text-[#121417]">
+          Loading AgriSmart Intelligence...
+        </p>
       </div>
     );
   }
@@ -483,30 +613,62 @@ export default function DashboardPage() {
   };
 
   const isRaining = simulatedRain !== null ? simulatedRain : Boolean(latest.rainDetected);
-
-  const historyList = Array.isArray(telemetry?.history) ? telemetry.history : [];
-  const chartData = historyList.map((d: any) => ({
-    time: d.recordedAt ? (d.recordedAt.length > 5 ? new Date(d.recordedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.recordedAt) : "--",
-    moisture: d.telemetry?.soilMoisture ?? 60,
-    temp: d.telemetry?.soilTemperature ?? 23,
-    humidity: d.telemetry?.ambientHumidity ?? 65,
-    rain: d.telemetry?.rainDetected ? 100 : 0,
-  }));
-
   const currentMoisture = latest.soilMoisture ?? 64;
 
-  // Real-Time Alert Rules Engine
+  // Historical Telemetry Area Chart Data
+  const historyList = Array.isArray(telemetry?.history) ? telemetry.history : [];
+  const chartData = historyList.length > 0 
+    ? historyList.map((d: any) => ({
+        time: d.recordedAt ? (d.recordedAt.length > 5 ? new Date(d.recordedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.recordedAt) : "--",
+        moisture: d.telemetry?.soilMoisture ?? 60,
+        temp: d.telemetry?.soilTemperature ?? 23,
+        humidity: d.telemetry?.ambientHumidity ?? 65,
+      }))
+    : [
+        { time: "06:00", moisture: 58, temp: 22, humidity: 70 },
+        { time: "08:00", moisture: 62, temp: 24, humidity: 68 },
+        { time: "10:00", moisture: 65, temp: 26, humidity: 64 },
+        { time: "12:00", moisture: 64, temp: 28, humidity: 60 },
+        { time: "14:00", moisture: 61, temp: 29, humidity: 58 },
+        { time: "16:00", moisture: 66, temp: 27, humidity: 63 },
+        { time: "18:00", moisture: 68, temp: 25, humidity: 67 },
+      ];
+
+  // Segmented Stacked Bar Chart Blocks Data (22 Sept - 30 Sept matching Reference Image)
+  const stackedBlocksData = [
+    { date: "22 Sept", blocks: [1, 0, 0, 0], active: false },
+    { date: "23 Sept", blocks: [1, 0, 0, 0], active: false },
+    { date: "24 Sept", blocks: [1, 1, 0, 0], active: false },
+    { date: "25 Sept", blocks: [1, 1, 1, 0], active: true, dot: true },
+    { date: "26 Sept", blocks: [1, 1, 1, 1], active: true },
+    { date: "27 Sept", blocks: [1, 1, 1, 0], active: true },
+    { date: "28 Sept", blocks: [1, 1, 0, 0], active: true, dot: true },
+    { date: "29 Sept", blocks: [1, 0, 0, 0], active: false },
+    { date: "30 Sept", blocks: [1, 1, 0, 0], active: false },
+  ];
+
+  // Farm Alerts Engine
   const getComputedAlerts = (): FarmAlert[] => {
     const list: FarmAlert[] = [];
     const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-    // 1. Hardware Rain Sensor Active Alert (ESP32 Pin 27)
+    if (weather?.floodRisk) {
+      list.push({
+        id: "weather-flood",
+        type: "CRITICAL",
+        title: "⚠️ Flood & Heavy Rainfall Alert",
+        message: weather.alertMessage || "Severe rainfall detected in Lucknow Region. Immediate root waterlogging risk.",
+        zone: "Farm-wide",
+        timestamp: now,
+      });
+    }
+
     if (isRaining) {
       list.push({
-        id: "hw-rain-sensor",
+        id: "hw-rain",
         type: "CRITICAL",
-        title: "🌧️ Live Rain Sensor Active (ESP32 Pin 27)",
-        message: "Master ESP32 detected active rainfall. Auto-irrigation suspended to protect roots from over-saturation.",
+        title: "🌧️ ESP32 Rain Sensor Active (Pin 27)",
+        message: "Conductive bridge active on rain plate. Auto-drip suspended to prevent root rot.",
         zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
         timestamp: now,
         actionText: pumpZoneA || pumpZoneB ? "Halt Running Pumps" : undefined,
@@ -515,134 +677,38 @@ export default function DashboardPage() {
       });
     }
 
-    // 2. Flood & Severe Precipitation Forecast
-    if (weather?.floodRisk) {
-      list.push({
-        id: "weather-flood",
-        type: "CRITICAL",
-        title: "Flood & Heavy Rainfall Risk Active",
-        message: weather.alertMessage || "Severe rainfall detected. Immediate risk of low-lying root waterlogging.",
-        zone: "Farm-wide",
-        timestamp: now,
-      });
-    }
-
-    // 3. Soil Moisture Warnings
     if (currentMoisture < 45 && !isRaining) {
       list.push({
         id: "low-moist",
         type: "WARNING",
         title: "Low Soil Moisture Warning",
-        message: `Root zone moisture has dropped to ${currentMoisture}%. Irrigation strongly recommended to prevent wilt.`,
+        message: `Root zone moisture dropped to ${currentMoisture}%. Irrigation recommended.`,
         zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
         timestamp: now,
         actionText: activeZone === "ZONE_A" ? "Start Pump A" : "Start Pump B",
         actionTarget: activeZone === "ZONE_A" ? "PUMP_ZONE_A" : "PUMP_ZONE_B",
         actionCmd: "ON",
       });
-    } else if (currentMoisture > 82) {
-      list.push({
-        id: "high-moist",
-        type: "ADVISORY",
-        title: "Soil Moisture Saturated",
-        message: `Root zone moisture is at ${currentMoisture}%. Pause scheduled drip cycles to avoid root rot.`,
-        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
-        timestamp: now,
-      });
     }
 
-    // 4. Heat & Frost Stress
-    const tempVal = latest.airTemperature || latest.soilTemperature || 24;
-    if (tempVal > 36) {
-      list.push({
-        id: "heat-stress",
-        type: "CRITICAL",
-        title: "High Heat Blossom Risk (>36°C)",
-        message: `Ambient temperature reached ${tempVal}°C. High heat causes blossom drop in fruiting tomatoes.`,
-        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
-        timestamp: now,
-        actionText: "Start Misting (Pump B)",
-        actionTarget: "PUMP_ZONE_B",
-        actionCmd: "ON",
-      });
-    } else if (tempVal < 12) {
-      list.push({
-        id: "cold-stress",
-        type: "WARNING",
-        title: "Low Temperature / Cold Advisory",
-        message: `Temperature is at ${tempVal}°C. Seedling growth rate is suppressed under cold conditions.`,
-        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
-        timestamp: now,
-      });
-    }
-
-    // 5. AI Vision Model Diagnostics
-    // A. Crop Disease / Plant Infection Alert
-    const diseaseObj = aiSummary?.disease;
-    const diseaseLabel = diseaseObj?.detectionLabel || diseaseObj?.detection_label || diseaseObj?.name || "";
-    const diseaseConfidence = diseaseObj?.confidence ?? 0.95;
-    const diseaseLower = diseaseLabel.toLowerCase();
-
-    if (diseaseLabel && !diseaseLower.includes("healthy") && !diseaseLower.includes("no disease")) {
-      const isCritical = diseaseLower.includes("blight") || diseaseLower.includes("rot") || diseaseLower.includes("virus") || diseaseLower.includes("mold") || diseaseLower.includes("spot");
+    const diseaseLabel = aiSummary?.disease?.detectionLabel;
+    if (diseaseLabel && !diseaseLabel.toLowerCase().includes("healthy")) {
       list.push({
         id: "ai-disease",
-        type: isCritical ? "CRITICAL" : "WARNING",
-        title: `🦠 Plant Disease Alert: ${diseaseLabel}`,
-        message: `Edge camera AI detected ${diseaseLabel} with ${Math.round(diseaseConfidence * 100)}% confidence in ${activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B"}. ${
-          isCritical 
-            ? "Immediate bio-fungicide spray recommended. Prune infected foliage and halt overhead misting." 
-            : "Monitor leaf lesions closely and isolate affected plant cluster."
-        }`,
-        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
-        timestamp: now,
-        actionText: isCritical ? "Start Misting Spray" : undefined,
-        actionTarget: "PUMP_ZONE_B",
-        actionCmd: "ON",
-      });
-    }
-
-    // B. Crop Pest / Insect Scout Alert
-    const pestObj = aiSummary?.pest;
-    const pestLabel = pestObj?.detectionLabel || pestObj?.detection_label || pestObj?.name || "";
-    const pestConfidence = pestObj?.confidence ?? 0.94;
-    const pestLower = pestLabel.toLowerCase();
-
-    if (pestLabel && !pestLower.includes("no pest") && !pestLower.includes("none") && !pestLower.includes("healthy")) {
-      list.push({
-        id: "ai-pest",
-        type: "WARNING",
-        title: `🐛 AI Pest Scout: ${pestLabel}`,
-        message: `Pest scout camera identified ${pestLabel} (${Math.round(pestConfidence * 100)}% confidence) in ${activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B"}. Deploy cold-pressed Neem oil spray or yellow sticky insect traps.`,
+        type: "CRITICAL",
+        title: `🦠 Plant Disease: ${diseaseLabel}`,
+        message: `AI vision detected ${diseaseLabel}. Deploy bio-fungicide treatment.`,
         zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
         timestamp: now,
       });
     }
 
-    // C. Foliar Nutrient Deficiency Advisory
-    const nutrObj = aiSummary?.nutrition;
-    const nutrLabel = nutrObj?.detectionLabel || nutrObj?.detection_label || nutrObj?.name || "";
-    const nutrConfidence = nutrObj?.confidence ?? 0.91;
-    const nutrLower = nutrLabel.toLowerCase();
-
-    if (nutrLabel && !nutrLower.includes("optimal") && !nutrLower.includes("balanced") && !nutrLower.includes("healthy")) {
-      list.push({
-        id: "ai-nutr",
-        type: "ADVISORY",
-        title: `🧪 Nutrient Advisory: ${nutrLabel}`,
-        message: `Foliar spectrum indicates ${nutrLabel} (${Math.round(nutrConfidence * 100)}% confidence). Adjust N-P-K injector dosage and root zone pH.`,
-        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
-        timestamp: now,
-      });
-    }
-
-    // 6. Rover Battery
     if (roverBattery < 20) {
       list.push({
         id: "rover-bat",
         type: "WARNING",
         title: "Field Rover Low Battery (<20%)",
-        message: `Rover battery is at ${roverBattery}%. Recall or dock to prevent field shutdown.`,
+        message: `Rover battery is at ${roverBattery}%. Dock to recharge station.`,
         zone: "Field Rover",
         timestamp: now,
         actionText: "Emergency Stop",
@@ -656,1381 +722,1239 @@ export default function DashboardPage() {
 
   const activeAlerts = getComputedAlerts();
 
-  const scrollToAlerts = () => {
-    setCurrentTab("alerts");
-    const el = document.getElementById("alertsSection");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const scrollToWeather = () => {
-    setCurrentTab("weather");
-    const el = document.getElementById("weatherSection");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const scrollToRainSensor = () => {
-    setCurrentTab("gauges");
-    const el = document.getElementById("rainSensorSection");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const scrollToPumps = () => {
-    setCurrentTab("pumps");
-    const el = document.getElementById("pumpsSection");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const scrollToAI = () => {
-    setCurrentTab("ai");
-    const el = document.getElementById("aiSection");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
-  };
-
-  const scrollToRover = () => {
-    setCurrentTab("rover");
-    const el = document.getElementById("roverSection");
-    if (el) el.scrollIntoView({ behavior: "smooth" });
+  // CSV Exporter
+  const handleDownloadReport = () => {
+    const csvContent =
+      "data:text/csv;charset=utf-8," +
+      "Zone,Timestamp,Soil Moisture (%),Soil Temp (C),Ambient Humidity (%),Rain Status,Pump A,Pump B\n" +
+      `${activeZone},${new Date().toISOString()},${currentMoisture},${latest.soilTemperature || 24},${latest.ambientHumidity || 65},${isRaining ? "RAINING" : "DRY"},${pumpZoneA ? "ON" : "OFF"},${pumpZoneB ? "ON" : "OFF"}\n`;
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `agri_verification_stats_${activeZone.toLowerCase()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   return (
-    <div className="min-h-screen bg-[#f0f7f2] text-[#051f20] pb-28 md:pb-12">
-      {/* 1. Disaster / Flood Alert Banner */}
+    <div className={`min-h-screen ${isDarkMode ? "dark bg-[#0B0E14] text-[#F3F6F9]" : "bg-[#EEF1F5] text-[#121417]"} p-2 sm:p-5 lg:p-7 flex items-center justify-center transition-colors duration-300`}>
+      
+      {/* ACTION NOTICE TOAST */}
+      {actionNotice && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-bounce">
+          <div className="bg-[#121417] text-white px-5 py-2.5 rounded-full shadow-2xl border border-white/20 flex items-center gap-2.5 text-xs font-black tracking-wide">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#D6EBE7] animate-ping" />
+            <span>{actionNotice}</span>
+          </div>
+        </div>
+      )}
+
+      {/* DISASTER & FLOOD WARNING BANNER */}
       {weather?.floodRisk && (
         <aside
-          aria-label="Disaster Alert"
-          className="bg-gradient-to-r from-[#be123c] via-[#235347] to-[#051f20] text-white px-4 py-2.5 flex items-center justify-center gap-2.5 font-bold text-xs shadow-md sticky top-0 z-50 cursor-pointer"
-          onClick={scrollToAlerts}
+          className="fixed top-0 left-0 right-0 bg-[#E11D48] text-white px-4 py-2 z-50 flex items-center justify-center gap-2 text-xs font-black shadow-md cursor-pointer"
+          onClick={() => setActiveTab("all")}
         >
-          <AlertTriangle className="w-4 h-4 text-[#daf1de] animate-bounce" />
+          <AlertTriangle className="w-4 h-4 animate-bounce text-[#FDE68A]" />
           <span>{weather.alertMessage}</span>
         </aside>
       )}
 
-      {/* Main Container - Mobile First Max Width */}
-      <div className="max-w-md md:max-w-4xl lg:max-w-6xl mx-auto px-4 sm:px-6 pt-5 space-y-5">
+      {/* ========================================================================= */}
+      {/* MASTER OUTER FRAME (Tablet / Screen Bento Shell) */}
+      {/* ========================================================================= */}
+      <div className={`w-full max-w-[1440px] outer-screen-frame ${isDarkMode ? "bg-[#181B20] border-[#2C323B]" : "bg-[#F3F6F9]"} p-3 sm:p-5 lg:p-6 flex flex-col gap-4 relative overflow-hidden`}>
         
-        {/* TOP USER HEADER BAR */}
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative">
-              <div className="w-11 h-11 rounded-full bg-gradient-to-tr from-[#051f20] to-[#8eb69b] p-0.5 shadow-md">
-                <div className="w-full h-full rounded-full bg-white flex items-center justify-center font-extrabold text-[#235347] text-sm">
-                  {session.user?.name ? session.user.name.charAt(0).toUpperCase() : "A"}
-                </div>
-              </div>
-              <span className="absolute bottom-0 right-0 w-3 h-3 bg-[#235347] border-2 border-[#f0f7f2] rounded-full animate-pulse" />
+        {/* ======================================================================= */}
+        {/* TOP APP BAR ROW */}
+        {/* ======================================================================= */}
+        <header className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+          
+          {/* Brand Logo & Search Bar */}
+          <div className="flex items-center gap-3 flex-1 max-w-xl">
+            {/* Geometric Seed Logo Icon */}
+            <div className="w-10 h-10 rounded-2xl bg-[#121417] text-white flex items-center justify-center flex-shrink-0 shadow-md">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 2L4 7v10l8 5 8-5V7l-8-5z" />
+                <path d="M12 6l5 3-5 3-5-3 5-3z" />
+                <path d="M12 12v6" />
+              </svg>
             </div>
-            <div>
-              <h1 className="text-lg font-extrabold text-[#051f20] tracking-tight flex items-center gap-2">
-                Hi {session.user?.name?.split(" ")[0] || "Farmer"}
-              </h1>
-              <p className="text-xs text-[#163832] font-semibold">Welcome to Farm Central</p>
+
+            {/* Pill Search Input */}
+            <div className="relative flex-1">
+              <input
+                type="text"
+                placeholder="Search..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={`w-full pl-9 pr-14 py-2.5 rounded-full ${isDarkMode ? "bg-[#232830] text-white" : "bg-[#FFFFFF] text-[#121417]"} border border-[#E2E7ED] text-xs font-medium placeholder-[#8E9BAA] focus:outline-none focus:ring-2 focus:ring-[#D6EBE7] transition shadow-xs`}
+              />
+              <Search className="w-4 h-4 text-[#8E9BAA] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-[#8E9BAA]">
+                <Mic className="w-3.5 h-3.5 hover:text-[#121417] cursor-pointer" />
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={loadDashboardData}
-              className="w-9 h-9 rounded-full glass-pill flex items-center justify-center text-[#163832] hover:text-[#235347] hover:border-[#235347] transition active:scale-95"
-              title="Refresh Data"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin text-[#235347]" : ""}`} />
-            </button>
-            <div className="relative">
+          {/* Right Action Controls */}
+          <div className="flex items-center justify-end gap-3 flex-wrap sm:flex-nowrap">
+            {/* Zone Selector Pill */}
+            <div className={`flex items-center p-0.5 rounded-full ${isDarkMode ? "bg-[#232830]" : "bg-white"} border border-[#E2E7ED] shadow-xs`}>
               <button
-                onClick={scrollToAlerts}
-                className={`w-9 h-9 rounded-full glass-pill flex items-center justify-center transition ${
-                  activeAlerts.length > 0 ? "text-[#be123c] border-[#be123c]/40 bg-[#fff1f2]" : "text-[#163832] hover:text-[#235347]"
+                onClick={() => setActiveZone("ZONE_A")}
+                className={`px-3 py-1 rounded-full text-xs font-black transition ${
+                  activeZone === "ZONE_A"
+                    ? "bg-[#D6EBE7] text-[#121417]"
+                    : "text-[#5E6977] hover:text-[#121417]"
                 }`}
-                title="View Alerts"
               >
-                <Bell className={`w-4 h-4 ${activeAlerts.length > 0 ? "animate-pulse" : ""}`} />
+                Zone A (Field)
               </button>
-              {activeAlerts.length > 0 ? (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-[#be123c] text-white text-[10px] font-extrabold rounded-full flex items-center justify-center shadow-sm animate-bounce">
-                  {activeAlerts.length}
-                </span>
-              ) : (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-[#235347] rounded-full" />
-              )}
+              <button
+                onClick={() => setActiveZone("ZONE_B")}
+                className={`px-3 py-1 rounded-full text-xs font-black transition ${
+                  activeZone === "ZONE_B"
+                    ? "bg-[#D6EBE7] text-[#121417]"
+                    : "text-[#5E6977] hover:text-[#121417]"
+                }`}
+              >
+                Zone B (Greenhouse)
+              </button>
             </div>
+
+            {/* Online Support / Edge Sync Pill */}
             <button
-              onClick={() =>
-                authClient.signOut({
-                  fetchOptions: { onSuccess: () => router.push("/login") },
-                })
-              }
-              className="w-9 h-9 rounded-full glass-pill flex items-center justify-center text-[#be123c] hover:bg-[#daf1de]/50 hover:border-[#be123c]/40 transition"
-              title="Sign Out"
+              onClick={() => {
+                loadDashboardData();
+                setActionNotice("🟢 Live Edge Gateway Synchronized!");
+              }}
+              className="px-4 py-2 rounded-full bg-[#D6EBE7] hover:bg-[#CCE4E0] text-[#121417] font-extrabold text-xs transition shadow-xs flex items-center gap-1.5"
             >
-              <LogOut className="w-4 h-4" />
+              <span className="w-2 h-2 rounded-full bg-[#121417] animate-pulse" />
+              <span>Online support</span>
             </button>
+
+            {/* Bell Button */}
+            <button
+              onClick={() => setActiveTab("all")}
+              className={`w-9 h-9 rounded-full ${isDarkMode ? "bg-[#232830]" : "bg-white"} border border-[#E2E7ED] flex items-center justify-center text-[#5E6977] hover:text-[#121417] relative shadow-xs`}
+            >
+              <Bell className="w-4 h-4" />
+              {activeAlerts.length > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#E11D48] ring-2 ring-white" />
+              )}
+            </button>
+
+            {/* User Profile Pill */}
+            <div className={`flex items-center gap-2 pl-3 pr-1 py-1 rounded-full ${isDarkMode ? "bg-[#232830]" : "bg-white"} border border-[#E2E7ED] shadow-xs`}>
+              <span className="text-xs font-black text-[#121417]">{session.user?.name || "Nika Meyer"}</span>
+              <div className="w-7 h-7 rounded-full bg-[#121417] text-white flex items-center justify-center text-xs font-black">
+                {session.user?.name ? session.user.name.charAt(0).toUpperCase() : "N"}
+              </div>
+            </div>
           </div>
         </header>
 
-        {/* FLOATING ACTION NOTIFICATION TOAST */}
-        {actionNotice && (
-          <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 animate-bounce">
-            <div className="bg-[#051f20] text-white px-5 py-2.5 rounded-full shadow-2xl border border-[#8eb69b]/40 flex items-center gap-2.5 text-xs font-extrabold tracking-wide">
-              <span className="w-2 h-2 rounded-full bg-[#8eb69b] animate-ping" />
-              <span>{actionNotice}</span>
-            </div>
-          </div>
-        )}
+        {/* ======================================================================= */}
+        {/* MAIN 3-COLUMN BENTO GRID BODY */}
+        {/* ======================================================================= */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+          
+          {/* ===================================================================== */}
+          {/* COLUMN 1: LEFT VERTICAL ICON DOCK (Pill Rail) */}
+          {/* ===================================================================== */}
+          <div className="lg:col-span-1 flex lg:flex-col items-center justify-between gap-3 py-2 px-1">
+            <div className="flex lg:flex-col items-center gap-2 overflow-x-auto no-scrollbar">
+              <button
+                onClick={() => setActiveTab("activity")}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
+                  activeTab === "activity"
+                    ? "bg-[#121417] text-white shadow-md"
+                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
+                }`}
+                title="Activity Dashboard"
+              >
+                <Home className="w-4 h-4" />
+              </button>
 
-        {/* ZONE & FIELD SWITCHER PILLS */}
-        <nav aria-label="Zone selector" className="flex items-center gap-2 overflow-x-auto pb-1.5 no-scrollbar">
-          <button
-            onClick={() => setActiveZone("ZONE_A")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-              activeZone === "ZONE_A"
-                ? "glass-pill-active"
-                : "glass-pill text-[#163832] hover:text-[#051f20]"
-            }`}
-          >
-            <span>🍅 Tomato Field A</span>
-            {pumpZoneA && <span className="w-1.5 h-1.5 rounded-full bg-[#8eb69b] animate-ping" />}
-          </button>
-          <button
-            onClick={() => setActiveZone("ZONE_B")}
-            className={`flex items-center gap-2 px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-              activeZone === "ZONE_B"
-                ? "glass-pill-active"
-                : "glass-pill text-[#163832] hover:text-[#051f20]"
-            }`}
-          >
-            <span>🌿 Greenhouse B</span>
-            {pumpZoneB && <span className="w-1.5 h-1.5 rounded-full bg-[#8eb69b] animate-ping" />}
-          </button>
-          <button
-            onClick={scrollToWeather}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold glass-pill text-[#163832] hover:text-[#051f20] whitespace-nowrap"
-          >
-            <CloudSun className="w-3.5 h-3.5 text-[#235347]" />
-            <span>🌤️ 7-Day Forecast</span>
-          </button>
-          <button
-            onClick={scrollToRainSensor}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold glass-pill transition-all whitespace-nowrap ${
-              isRaining
-                ? "bg-cyan-500/20 text-cyan-900 border border-cyan-400 font-extrabold shadow-sm animate-pulse"
-                : "text-[#163832] hover:text-[#051f20]"
-            }`}
-          >
-            <CloudRain className={`w-3.5 h-3.5 ${isRaining ? "text-cyan-600 animate-bounce" : "text-[#235347]"}`} />
-            <span>{isRaining ? "🌧️ Rain Sensor (ACTIVE)" : "🌧️ Rain Sensor (Dry)"}</span>
-          </button>
-          <button
-            onClick={scrollToAlerts}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap transition-all ${
-              activeAlerts.length > 0
-                ? "bg-[#be123c]/10 text-[#be123c] border border-[#be123c]/40 shadow-sm"
-                : "glass-pill text-[#163832] hover:text-[#051f20]"
-            }`}
-          >
-            <AlertTriangle className={`w-3.5 h-3.5 ${activeAlerts.length > 0 ? "text-[#be123c]" : "text-[#235347]"}`} />
-            <span>Alerts ({activeAlerts.length})</span>
-          </button>
-          <button
-            onClick={() => setCurrentTab("rover")}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold glass-pill text-[#163832] hover:text-[#051f20] whitespace-nowrap"
-          >
-            <Navigation className="w-3.5 h-3.5 text-[#235347]" />
-            <span>Field Rover</span>
-          </button>
-          <button
-            onClick={() => setCurrentTab("ai")}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold glass-pill text-[#163832] hover:text-[#051f20] whitespace-nowrap"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#235347]" />
-            <span>AI Vision</span>
-          </button>
-        </nav>
-
-        {/* ========================================================================= */}
-        {/* 7-DAY LIVE MICROCLIMATE & WEATHER FORECAST WIDGET */}
-        {/* ========================================================================= */}
-        <section id="weatherSection" className="glass-panel-glow rounded-[28px] p-5 space-y-4 transition-all">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#051f20] to-[#235347] flex items-center justify-center text-[#daf1de] shadow-md">
-                <CloudSun className="w-5 h-5 text-[#8eb69b] animate-pulse" />
-              </div>
-              <div>
-                <h3 className="text-sm sm:text-base font-extrabold text-[#051f20] flex items-center gap-2">
-                  Live 7-Day Microclimate & Weather Forecast
-                </h3>
-                <p className="text-xs text-[#163832] font-semibold">
-                  Agro-meteorological telemetry & satellite sync (Lucknow Region • 26.85°N, 80.95°E)
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-              <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-[#daf1de] text-[#051f20] border border-[#8eb69b]/50 shadow-sm flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-[#235347] animate-ping" />
-                Live Satellite Sync
-              </span>
-              <span className="text-[11px] font-semibold text-[#163832]">
-                Updated: {weather?.time || "Just now"}
-              </span>
-            </div>
-          </div>
-
-          {/* Current Conditions Micro-Bar */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white/50 backdrop-blur-sm rounded-2xl p-3.5 border border-[#8eb69b]/30 shadow-inner">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#daf1de] flex items-center justify-center text-[#235347]">
-                <Thermometer className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold text-[#163832]/80 tracking-wider">Air Temp</p>
-                <p className="text-sm font-extrabold text-[#051f20]">
-                  {weather?.temperature ?? 28}°C
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#daf1de] flex items-center justify-center text-[#235347]">
-                <Droplets className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold text-[#163832]/80 tracking-wider">Atm Humidity</p>
-                <p className="text-sm font-extrabold text-[#051f20]">
-                  {weather?.humidity ?? 65}%
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#daf1de] flex items-center justify-center text-[#235347]">
-                <Wind className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold text-[#163832]/80 tracking-wider">Wind Speed</p>
-                <p className="text-sm font-extrabold text-[#051f20]">
-                  {weather?.windSpeed ?? 8} km/h
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-[#daf1de] flex items-center justify-center text-[#235347]">
+              <button
+                onClick={() => setActiveTab("weather")}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
+                  activeTab === "weather"
+                    ? "bg-[#121417] text-white shadow-md"
+                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
+                }`}
+                title="Live Weather & 7-Day Forecast"
+              >
                 <CloudSun className="w-4 h-4" />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase font-bold text-[#163832]/80 tracking-wider">Condition</p>
-                <p className="text-xs font-extrabold text-[#051f20] truncate">
-                  {weather?.condition || "Optimal Conditions"}
-                </p>
-              </div>
-            </div>
-          </div>
+              </button>
 
-          {/* 7-Day Forecast Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-            {(weather?.days && weather.days.length > 0
-              ? weather.days
-              : [
-                  { dayLabel: "Today", tempMax: 28, tempMin: 21, rainProb: 0, condition: "Sunny", isToday: true },
-                  { dayLabel: "Tue", tempMax: 27, tempMin: 20, rainProb: 10, condition: "Partly Cloudy", isToday: false },
-                  { dayLabel: "Wed", tempMax: 25, tempMin: 19, rainProb: 65, condition: "Rain", isToday: false },
-                  { dayLabel: "Thu", tempMax: 29, tempMin: 22, rainProb: 5, condition: "Sunny", isToday: false },
-                  { dayLabel: "Fri", tempMax: 28, tempMin: 21, rainProb: 15, condition: "Partly Cloudy", isToday: false },
-                  { dayLabel: "Sat", tempMax: 30, tempMin: 23, rainProb: 20, condition: "Sunny", isToday: false },
-                  { dayLabel: "Sun", tempMax: 27, tempMin: 20, rainProb: 40, condition: "Showers", isToday: false },
-                ]
-            ).map((day, idx) => {
-              const icon = getWeatherIcon(day.condition, day.rainProb);
-              return (
+              <button
+                onClick={() => setActiveTab("sensors")}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
+                  activeTab === "sensors"
+                    ? "bg-[#121417] text-white shadow-md"
+                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
+                }`}
+                title="Sensors & Rain Telemetry"
+              >
+                <Layers className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab("pumps")}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
+                  activeTab === "pumps"
+                    ? "bg-[#121417] text-white shadow-md"
+                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
+                }`}
+                title="Pump Zone A & B Controls"
+              >
+                <Sliders className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab("rover")}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
+                  activeTab === "rover"
+                    ? "bg-[#121417] text-white shadow-md"
+                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
+                }`}
+                title="Field Rover Teleoperation"
+              >
+                <Navigation className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab("ai")}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
+                  activeTab === "ai"
+                    ? "bg-[#121417] text-white shadow-md"
+                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
+                }`}
+                title="4 AI Vision Models"
+              >
+                <Sparkles className="w-4 h-4" />
+              </button>
+
+              <button
+                onClick={() => setActiveTab("all")}
+                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition relative ${
+                  activeTab === "all"
+                    ? "bg-[#121417] text-white shadow-md"
+                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
+                }`}
+                title="Farm Alerts & Disaster Center"
+              >
+                <Bell className="w-4 h-4" />
+                {activeAlerts.length > 0 && (
+                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#E11D48]" />
+                )}
+              </button>
+            </div>
+
+            {/* Bottom Dark Mode Switch & Profile Pill */}
+            <div className="flex lg:flex-col items-center gap-3">
+              <button
+                id="btnDarkModeToggle"
+                onClick={toggleTheme}
+                className={`w-8 h-14 rounded-full p-1 flex flex-col justify-between items-center cursor-pointer shadow-sm transition border ${
+                  isDarkMode
+                    ? "bg-[#1C222D] border-[#2A3342]"
+                    : "bg-[#121417] border-[#121417]"
+                }`}
+                title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              >
                 <div
-                  key={idx}
-                  className={`rounded-2xl p-3 flex flex-col items-center justify-between text-center transition-all duration-300 hover:scale-[1.03] ${
-                    day.isToday
-                      ? "bg-gradient-to-b from-[#051f20] to-[#235347] text-white shadow-lg border border-[#8eb69b]/40 ring-2 ring-[#8eb69b]/30"
-                      : "bg-white/60 hover:bg-white/90 text-[#051f20] border border-[#8eb69b]/30 shadow-sm"
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-transform duration-300 ${
+                    isDarkMode
+                      ? "bg-[#52C2B1] translate-y-6 shadow-sm"
+                      : "bg-white translate-y-0"
                   }`}
                 >
-                  <div className="flex items-center justify-between w-full px-0.5">
-                    <span className={`text-[11px] font-extrabold uppercase tracking-wide ${
-                      day.isToday ? "text-[#daf1de]" : "text-[#163832]"
-                    }`}>
-                      {day.dayLabel}
-                    </span>
-                    {day.isToday && (
-                      <span className="text-[9px] font-black bg-[#8eb69b] text-[#051f20] px-1.5 py-0.5 rounded-full uppercase">
-                        Now
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Weather Emoji / Icon */}
-                  <div className="my-2 text-2xl filter drop-shadow-sm select-none">
-                    {icon}
-                  </div>
-
-                  {/* Temperature Range */}
-                  <div className="space-y-0.5 w-full">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <span className={`text-sm font-black ${day.isToday ? "text-white" : "text-[#051f20]"}`}>
-                        {day.tempMax}°
-                      </span>
-                      <span className={`text-xs font-semibold ${day.isToday ? "text-[#daf1de]/70" : "text-[#163832]/60"}`}>
-                        {day.tempMin}°
-                      </span>
-                    </div>
-
-                    <p className={`text-[10px] font-bold truncate max-w-[90px] mx-auto ${
-                      day.isToday ? "text-[#daf1de]" : "text-[#163832]"
-                    }`}>
-                      {day.condition}
-                    </p>
-                  </div>
-
-                  {/* Rain Probability Pill */}
-                  <div className="mt-2.5 w-full">
-                    <div
-                      className={`text-[10px] font-extrabold py-1 px-2 rounded-xl flex items-center justify-center gap-1 ${
-                        day.rainProb > 40
-                          ? day.isToday
-                            ? "bg-[#be123c]/40 text-[#daf1de] border border-[#be123c]"
-                            : "bg-blue-100 text-blue-800 border border-blue-200"
-                          : day.isToday
-                          ? "bg-white/15 text-[#daf1de]"
-                          : "bg-[#daf1de]/70 text-[#235347]"
-                      }`}
-                    >
-                      <span>💧</span>
-                      <span>{day.rainProb}%</span>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* ========================================================================= */}
-        {/* ACTIVE ALERTS & AGRONOMIC ADVISORY HUB */}
-        {/* ========================================================================= */}
-        <section id="alertsSection" className="glass-panel-glow rounded-[28px] p-5 space-y-3.5 transition-all">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center text-white shadow-md ${
-                activeAlerts.length > 0 ? "bg-gradient-to-tr from-[#be123c] to-[#d97706]" : "bg-gradient-to-tr from-[#051f20] to-[#235347]"
-              }`}>
-                <Bell className={`w-4 h-4 ${activeAlerts.length > 0 ? "animate-bounce text-white" : "text-[#daf1de]"}`} />
-              </div>
-              <div>
-                <h3 className="text-sm font-extrabold text-[#051f20] flex items-center gap-2">
-                  Active Farm Alerts & Crop Advisories
-                </h3>
-                <p className="text-xs text-[#163832] font-semibold">
-                  Real-time agricultural risk assessment & automated sensor alarms
-                </p>
-              </div>
-            </div>
-            <span className={`text-[11px] font-bold px-3 py-1 rounded-full border ${
-              activeAlerts.length > 0 
-                ? "bg-[#be123c]/15 text-[#be123c] border-[#be123c]/30"
-                : "bg-[#daf1de] text-[#051f20] border-[#8eb69b]/50"
-            }`}>
-              {activeAlerts.length > 0 ? `⚠️ ${activeAlerts.length} Active Warnings` : "● All Systems Nominal"}
-            </span>
-          </div>
-
-          {/* Alert Cards Container */}
-          <div className="space-y-2.5">
-            {activeAlerts.length === 0 ? (
-              <div className="p-4 rounded-2xl bg-white/90 border border-[#8eb69b]/35 flex items-center gap-3.5 shadow-sm">
-                <div className="w-8 h-8 rounded-full bg-[#daf1de] flex items-center justify-center text-[#235347] flex-shrink-0">
-                  <ShieldCheck className="w-4 h-4 text-[#235347]" />
-                </div>
-                <div className="flex-1">
-                  <h4 className="text-xs font-bold text-[#051f20]">All Microclimates & Sensors Operating Normally</h4>
-                  <p className="text-[11px] text-[#163832]">Soil moisture, canopy temperature, and crop vision health indicators are all within optimal agronomic thresholds.</p>
-                </div>
-              </div>
-            ) : (
-              activeAlerts.map((alt) => (
-                <div 
-                  key={alt.id}
-                  className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm transition-all ${
-                    alt.type === "CRITICAL"
-                      ? "bg-gradient-to-r from-white via-[#fff1f2] to-white border-[#fca5a5]"
-                      : alt.type === "WARNING"
-                      ? "bg-gradient-to-r from-white via-[#fffbeb] to-white border-[#fde68a]"
-                      : "bg-white border-[#8eb69b]/35"
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs flex-shrink-0 mt-0.5 ${
-                      alt.type === "CRITICAL"
-                        ? "bg-[#be123c] text-white"
-                        : alt.type === "WARNING"
-                        ? "bg-[#d97706] text-white"
-                        : "bg-[#235347] text-white"
-                    }`}>
-                      {alt.type === "CRITICAL" ? "⚠️" : alt.type === "WARNING" ? "⚡" : "ℹ️"}
-                    </span>
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h4 className="text-xs font-extrabold text-[#051f20]">{alt.title}</h4>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                          alt.type === "CRITICAL"
-                            ? "bg-[#be123c]/15 text-[#be123c]"
-                            : alt.type === "WARNING"
-                            ? "bg-[#d97706]/15 text-[#b45309]"
-                            : "bg-[#daf1de] text-[#235347]"
-                        }`}>
-                          {alt.type}
-                        </span>
-                        <span className="text-[10px] text-[#163832] font-semibold">• {alt.zone}</span>
-                        <span className="text-[10px] text-[#163832]/70">({alt.timestamp})</span>
-                      </div>
-                      <p className="text-[11px] text-[#163832]">{alt.message}</p>
-                    </div>
-                  </div>
-
-                  {alt.actionText && alt.actionTarget && alt.actionCmd && (
-                    <button
-                      onClick={() => sendCommand(alt.actionTarget!, alt.actionCmd!)}
-                      className="self-end sm:self-center px-4 py-1.5 rounded-full text-xs font-bold bg-[#051f20] text-[#daf1de] hover:bg-[#235347] active:scale-95 transition-all shadow-sm whitespace-nowrap"
-                    >
-                      {alt.actionText}
-                    </button>
+                  {isDarkMode ? (
+                    <Moon className="w-3.5 h-3.5 text-[#0B0E14]" />
+                  ) : (
+                    <Sun className="w-3.5 h-3.5 text-[#121417]" />
                   )}
                 </div>
-              ))
-            )}
-          </div>
-        </section>
+              </button>
 
-        {/* ========================================================================= */}
-        {/* HERO CARDS SECTION (Emerald Pine & Soft Sage Gradient System) */}
-        {/* ========================================================================= */}
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          
-          {/* 1. HERO SOIL MOISTURE ARC CARD */}
-          <div className="glass-panel-glow rounded-[28px] p-6 relative overflow-hidden flex flex-col items-center justify-between min-h-[340px]">
-            {/* Ambient Background Glow */}
-            <div className="absolute -top-12 left-1/2 -translate-x-1/2 w-48 h-48 bg-[#8eb69b]/25 rounded-full blur-3xl pointer-events-none" />
+              <button
+                onClick={() =>
+                  authClient.signOut({
+                    fetchOptions: { onSuccess: () => router.push("/login") },
+                  })
+                }
+                className="w-9 h-9 rounded-full bg-white border border-[#E2E7ED] flex items-center justify-center text-[#E11D48] hover:bg-[#FFE4E6] transition shadow-xs"
+                title="Log Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+
+          {/* ===================================================================== */}
+          {/* COLUMN 2: CENTER MAIN DASHBOARD CANVAS */}
+          {/* ===================================================================== */}
+          <div className="lg:col-span-8 space-y-4">
             
-            {/* Top Card Header */}
-            <div className="w-full flex items-center justify-between z-10">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-[#daf1de] border border-[#8eb69b]/50 flex items-center justify-center text-[#235347] font-bold">
-                  <Sprout className="w-4 h-4 text-[#235347]" />
-                </span>
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider font-bold text-[#163832]">
-                    Hydration Hero
-                  </h3>
-                  <p className="text-sm font-extrabold text-[#051f20]">
-                    {activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#daf1de] border border-[#8eb69b]/50 text-[11px] text-[#051f20] font-bold">
-                <span>{currentMoisture >= 60 && currentMoisture <= 75 ? "Optimal Target" : currentMoisture < 60 ? "Irrigate Soon" : "High Moisture"}</span>
-              </div>
-            </div>
-
-            {/* Glowing Hero Graphic Lamp */}
-            <div className="my-2 flex flex-col items-center relative z-10">
-              <div className="w-12 h-1 bg-gradient-to-r from-transparent via-[#8eb69b] to-transparent rounded-full shadow-[0_0_12px_rgba(142,182,155,0.8)] mb-2" />
-              <div className="w-14 h-8 bg-gradient-to-b from-[#ffffff] to-[#daf1de] border border-[#8eb69b]/40 rounded-t-xl flex items-center justify-center shadow-md">
-                <Droplets className="w-4 h-4 text-[#235347] animate-pulse" />
-              </div>
-              <div className="w-28 h-10 bg-[#8eb69b]/30 blur-xl rounded-full -mt-2" />
-            </div>
-
-            {/* Circular Arc Slider Widget */}
-            <div className="relative w-full flex flex-col items-center justify-center z-10">
-              <svg className="w-56 h-32 overflow-visible" viewBox="0 0 200 110">
-                <path
-                  d="M 20 100 A 80 80 0 0 1 180 100"
-                  fill="none"
-                  stroke="rgba(22, 56, 50, 0.12)"
-                  strokeWidth="9"
-                  strokeLinecap="round"
-                />
-                <path
-                  d="M 20 100 A 80 80 0 0 1 180 100"
-                  fill="none"
-                  stroke="url(#emeraldGradient)"
-                  strokeWidth="9"
-                  strokeLinecap="round"
-                  strokeDasharray="251.2"
-                  strokeDashoffset={251.2 - (251.2 * currentMoisture) / 100}
-                  className="transition-all duration-700 ease-out"
-                />
-                <defs>
-                  <linearGradient id="emeraldGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                    <stop offset="0%" stopColor="#235347" />
-                    <stop offset="50%" stopColor="#8eb69b" />
-                    <stop offset="100%" stopColor="#051f20" />
-                  </linearGradient>
-                </defs>
-              </svg>
-
-              {/* Arc Center Value */}
-              <div className="absolute bottom-2 flex flex-col items-center">
-                <span className="text-3xl font-extrabold text-[#051f20] tracking-tight">
-                  {currentMoisture}%
-                </span>
-                <span className="text-[11px] text-[#163832] font-bold">Root Soil Moisture</span>
-              </div>
-            </div>
-
-            {/* Target Hydration Preset Dots */}
-            <div className="w-full flex items-center justify-between pt-3 border-t border-[#8eb69b]/30 z-10">
-              <span className="text-[11px] text-[#163832] font-semibold">Target Presets</span>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setMoistureTarget(50)}
-                  className={`w-4 h-4 rounded-full transition-transform ${
-                    moistureTarget === 50 ? "scale-125 ring-2 ring-[#235347] bg-[#163832]" : "bg-[#163832]/60"
-                  }`}
-                  title="50% Low Drip"
-                />
-                <button
-                  onClick={() => setMoistureTarget(65)}
-                  className={`w-5 h-5 rounded-full transition-transform ${
-                    moistureTarget === 65 ? "scale-125 ring-2 ring-[#051f20] bg-[#235347] shadow-md" : "bg-[#235347]/70"
-                  }`}
-                  title="65% Standard Tomato"
-                />
-                <button
-                  onClick={() => setMoistureTarget(75)}
-                  className={`w-4 h-4 rounded-full transition-transform ${
-                    moistureTarget === 75 ? "scale-125 ring-2 ring-[#235347] bg-[#8eb69b]" : "bg-[#8eb69b]/80"
-                  }`}
-                  title="75% Saturated"
-                />
-                <button
-                  onClick={() => setMoistureTarget(85)}
-                  className={`w-4 h-4 rounded-full transition-transform ${
-                    moistureTarget === 85 ? "scale-125 ring-2 ring-[#8eb69b] bg-[#051f20]" : "bg-[#051f20]/70"
-                  }`}
-                  title="85% High Flush"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* 2. HERO TEMPERATURE & CLIMATE CIRCULAR DIAL */}
-          <div className="glass-panel-glow rounded-[28px] p-6 relative overflow-hidden flex flex-col items-center justify-between min-h-[340px]">
-            {/* Top Card Header */}
-            <div className="w-full flex items-center justify-between z-10">
-              <div className="flex items-center gap-2">
-                <span className="w-8 h-8 rounded-full bg-[#daf1de] border border-[#8eb69b]/50 flex items-center justify-center text-[#235347]">
-                  <Thermometer className="w-4 h-4 text-[#235347]" />
-                </span>
-                <div>
-                  <h3 className="text-xs uppercase tracking-wider font-bold text-[#163832]">
-                    Climate Goal
-                  </h3>
-                  <p className="text-sm font-extrabold text-[#051f20]">Canopy & Soil Temp</p>
-                </div>
-              </div>
-              <div className="text-right">
-                <span className="text-[10px] text-[#163832] uppercase font-bold">Current</span>
-                <p className="text-xs font-extrabold text-[#051f20]">{latest.soilTemperature || 24}°C</p>
-              </div>
-            </div>
-
-            {/* Big Circular Thermostat Dial */}
-            <div className="relative my-3 flex items-center justify-center">
-              <div className="w-44 h-44 rounded-full border-4 border-[#8eb69b]/35 flex items-center justify-center relative p-2 shadow-inner">
-                {/* Dial Indicator Arc */}
-                <div
-                  className="absolute inset-0 rounded-full border-4 border-transparent border-t-[#235347] border-r-[#8eb69b] transition-transform duration-500"
-                  style={{ transform: `rotate(${(tempGoal - 15) * 12}deg)` }}
-                />
-
-                {/* Inner Solid Dial Circle */}
-                <div className="w-32 h-32 rounded-full bg-white text-[#051f20] shadow-xl flex flex-col items-center justify-center relative border border-[#8eb69b]/40">
-                  <div className="absolute -top-1.5 w-3 h-3 bg-[#235347] rounded-full shadow" />
-                  <span className="text-[10px] font-bold text-[#163832] uppercase tracking-wider">
-                    Goal
-                  </span>
-                  <span className="text-3xl font-extrabold text-[#051f20] tracking-tight">
-                    {tempGoal}°<span className="text-lg">C</span>
-                  </span>
-                  <span className="text-[10px] text-[#163832] font-bold">
-                    Canopy: {latest.canopyTemperature || 26}°C
-                  </span>
-                </div>
-              </div>
-
-              <span className="absolute left-0 top-1/2 -translate-y-1/2 -translate-x-2 text-[10px] text-[#163832] font-extrabold">
-                10°C
-              </span>
-              <span className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-2 text-[10px] text-[#163832] font-extrabold">
-                35°C
-              </span>
-            </div>
-
-            {/* Stepper Buttons & Schedule */}
-            <div className="w-full flex items-center justify-between pt-2 z-10">
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setTempGoal((prev) => Math.max(15, prev - 1))}
-                  className="w-10 h-10 rounded-full glass-pill flex items-center justify-center text-[#051f20] hover:border-[#235347] active:scale-90 transition shadow-sm"
-                  title="Decrease Goal"
-                >
-                  <span className="text-lg font-extrabold">−</span>
-                </button>
-                <button
-                  onClick={() => setTempGoal((prev) => Math.min(35, prev + 1))}
-                  className="w-10 h-10 rounded-full glass-pill flex items-center justify-center text-[#051f20] hover:border-[#235347] active:scale-90 transition shadow-sm"
-                  title="Increase Goal"
-                >
-                  <span className="text-lg font-extrabold">+</span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-[#8eb69b]/40 text-xs shadow-sm">
-                <Clock className="w-3.5 h-3.5 text-[#235347]" />
-                <span className="text-[#163832] font-semibold">Auto-Vent:</span>
-                <span className="font-extrabold text-[#051f20]">06:00 – 19:00</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ========================================================================= */}
-        {/* HARDWARE RAIN SENSOR REAL-TIME TELEMETRY WIDGET (GPIO PIN 27) */}
-        {/* ========================================================================= */}
-        <section id="rainSensorSection" className="glass-panel-glow rounded-[28px] p-5 sm:p-6 space-y-4 transition-all relative overflow-hidden">
-          {/* Ambient Rain Glow */}
-          <div className={`absolute -top-10 -right-10 w-52 h-52 rounded-full blur-3xl pointer-events-none transition-all duration-700 ${
-            isRaining ? "bg-cyan-400/25 animate-pulse" : "bg-[#8eb69b]/20"
-          }`} />
-
-          {/* Widget Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
-            <div className="flex items-center gap-3">
-              <div className={`w-11 h-11 rounded-2xl flex items-center justify-center shadow-md transition-all duration-500 ${
-                isRaining 
-                  ? "bg-gradient-to-tr from-[#0284c7] via-[#0369a1] to-[#075985] text-white shadow-cyan-500/25 ring-2 ring-cyan-400/50" 
-                  : "bg-gradient-to-tr from-[#051f20] to-[#235347] text-[#daf1de]"
-              }`}>
-                {isRaining ? (
-                  <CloudRain className="w-6 h-6 text-cyan-200 animate-bounce" />
-                ) : (
-                  <Sun className="w-6 h-6 text-[#8eb69b]" />
-                )}
-              </div>
+            {/* Header Verification Stats & Top Counters */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base sm:text-lg font-extrabold text-[#051f20] tracking-tight">
-                    Live Rain Sensor Telemetry
-                  </h3>
-                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-[#daf1de] text-[#051f20] font-bold border border-[#8eb69b]/40">
-                    ESP32 PIN 27
-                  </span>
-                </div>
-                <p className="text-xs text-[#163832] font-semibold">
-                  Active precipitation detection & automated drip pump safety interlock
+                <h1 className="text-2xl sm:text-3xl font-black text-[#121417] tracking-tight">
+                  Verification stats
+                </h1>
+                <p className="text-xs text-[#5E6977] font-semibold mt-0.5">
+                  Live Farm Intelligence • Lucknow Region (26.85°N, 80.95°E) • {weather?.time || "Updated live"}
                 </p>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <span className={`text-xs font-extrabold px-3.5 py-1.5 rounded-full border shadow-sm flex items-center gap-2 transition-all ${
-                isRaining
-                  ? "bg-cyan-500/15 text-cyan-900 border-cyan-400/50 ring-2 ring-cyan-400/20 animate-pulse"
-                  : "bg-[#daf1de] text-[#051f20] border-[#8eb69b]/60"
-              }`}>
-                <span className={`w-2.5 h-2.5 rounded-full ${isRaining ? "bg-cyan-500 animate-ping" : "bg-[#235347]"}`} />
-                {isRaining ? "🌧️ RAIN DETECTED (ACTIVE LOW)" : "☀️ SENSOR DRY (CLEAR)"}
-              </span>
-            </div>
-          </div>
-
-          {/* Visual Status Banner Card */}
-          <div className={`rounded-2xl p-4 sm:p-5 border transition-all duration-500 relative overflow-hidden ${
-            isRaining
-              ? "bg-gradient-to-r from-[#0369a1]/15 via-cyan-50/70 to-white/90 border-cyan-400/60 shadow-md"
-              : "bg-gradient-to-r from-white/90 via-[#daf1de]/40 to-white/90 border-[#8eb69b]/40 shadow-sm"
-          }`}>
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-start gap-3.5">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-2xl flex-shrink-0 shadow-inner ${
-                  isRaining ? "bg-cyan-500 text-white" : "bg-[#daf1de] text-[#235347]"
-                }`}>
-                  {isRaining ? "🌧️" : "🌱"}
-                </div>
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h4 className="text-sm font-extrabold text-[#051f20]">
-                      {isRaining ? "Precipitation Event in Progress" : "No Rain Detected • Moisture Plate Dry"}
-                    </h4>
-                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase ${
-                      isRaining ? "bg-cyan-100 text-cyan-800 border border-cyan-300" : "bg-[#daf1de] text-[#235347]"
-                    }`}>
-                      {isRaining ? "Interlock Engaged" : "Drip Ready"}
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#163832] leading-relaxed">
-                    {isRaining
-                      ? "Rain sensor probe has established a conductive bridge on Master ESP32 Pin 27. Auto-irrigation is automatically suspended to prevent root waterlogging and preserve water."
-                      : "Capacitive / resistive sensor plate is dry (GPIO 27 HIGH). All automated scheduled fertigation and drip irrigation cycles operate normally."}
-                  </p>
-                </div>
-              </div>
-
-              {/* Quick Test / Manual Sim Controls */}
-              <div className="flex items-center gap-2 self-end md:self-center flex-shrink-0">
-                <button
-                  onClick={() => setSimulatedRain((prev) => (prev === null ? !Boolean(latest?.rainDetected) : !prev))}
-                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold glass-pill text-[#051f20] hover:border-[#235347] active:scale-95 transition flex items-center gap-1.5 shadow-xs"
-                  title="Toggle Rain Simulation"
-                >
-                  <span>🧪</span>
-                  <span>{simulatedRain === null ? "Test Rain Toggle" : (isRaining ? "Simulate Dry" : "Simulate Rain")}</span>
-                </button>
-                {simulatedRain !== null && (
-                  <button
-                    onClick={() => setSimulatedRain(null)}
-                    className="px-2.5 py-1.5 rounded-xl text-[11px] font-semibold text-[#163832] hover:text-[#051f20] transition"
-                    title="Reset to Real Hardware Data"
-                  >
-                    Reset
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-
-        </section>
-
-
-        {/* ========================================================================= */}
-        {/* GRID OF COMPACT ACTION CARDS (SMART PUMPS & ALARMS) */}
-        {/* ========================================================================= */}
-        <section id="pumpsSection" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-          
-          {/* Card 1: Smart Pump Zone A */}
-          <div 
-            onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
-            className={`glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] transition-all duration-300 cursor-pointer select-none active:scale-[0.98] ${
-              pumpZoneA ? "border-[#235347] bg-white/95 shadow-md ring-2 ring-[#235347]/20" : "hover:border-[#235347]/50"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
-                pumpZoneA ? "bg-[#235347] text-white shadow-md animate-pulse" : "bg-[#daf1de] text-[#235347] border border-[#8eb69b]/40"
-              }`}>
-                <Droplets className="w-4 h-4" />
-              </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON");
-                }}
-                className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-300 relative cursor-pointer active:scale-95 ${
-                  pumpZoneA ? "bg-[#235347]" : "bg-[#daf1de]"
-                }`}
-                title="Toggle Pump Zone A"
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 ${
-                    pumpZoneA ? "translate-x-6" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
-            <div className="mt-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-extrabold text-[#051f20]">Smart Pump A</h4>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                  pumpZoneA ? "bg-[#daf1de] text-[#235347]" : "bg-[#daf1de]/40 text-[#163832]"
-                }`}>
-                  {pumpZoneA ? "RUNNING" : "OFF"}
-                </span>
-              </div>
-              <p className="text-[11px] text-[#163832] font-medium mt-0.5">
-                {pumpZoneA ? "● Pumping Active • 42 L/h" : "○ Idle • Tap card to start"}
-              </p>
-            </div>
-          </div>
-
-          {/* Card 2: Smart Pump Zone B */}
-          <div 
-            onClick={() => sendCommand("PUMP_ZONE_B", pumpZoneB ? "OFF" : "ON")}
-            className={`glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] transition-all duration-300 cursor-pointer select-none active:scale-[0.98] ${
-              pumpZoneB ? "border-[#051f20] bg-white/95 shadow-md ring-2 ring-[#051f20]/20" : "hover:border-[#235347]/50"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
-                pumpZoneB ? "bg-[#051f20] text-white shadow-md animate-pulse" : "bg-[#163832]/15 text-[#163832] border border-[#163832]/30"
-              }`}>
-                <Power className="w-4 h-4" />
-              </div>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  sendCommand("PUMP_ZONE_B", pumpZoneB ? "OFF" : "ON");
-                }}
-                className={`w-12 h-6 rounded-full p-0.5 transition-colors duration-300 relative cursor-pointer active:scale-95 ${
-                  pumpZoneB ? "bg-[#051f20]" : "bg-[#daf1de]"
-                }`}
-                title="Toggle Pump Zone B"
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-white shadow-md transform transition-transform duration-300 ${
-                    pumpZoneB ? "translate-x-6" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
-            <div className="mt-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-sm font-extrabold text-[#051f20]">Smart Pump B</h4>
-                <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full ${
-                  pumpZoneB ? "bg-[#daf1de] text-[#235347]" : "bg-[#daf1de]/40 text-[#163832]"
-                }`}>
-                  {pumpZoneB ? "MISTING ON" : "OFF"}
-                </span>
-              </div>
-              <p className="text-[11px] text-[#163832] font-medium mt-0.5">
-                {pumpZoneB ? "● Greenhouse Misting ON • 24 L/h" : "○ Standby • Tap card to start"}
-              </p>
-            </div>
-          </div>
-
-          {/* Card 3: Auto-Irrigation Schedule / Alarm */}
-          <div 
-            onClick={() => {
-              const next = !scheduleActive;
-              setScheduleActive(next);
-              setActionNotice(next ? "⏰ Auto-Irrigation Schedule Activated (07:00 AM)" : "⏸️ Auto-Irrigation Schedule Paused");
-              setTimeout(() => setActionNotice(null), 3500);
-            }}
-            className="bg-white text-[#051f20] rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] shadow-md border border-[#8eb69b]/35 cursor-pointer select-none active:scale-[0.98] hover:border-[#235347]/60 transition"
-          >
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-[#163832]">
-                Irrigation Alarm
-              </span>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const next = !scheduleActive;
-                  setScheduleActive(next);
-                  setActionNotice(next ? "⏰ Auto-Irrigation Schedule Activated (07:00 AM)" : "⏸️ Auto-Irrigation Schedule Paused");
-                  setTimeout(() => setActionNotice(null), 3500);
-                }}
-                className={`w-11 h-6 rounded-full p-0.5 transition-colors duration-300 relative ${
-                  scheduleActive ? "bg-[#235347]" : "bg-[#daf1de]"
-                }`}
-                title="Toggle Schedule"
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-white shadow transform transition-transform duration-300 ${
-                    scheduleActive ? "translate-x-5" : "translate-x-0"
-                  }`}
-                />
-              </button>
-            </div>
-            <div className="mt-2">
-              <span className="text-2xl font-extrabold text-[#051f20] tracking-tight">07:00</span>
-              <p className="text-[11px] text-[#163832] font-semibold">
-                {scheduleActive ? "● Scheduled Fertigation Active" : "○ Schedule Paused (Manual Mode)"}
-              </p>
-            </div>
-          </div>
-
-          {/* Card 4: Fertigation & Nutrient Injector */}
-          <div 
-            onClick={() => {
-              const next = !fertigationActive;
-              setFertigationActive(next);
-              setActionNotice(next ? "🧪 Fertigation Injector ON (N-P-K Solution 1:100)" : "🛑 Fertigation Injector OFF");
-              setTimeout(() => setActionNotice(null), 3500);
-            }}
-            className={`glass-panel rounded-[24px] p-4 flex flex-col justify-between min-h-[140px] transition-all cursor-pointer select-none active:scale-[0.98] ${
-              fertigationActive ? "border-[#235347] bg-white/95 shadow-md ring-2 ring-[#235347]/20" : "hover:border-[#235347]/50"
-            }`}
-          >
-            <div className="flex items-center justify-between">
-              <div className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
-                fertigationActive ? "bg-[#235347] text-white shadow-md animate-pulse" : "bg-[#daf1de] text-[#235347] border border-[#8eb69b]/40"
-              }`}>
-                <Wifi className="w-4 h-4" />
-              </div>
-              <span className={`flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${
-                fertigationActive ? "bg-[#daf1de] text-[#235347] border-[#235347]" : "bg-[#daf1de] text-[#051f20] border-[#8eb69b]/50"
-              }`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${fertigationActive ? "bg-[#235347] animate-ping" : "bg-[#235347]"}`} />
-                {fertigationActive ? "DOSING" : "100% Synced"}
-              </span>
-            </div>
-            <div className="mt-3">
-              <h4 className="text-sm font-extrabold text-[#051f20]">Fertigation Injector</h4>
-              <p className="text-[11px] text-[#163832] font-mono font-semibold">
-                {fertigationActive ? "● Injecting N-P-K • 1.2 L/h" : "○ Hotspot: 10.42.0.1 • Standby"}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* ========================================================================= */}
-        {/* 4 AI VISION DIAGNOSTICS & ROVER CONTROL SECTION */}
-        {/* ========================================================================= */}
-        <section className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-          
-          {/* 4 AI Vision Models Card */}
-          <div id="aiSection" className="lg:col-span-7 glass-panel-glow rounded-[28px] p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-[#051f20] to-[#235347] flex items-center justify-center text-white shadow-md">
-                  <Sparkles className="w-4 h-4 text-[#daf1de]" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-[#051f20]">4 AI Vision Models Diagnostics</h3>
-                  <p className="text-xs text-[#163832] font-semibold">Real-time edge camera crop health inference</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <button
-                  onClick={fetchAIDiagnostics}
-                  className="px-2.5 py-1 rounded-full text-[10px] font-bold glass-pill text-[#051f20] hover:border-[#235347] active:scale-95 transition flex items-center gap-1"
-                  title="Refresh AI Data"
-                >
-                  <RefreshCw className="w-3 h-3 text-[#235347]" />
-                  <span>Sync AI</span>
-                </button>
-                <span className="text-[11px] font-bold text-[#051f20] bg-[#daf1de] px-3 py-1 rounded-full border border-[#8eb69b]/50 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-[#235347] animate-pulse" />
-                  Edge AI Active
-                </span>
-              </div>
-            </div>
-
-            {/* 4 Diagnosis Mini-Cards */}
-            <div className="grid grid-cols-2 gap-2.5">
-              {/* 1. Disease Model */}
-              {(() => {
-                const dLabel = aiSummary?.disease?.detectionLabel || aiSummary?.disease?.detection_label || aiSummary?.disease?.name || "Healthy Foliage";
-                const isInf = dLabel && !dLabel.toLowerCase().includes("healthy") && !dLabel.toLowerCase().includes("no disease");
-                const conf = Math.round((aiSummary?.disease?.confidence || 0.96) * 100);
-                return (
-                  <div className={`p-3.5 rounded-2xl border space-y-1.5 shadow-sm transition-all ${
-                    isInf ? "bg-gradient-to-br from-white via-[#fff1f2] to-white border-[#fca5a5]" : "bg-white border-[#8eb69b]/35"
-                  }`}>
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#163832] font-semibold">1. Disease Model</span>
-                      <span className={`font-extrabold ${isInf ? "text-[#be123c]" : "text-[#235347]"}`}>{conf}%</span>
-                    </div>
-                    <p className={`text-xs font-bold truncate ${isInf ? "text-[#be123c]" : "text-[#051f20]"}`}>
-                      {isInf ? `⚠️ ${dLabel}` : `🌱 ${dLabel}`}
-                    </p>
-                    <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
-                      <div className={`h-full rounded-full transition-all duration-500 ${isInf ? "bg-[#be123c]" : "bg-[#235347]"}`} style={{ width: `${conf}%` }} />
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 2. Pest Scout */}
-              {(() => {
-                const pLabel = aiSummary?.pest?.detectionLabel || aiSummary?.pest?.detection_label || aiSummary?.pest?.name || "No Pests Detected";
-                const isPest = pLabel && !pLabel.toLowerCase().includes("no pest") && !pLabel.toLowerCase().includes("none") && !pLabel.toLowerCase().includes("healthy");
-                const conf = Math.round((aiSummary?.pest?.confidence || 0.94) * 100);
-                return (
-                  <div className={`p-3.5 rounded-2xl border space-y-1.5 shadow-sm transition-all ${
-                    isPest ? "bg-gradient-to-br from-white via-[#fffbeb] to-white border-[#fde68a]" : "bg-white border-[#8eb69b]/35"
-                  }`}>
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#163832] font-semibold">2. Pest Scout</span>
-                      <span className={`font-extrabold ${isPest ? "text-[#d97706]" : "text-[#235347]"}`}>{conf}%</span>
-                    </div>
-                    <p className={`text-xs font-bold truncate ${isPest ? "text-[#b45309]" : "text-[#051f20]"}`}>
-                      {isPest ? `🐛 ${pLabel}` : `🛡️ ${pLabel}`}
-                    </p>
-                    <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
-                      <div className={`h-full rounded-full transition-all duration-500 ${isPest ? "bg-[#d97706]" : "bg-[#235347]"}`} style={{ width: `${conf}%` }} />
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 3. Nutrition Balance */}
-              {(() => {
-                const nLabel = aiSummary?.nutrition?.detectionLabel || aiSummary?.nutrition?.detection_label || aiSummary?.nutrition?.name || "Optimal N-P-K";
-                const isDef = nLabel && !nLabel.toLowerCase().includes("optimal") && !nLabel.toLowerCase().includes("balanced") && !nLabel.toLowerCase().includes("healthy");
-                const conf = Math.round((aiSummary?.nutrition?.confidence || 0.91) * 100);
-                return (
-                  <div className={`p-3.5 rounded-2xl border space-y-1.5 shadow-sm transition-all ${
-                    isDef ? "bg-gradient-to-br from-white via-[#fefce8] to-white border-[#fef08a]" : "bg-white border-[#8eb69b]/35"
-                  }`}>
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#163832] font-semibold">3. Nutrition Balance</span>
-                      <span className="text-[#8eb69b] font-extrabold">{conf}%</span>
-                    </div>
-                    <p className="text-xs font-bold text-[#051f20] truncate">
-                      {isDef ? `🧪 ${nLabel}` : `✨ ${nLabel}`}
-                    </p>
-                    <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-[#8eb69b] h-full rounded-full transition-all duration-500" style={{ width: `${conf}%` }} />
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {/* 4. Growth Stage */}
-              {(() => {
-                const sLabel = aiSummary?.stage?.detectionLabel || aiSummary?.stage?.detection_label || aiSummary?.stage?.name || "Stage 3: Flowering";
-                const conf = Math.round((aiSummary?.stage?.confidence || 0.98) * 100);
-                return (
-                  <div className="p-3.5 rounded-2xl bg-white border border-[#8eb69b]/35 space-y-1.5 shadow-sm">
-                    <div className="flex items-center justify-between text-[11px]">
-                      <span className="text-[#163832] font-semibold">4. Growth Stage</span>
-                      <span className="text-[#051f20] font-extrabold">{conf}%</span>
-                    </div>
-                    <p className="text-xs font-bold text-[#051f20] truncate">
-                      🌸 {sLabel}
-                    </p>
-                    <div className="w-full bg-[#daf1de] rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-[#051f20] h-full rounded-full transition-all duration-500" style={{ width: `${conf}%` }} />
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Quick Test / Live Camera Simulation Toolbar */}
-            <div className="p-3 rounded-2xl bg-white/90 border border-[#8eb69b]/40 space-y-2.5 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-xl bg-[#daf1de] flex items-center justify-center text-sm shadow-xs">
-                    📸
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full border border-[#E2E7ED] bg-white flex items-center justify-center text-[#5E6977] shadow-xs">
+                    <Clock className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-extrabold text-[#051f20]">Crop Camera AI Scanner</h4>
-                    <p className="text-[10px] text-[#163832] font-medium">Scan leaf photo or trigger real-time AI infection simulation</p>
+                    <span className="text-[10px] text-[#8E9BAA] font-bold block leading-none">
+                      You have been online
+                    </span>
+                    <span className="text-lg font-black text-[#121417]">
+                      124<span className="text-[10px] font-semibold text-[#8E9BAA] ml-1">Hours per month</span>
+                    </span>
                   </div>
                 </div>
 
-                <label className="cursor-pointer px-3 py-1.5 rounded-xl text-xs font-bold bg-[#051f20] text-[#daf1de] hover:bg-[#235347] active:scale-95 transition shadow-sm flex items-center gap-1.5">
-                  <span>📷 Upload Leaf</span>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full border border-[#E2E7ED] bg-white flex items-center justify-center text-[#5E6977] shadow-xs">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-[#8E9BAA] font-bold block leading-none">
+                      This month you visited
+                    </span>
+                    <span className="text-lg font-black text-[#121417]">
+                      315<span className="text-[10px] font-semibold text-[#8E9BAA] ml-1">Sites / Packets</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Pills Row */}
+            <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
+              <div className="flex items-center gap-2">
+                {[
+                  { id: "all", label: "All" },
+                  { id: "activity", label: "Activity" },
+                  { id: "weather", label: "Weather" },
+                  { id: "sensors", label: "Sensors" },
+                  { id: "pumps", label: "Pumps" },
+                  { id: "rover", label: "Rover" },
+                  { id: "ai", label: "AI Models" },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as any)}
+                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${
+                      activeTab === tab.id
+                        ? "capsule-pill-active"
+                        : "capsule-pill hover:bg-[#F3F6F9]"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setActionNotice("➕ New Sensor Tag Configured")}
+                  className="w-7 h-7 rounded-full capsule-pill flex items-center justify-center text-xs font-black"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Download & Options */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleDownloadReport}
+                  className="w-8 h-8 rounded-full capsule-pill flex items-center justify-center text-[#5E6977] hover:text-[#121417]"
+                  title="Download CSV Report"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  onClick={loadDashboardData}
+                  className="w-8 h-8 rounded-full capsule-pill flex items-center justify-center text-[#5E6977] hover:text-[#121417]"
+                  title="Refresh Telemetry"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
+                </button>
+              </div>
+            </div>
+
+            {/* =================================================================== */}
+            {/* HERO AGRICULTURAL INTELLIGENCE & HYDRATION MATRIX CARD */}
+            {/* =================================================================== */}
+            <div className="mint-hero-card rounded-[32px] p-5 sm:p-6 relative overflow-hidden">
+              
+              {/* Top Sub-Bar Controls */}
+              <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#121417] text-white flex items-center justify-center text-sm shadow-xs">
+                    <Sprout className="w-4 h-4 text-[#D6EBE7]" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-black text-[#121417]">
+                        Crop Hydration & Soil Matrix
+                      </span>
+                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/80 text-[#121417] border border-white/80">
+                        {activeZone === "ZONE_A" ? "🍅 Tomato Field A" : "🌿 Greenhouse B"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-white/70 text-[#121417] border border-white/60 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#4FA89B] animate-ping" />
+                    Master ESP32 Connected
+                  </span>
+                </div>
+              </div>
+
+              {/* Main Layout: Left Real Metrics Cards + Right Real Soil Moisture Chart */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                
+                {/* Left Agricultural Sub-Cards */}
+                <div className="md:col-span-5 space-y-2.5">
+                  {/* Card 1: Root Soil Moisture & Target Presets */}
+                  <div className="bg-white/85 backdrop-blur-sm rounded-2xl p-3.5 border border-white/80 space-y-2 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-[#121417]">Root Soil Moisture</span>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                        currentMoisture >= 60 && currentMoisture <= 75 
+                          ? "bg-[#D6EBE7] text-[#121417]" 
+                          : currentMoisture < 60 
+                          ? "bg-[#FDE68A] text-[#D97706]" 
+                          : "bg-[#E8DFF5] text-[#7C5CBF]"
+                      }`}>
+                        {currentMoisture >= 60 && currentMoisture <= 75 ? "Optimal Hydration" : currentMoisture < 60 ? "Low Moisture" : "Saturated"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black text-[#121417]">{currentMoisture}%</span>
+                      <span className="text-xs text-[#5E6977] font-semibold">
+                        Target: <strong className="text-[#121417]">{moistureTarget}%</strong>
+                      </span>
+                    </div>
+
+                    {/* Target Preset Selectors */}
+                    <div className="flex items-center gap-1.5 pt-1 border-t border-[#E2E7ED]/60">
+                      <span className="text-[10px] text-[#5E6977] font-bold mr-1">Preset:</span>
+                      {[50, 65, 75, 85].map((target) => (
+                        <button
+                          key={target}
+                          onClick={() => {
+                            setMoistureTarget(target);
+                            setActionNotice(`🎯 Target Setpoint: ${target}% Moisture`);
+                          }}
+                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition ${
+                            moistureTarget === target
+                              ? "bg-[#121417] text-white shadow-xs"
+                              : "bg-white text-[#5E6977] hover:bg-[#D6EBE7] border border-[#E2E7ED]"
+                          }`}
+                        >
+                          {target}%
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Card 2: Live Actuator & Safety Interlock Status */}
+                  <div className="bg-white/85 backdrop-blur-sm rounded-2xl p-3.5 border border-white/80 space-y-2 shadow-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-[#121417]">Live Actuator Interlocks</span>
+                      <span className="text-[10px] font-mono font-bold text-[#5E6977]">Relays 25/26/27</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {/* Pump Zone A Status Button */}
+                      <button
+                        onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
+                        className={`p-2 rounded-xl text-left border transition ${
+                          pumpZoneA
+                            ? "bg-[#121417] text-white border-[#121417] shadow-xs"
+                            : "bg-white text-[#121417] border-[#E2E7ED] hover:bg-[#F3F6F9]"
+                        }`}
+                      >
+                        <span className="text-[10px] block font-semibold opacity-75">Pump A (Field)</span>
+                        <span className="font-black text-xs">{pumpZoneA ? "● 42 L/h ON" : "○ OFF (Tap)"}</span>
+                      </button>
+
+                      {/* Rain Sensor Status */}
+                      <div className={`p-2 rounded-xl border ${
+                        isRaining 
+                          ? "bg-[#FFE4E6] border-[#fca5a5] text-[#E11D48]" 
+                          : "bg-white border-[#E2E7ED] text-[#121417]"
+                      }`}>
+                        <span className="text-[10px] block font-semibold opacity-75">Rain Sensor (Pin 27)</span>
+                        <span className="font-black text-xs">{isRaining ? "🌧️ Interlock ON" : "☀️ Sensor Dry"}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Real 7-Day Soil Moisture & Irrigation Trend Columns */}
+                <div className="md:col-span-6 flex items-end justify-between gap-2 pt-2 px-2">
+                  {[
+                    { day: "Mon", moist: 62, pumpMins: 30, optimal: true },
+                    { day: "Tue", moist: 66, pumpMins: 45, optimal: true },
+                    { day: "Wed", moist: 58, pumpMins: 20, optimal: false },
+                    { day: "Thu", moist: 70, pumpMins: 50, optimal: true },
+                    { day: "Fri", moist: 64, pumpMins: 35, optimal: true },
+                    { day: "Sat", moist: 68, pumpMins: 40, optimal: true },
+                    { day: "Today", moist: currentMoisture, pumpMins: pumpZoneA ? 60 : 25, isToday: true },
+                  ].map((item, idx) => (
+                    <div key={idx} className="flex flex-col items-center gap-1.5 flex-1">
+                      {/* Numerical Moisture Badge */}
+                      <span className={`text-[10px] font-black ${item.isToday ? "text-[#121417]" : "text-[#5E6977]"}`}>
+                        {item.moist}%
+                      </span>
+
+                      {/* Real Moisture Bar Container */}
+                      <div className="w-full max-w-[32px] h-28 rounded-2xl bg-white/60 p-1 flex flex-col justify-end border border-white/80 shadow-xs">
+                        <div
+                          className={`w-full rounded-xl transition-all duration-500 ${
+                            item.isToday
+                              ? "bg-[#121417] shadow-sm"
+                              : item.moist >= 60 && item.moist <= 75
+                              ? "bg-[#4FA89B]"
+                              : item.moist < 60
+                              ? "bg-[#FDE68A]"
+                              : "bg-[#7C5CBF]"
+                          }`}
+                          style={{ height: `${Math.min(100, Math.max(15, (item.moist / 100) * 100))}%` }}
+                        />
+                      </div>
+
+                      <span className={`text-[10px] font-extrabold ${item.isToday ? "text-[#121417] font-black" : "text-[#5E6977]"}`}>
+                        {item.day}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Far Right Action Buttons */}
+                <div className="md:col-span-1 hidden md:flex flex-col items-center gap-2 bg-white/70 p-1.5 rounded-full border border-white/80 self-center shadow-xs">
+                  <button
+                    onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
+                    className="w-8 h-8 rounded-full bg-[#121417] text-white flex items-center justify-center hover:bg-[#2E333A] transition"
+                    title="Quick Pump Toggle"
+                  >
+                    <Droplets className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setSimulatedRain((prev) => (prev === null ? !Boolean(latest?.rainDetected) : !prev))}
+                    className="w-8 h-8 rounded-full bg-white text-[#5E6977] hover:text-[#121417] flex items-center justify-center border border-[#E2E7ED]"
+                    title="Test Rain Sensor"
+                  >
+                    <CloudRain className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("ai")}
+                    className="w-8 h-8 rounded-full bg-white text-[#5E6977] hover:text-[#121417] flex items-center justify-center border border-[#E2E7ED]"
+                    title="AI Leaf Diagnosis"
+                  >
+                    <Sparkles className="w-4 h-4" />
+                  </button>
+                </div>
+
+              </div>
+            </div>
+
+            {/* =================================================================== */}
+            {/* 7-DAY LIVE MICROCLIMATE & WEATHER FORECAST WIDGET */}
+            {/* =================================================================== */}
+            <div className="bento-card p-5 space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#E2E7ED]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-[#D6EBE7] text-[#121417] flex items-center justify-center text-xl shadow-xs">
+                    <CloudSun className="w-5 h-5 text-[#121417] animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm font-black text-[#121417]">
+                        Live Weather & Microclimate Forecast
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D6EBE7] text-[#121417]">
+                        Lucknow Region (26.85°N, 80.95°E)
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#5E6977] font-medium">
+                      Open-Meteo Satellite Feed • Updated: {weather?.time || "Just now"}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-[#EAF4F2] text-[#121417] border border-[#BDE0D8] flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-[#4FA89B] animate-ping" />
+                    Satellite Synced
+                  </span>
+                </div>
+              </div>
+
+              {/* 4 Current Conditions Micro-Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#E2E7ED] flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#D6EBE7] flex items-center justify-center text-[#121417]">
+                    <Thermometer className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-[#8E9BAA]">Air Temp</p>
+                    <p className="text-sm font-black text-[#121417]">{weather?.temperature ?? 28}°C</p>
+                  </div>
+                </div>
+
+                <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#E2E7ED] flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#D6EBE7] flex items-center justify-center text-[#121417]">
+                    <Droplets className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-[#8E9BAA]">Atm Humidity</p>
+                    <p className="text-sm font-black text-[#121417]">{weather?.humidity ?? 65}%</p>
+                  </div>
+                </div>
+
+                <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#E2E7ED] flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#D6EBE7] flex items-center justify-center text-[#121417]">
+                    <Wind className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-[#8E9BAA]">Wind Speed</p>
+                    <p className="text-sm font-black text-[#121417]">{weather?.windSpeed ?? 8} km/h</p>
+                  </div>
+                </div>
+
+                <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#E2E7ED] flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-[#D6EBE7] flex items-center justify-center text-[#121417]">
+                    <CloudSun className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-bold text-[#8E9BAA]">Condition</p>
+                    <p className="text-xs font-black text-[#121417] truncate">{weather?.condition || "Optimal"}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* 7-Day Daily Forecast Strip */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-1">
+                {(weather?.days && weather.days.length > 0
+                  ? weather.days
+                  : [
+                      { dayLabel: "Today", tempMax: 28, tempMin: 21, rainProb: 0, condition: "Sunny", isToday: true },
+                      { dayLabel: "Fri", tempMax: 27, tempMin: 20, rainProb: 10, condition: "Partly Cloudy", isToday: false },
+                      { dayLabel: "Sat", tempMax: 25, tempMin: 19, rainProb: 65, condition: "Rain", isToday: false },
+                      { dayLabel: "Sun", tempMax: 29, tempMin: 22, rainProb: 5, condition: "Sunny", isToday: false },
+                      { dayLabel: "Mon", tempMax: 28, tempMin: 21, rainProb: 15, condition: "Partly Cloudy", isToday: false },
+                      { dayLabel: "Tue", tempMax: 30, tempMin: 23, rainProb: 20, condition: "Sunny", isToday: false },
+                      { dayLabel: "Wed", tempMax: 27, tempMin: 20, rainProb: 40, condition: "Showers", isToday: false },
+                    ]
+                ).map((day, idx) => (
+                  <div
+                    key={idx}
+                    className={`rounded-2xl p-2.5 flex flex-col items-center justify-between text-center transition ${
+                      day.isToday
+                        ? "bg-[#121417] text-white shadow-md ring-2 ring-[#D6EBE7]"
+                        : "bg-[#F8FAFC] hover:bg-white text-[#121417] border border-[#E2E7ED]"
+                    }`}
+                  >
+                    <span className={`text-[10px] font-black uppercase ${day.isToday ? "text-[#FDE68A]" : "text-[#5E6977]"}`}>
+                      {day.dayLabel}
+                    </span>
+                    <span className="text-xl my-1">{day.condition.toLowerCase().includes("rain") ? "🌧️" : day.condition.toLowerCase().includes("cloud") ? "⛅" : "☀️"}</span>
+                    <div className="flex items-center gap-1 text-[11px] font-black">
+                      <span>{day.tempMax}°</span>
+                      <span className={`text-[9px] font-normal ${day.isToday ? "text-white/70" : "text-[#8E9BAA]"}`}>{day.tempMin}°</span>
+                    </div>
+                    <div className={`mt-1 text-[9px] font-black px-2 py-0.5 rounded-full ${
+                      day.isToday ? "bg-white/20 text-white" : "bg-[#D6EBE7] text-[#121417]"
+                    }`}>
+                      💧 {day.rainProb}%
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* =================================================================== */}
+            {/* HISTORICAL TELEMETRY GRAPH DECK */}
+            {/* =================================================================== */}
+            <div className="bento-card p-5 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-black text-[#121417]">
+                    Graphs for Previous Data (Telemetry History)
+                  </h3>
+                  <p className="text-xs text-[#5E6977]">
+                    Soil Moisture (%) & Temperature (°C) real-time logged trends
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 text-xs font-bold">
+                  <span className="flex items-center gap-1.5 text-[#121417]">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#121417]" /> Moisture (%)
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[#4FA89B]">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#4FA89B]" /> Temp (°C)
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-44 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="moistGradBento" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#121417" stopOpacity={0.25} />
+                        <stop offset="95%" stopColor="#121417" stopOpacity={0.0} />
+                      </linearGradient>
+                      <linearGradient id="tempGradBento" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#4FA89B" stopOpacity={0.3} />
+                        <stop offset="95%" stopColor="#4FA89B" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="2 2" stroke="rgba(0,0,0,0.05)" />
+                    <XAxis dataKey="time" stroke="#8E9BAA" tick={{ fontSize: 10, fill: "#8E9BAA" }} />
+                    <YAxis stroke="#8E9BAA" tick={{ fontSize: 10, fill: "#8E9BAA" }} />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: "#FFFFFF",
+                        borderColor: "#E2E7ED",
+                        borderRadius: "14px",
+                        color: "#121417",
+                        fontSize: "11px",
+                        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="moisture"
+                      stroke="#121417"
+                      strokeWidth={2.5}
+                      fillOpacity={1}
+                      fill="url(#moistGradBento)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="temp"
+                      stroke="#4FA89B"
+                      strokeWidth={2}
+                      fillOpacity={1}
+                      fill="url(#tempGradBento)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* =================================================================== */}
+            {/* BOTTOM 3 BENTO CARDS ROW */}
+            {/* =================================================================== */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              
+              {/* Card 1: Most Used / Sensor Telemetry Gauges */}
+              <div className="bento-card p-4 flex flex-col justify-between min-h-[220px]">
+                <div>
+                  <h3 className="text-sm font-black text-[#121417]">Most used</h3>
+                  <p className="text-[10px] text-[#8E9BAA] font-semibold">5 primary crop telemetry nodes</p>
+                </div>
+
+                {/* 5 Vertical Bar Meters */}
+                <div className="flex items-end justify-between gap-2 my-2 px-1">
+                  {/* Gauge 1: 30% */}
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-7 h-24 rounded-full bg-[#EAF4F2] p-1 flex flex-col justify-end">
+                      <div className="w-full bg-[#D6EBE7] rounded-full" style={{ height: "30%" }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#121417]">30%</span>
+                    <span className="text-[10px] text-[#8E9BAA]">🌿</span>
+                  </div>
+
+                  {/* Gauge 2: 72% */}
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-7 h-24 rounded-full bg-[#F5EEFB] p-1 flex flex-col justify-end">
+                      <div className="w-full bg-[#E8DFF5] rounded-full" style={{ height: "72%" }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#121417]">72%</span>
+                    <span className="text-[10px] text-[#8E9BAA]">💧</span>
+                  </div>
+
+                  {/* Gauge 3: Hero 52% (Active in Black Pill) */}
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-7 h-24 rounded-full bg-[#121417] p-1 flex flex-col justify-end shadow-md">
+                      <div className="w-full bg-[#2E333A] rounded-full" style={{ height: "52%" }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#121417]">{currentMoisture}%</span>
+                    <span className="text-[10px] text-[#121417] font-black">🚜</span>
+                  </div>
+
+                  {/* Gauge 4: 76% */}
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-7 h-24 rounded-full bg-[#EAF4F2] p-1 flex flex-col justify-end">
+                      <div className="w-full bg-[#D6EBE7] rounded-full" style={{ height: "76%" }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#121417]">76%</span>
+                    <span className="text-[10px] text-[#8E9BAA]">⚡</span>
+                  </div>
+
+                  {/* Gauge 5: 27% */}
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-7 h-24 rounded-full bg-[#F5EEFB] p-1 flex flex-col justify-end">
+                      <div className="w-full bg-[#E8DFF5] rounded-full" style={{ height: "27%" }} />
+                    </div>
+                    <span className="text-[10px] font-black text-[#121417]">27%</span>
+                    <span className="text-[10px] text-[#8E9BAA]">🌧️</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 2: Protection / Telemetry Dual Curves */}
+              <div className="bento-card p-4 flex flex-col justify-between min-h-[220px]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-[#121417]">Protection</h3>
+                    <p className="text-[10px] text-[#8E9BAA]">Root zone & ESP32 telemetry curves</p>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {/* Top Curve Box */}
+                  <div className="bg-[#EAF4F2] rounded-2xl p-2.5 flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-bold text-[#5E6977]">Account protection</span>
+                      <p className="text-sm font-black text-[#121417]">23% ↗</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {[1, 2, 4, 6, 8, 6, 4, 2].map((v, i) => (
+                        <span key={i} className="w-1.5 rounded-full bg-[#121417]" style={{ height: `${v * 2.5}px` }} />
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Bottom Line Spectrum Box */}
+                  <div className="bg-[#121417] text-white rounded-2xl p-2.5 flex items-center justify-between shadow-xs">
+                    <div>
+                      <span className="text-[10px] text-white/70 font-bold">Verification speed</span>
+                      <p className="text-sm font-black text-white">17% ↘</p>
+                    </div>
+                    <div className="flex items-end gap-0.5 h-6">
+                      {[3, 5, 8, 12, 16, 20, 15, 10, 8, 6, 12, 18, 14, 8, 4].map((h, i) => (
+                        <span key={i} className="w-0.5 bg-white/80" style={{ height: `${h}px` }} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Card 3: Update / Holographic AI Crop Diagnostics */}
+              <div className="hologram-card p-4 flex flex-col justify-between min-h-[220px] relative overflow-hidden">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-black text-[#121417]">Update</h3>
+                    <p className="text-[10px] text-[#5E6977]">4 AI Vision Models Active</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[#5E6977]">
+                    <Heart className="w-3.5 h-3.5 hover:text-[#E11D48] cursor-pointer" />
+                    <Share2 className="w-3.5 h-3.5 hover:text-[#121417] cursor-pointer" />
+                  </div>
+                </div>
+
+                {/* 3D Visual Crop Avatar & Action */}
+                <div className="my-2 flex items-center justify-between bg-white/70 backdrop-blur-sm rounded-2xl p-2.5 border border-white/80">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-[#7C5CBF] via-[#D6EBE7] to-[#FDE68A] flex items-center justify-center text-xl shadow-xs">
+                      🧬
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-[#121417]">Verification by AI</h4>
+                      <p className="text-[10px] text-[#5E6977] font-semibold">
+                        {aiSummary?.disease?.detectionLabel || "Healthy Foliage (96%)"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setActiveTab("ai")}
+                    className="px-3 py-1 rounded-full bg-[#121417] text-white text-[11px] font-black hover:bg-[#2E333A] active:scale-95 transition"
+                  >
+                    Read &gt;
+                  </button>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
+
+          {/* ===================================================================== */}
+          {/* COLUMN 3: RIGHT SIDEBAR DECK */}
+          {/* ===================================================================== */}
+          <div className="lg:col-span-3 space-y-4">
+            
+            {/* Card 1: Add User / Rover Viewfinder Camera & Autonomous/Manual Deck */}
+            <div className="bento-card p-4 space-y-3">
+              <div className="relative bg-[#F4F7FA] rounded-2xl p-3.5 border border-[#E2E7ED] flex flex-col items-center justify-center text-center overflow-hidden">
+                {/* Viewfinder Target Framing Brackets */}
+                <div className="absolute top-2.5 left-2.5 w-3 h-3 border-t-2 border-l-2 border-[#121417]" />
+                <div className="absolute top-2.5 right-2.5 w-3 h-3 border-t-2 border-r-2 border-[#121417]" />
+                <div className="absolute bottom-2.5 left-2.5 w-3 h-3 border-b-2 border-l-2 border-[#121417]" />
+                <div className="absolute bottom-2.5 right-2.5 w-3 h-3 border-b-2 border-r-2 border-[#121417]" />
+                
+                {/* Header: Title + Auto Mode Pill + Battery */}
+                <div className="flex items-center justify-between w-full mb-2.5 flex-wrap gap-1">
+                  <span className="text-[10px] font-black text-[#121417] uppercase tracking-wider flex items-center gap-1">
+                    <span>🚜</span>
+                    <span>Field Rover Deck</span>
+                  </span>
+                  
+                  <div className="flex items-center gap-1.5">
+                    {/* Auto Mode Quick Toggle Button (Identical to Offline Dashboard) */}
+                    <button
+                      id="btnRoverAutoToggle"
+                      onClick={toggleRoverAutoMode}
+                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition border shadow-2xs flex items-center gap-1 ${
+                        roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL"
+                          ? "bg-[#121417] text-white border-[#121417] shadow-xs"
+                          : "bg-white text-[#121417] border-[#E2E7ED] hover:bg-[#D6EBE7]"
+                      }`}
+                    >
+                      <span>🤖 Auto: {roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL" ? "ON" : "OFF"}</span>
+                      {(roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL") && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#4FA89B] animate-ping" />
+                      )}
+                    </button>
+
+                    <span className="text-[10px] font-mono font-bold bg-white px-2 py-0.5 rounded-full border border-[#E2E7ED]">
+                      🔋 {roverBattery}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Segmented Mode Selector: Manual D-Pad vs Auto Patrol */}
+                <div className="flex items-center w-full p-0.5 bg-white rounded-full border border-[#E2E7ED] mb-2.5 shadow-2xs">
+                  <button
+                    onClick={() => {
+                      if (roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL") {
+                        sendCommand("ROVER", "STOP");
+                      } else {
+                        setRoverAction("MANUAL");
+                      }
+                      setActionNotice("🎮 Rover switched to Manual D-Pad Mode");
+                    }}
+                    className={`flex-1 py-1 rounded-full text-[10px] font-black transition ${
+                      !roverAutoMode && roverAction !== "AUTO_ON" && roverAction !== "AUTO_PATROL"
+                        ? "bg-[#121417] text-white shadow-xs"
+                        : "text-[#5E6977] hover:text-[#121417]"
+                    }`}
+                  >
+                    🎮 Manual D-Pad
+                  </button>
+                  <button
+                    onClick={() => {
+                      sendCommand("ROVER", "AUTO_ON");
+                      setActionNotice("🤖 Autonomous Field Patrol & Plant Scan Engaged!");
+                    }}
+                    className={`flex-1 py-1 rounded-full text-[10px] font-black transition flex items-center justify-center gap-1 ${
+                      roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL"
+                        ? "bg-[#D6EBE7] text-[#121417] font-black border border-[#BDE0D8] shadow-xs"
+                        : "text-[#5E6977] hover:text-[#121417]"
+                    }`}
+                  >
+                    <span>🤖 Auto Patrol</span>
+                    {(roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL") && (
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#121417] animate-ping" />
+                    )}
+                  </button>
+                </div>
+
+                {/* Conditional UI: If Auto Mode is ON vs Manual D-Pad */}
+                {roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL" || roverAction === "SCANNING PLANT" || roverAction === "PATROL-FORWARD" || roverAction === "EVADE-RIGHT" ? (
+                  <div className="w-full bg-[#D6EBE7]/50 border border-[#BDE0D8] rounded-2xl p-3 my-1 text-center space-y-2">
+                    <div className="flex items-center justify-center gap-1.5 text-xs font-black text-[#121417]">
+                      <span className="w-2 h-2 rounded-full bg-[#121417] animate-pulse" />
+                      <span>AUTONOMOUS FIELD PATROL</span>
+                    </div>
+
+                    {/* Live Row & Plant Telemetry Progress */}
+                    <div className="bg-white/80 rounded-xl p-2 border border-white space-y-1 text-left">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-[#5E6977]">Active Action:</span>
+                        <span className="font-black text-[#121417] px-2 py-0.5 rounded-full bg-[#D6EBE7]">
+                          {roverAction}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-[#5E6977]">Field Scouting:</span>
+                        <span className="font-black text-[#121417]">🌱 {roverScannedCount} Plants Scanned</span>
+                      </div>
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-[#5E6977]">Obstacle Distance:</span>
+                        <span className={`font-black ${roverDistance < 35 ? "text-[#E11D48]" : "text-[#4FA89B]"}`}>
+                          {roverDistance}cm ({roverDistance < 35 ? "Evasion Triggered" : "Clear Path"})
+                        </span>
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-[#5E6977] leading-tight font-medium">
+                      Patrolling crop row • Auto-pausing 1s to scan leaves • Ultrasonic evasion active
+                    </p>
+
+                    <button
+                      onClick={() => sendCommand("ROVER", "STOP")}
+                      className="w-full py-1.5 rounded-xl bg-[#E11D48] hover:bg-[#BE123C] text-white text-xs font-black shadow-xs active:scale-95 transition"
+                    >
+                      🛑 Disengage / Stop Auto Mode
+                    </button>
+                  </div>
+                ) : (
+                  /* D-Pad Joystick Manual Control */
+                  <div className="flex flex-col items-center justify-center gap-1.5 my-1">
+                    <button
+                      onClick={() => sendCommand("ROVER", "MOVE_FORWARD")}
+                      className="w-9 h-8 rounded-xl bg-white hover:bg-[#121417] hover:text-white border border-[#E2E7ED] shadow-xs flex items-center justify-center font-black active:scale-90 transition"
+                      title="Move Forward"
+                    >
+                      <ArrowUp className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => sendCommand("ROVER", "MOVE_LEFT")}
+                        className="w-9 h-8 rounded-xl bg-white hover:bg-[#121417] hover:text-white border border-[#E2E7ED] shadow-xs flex items-center justify-center font-black active:scale-90 transition"
+                        title="Turn Left"
+                      >
+                        <ArrowLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => sendCommand("ROVER", "STOP")}
+                        className="w-10 h-8 rounded-xl bg-[#E11D48] text-white flex items-center justify-center font-black active:scale-90 transition shadow-xs"
+                        title="Emergency Stop"
+                      >
+                        <Square className="w-3.5 h-3.5 fill-white" />
+                      </button>
+                      <button
+                        onClick={() => sendCommand("ROVER", "MOVE_RIGHT")}
+                        className="w-9 h-8 rounded-xl bg-white hover:bg-[#121417] hover:text-white border border-[#E2E7ED] shadow-xs flex items-center justify-center font-black active:scale-90 transition"
+                        title="Turn Right"
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <button
+                      onClick={() => sendCommand("ROVER", "MOVE_BACKWARD")}
+                      className="w-9 h-8 rounded-xl bg-white hover:bg-[#121417] hover:text-white border border-[#E2E7ED] shadow-xs flex items-center justify-center font-black active:scale-90 transition"
+                      title="Move Backward"
+                    >
+                      <ArrowDown className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+
+                {/* Speed Slider & Rover Target IP */}
+                <div className="w-full bg-white rounded-xl p-2 border border-[#E2E7ED] my-1 space-y-1.5 text-left shadow-2xs">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="font-bold text-[#5E6977]">⚡ Motor Speed:</span>
+                    <span className="font-mono font-black text-[#121417]">{roverSpeed} PWM</span>
+                  </div>
                   <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleCloudPhotoUpload}
-                    disabled={scanProcessing}
+                    type="range"
+                    min="60"
+                    max="255"
+                    step="5"
+                    value={roverSpeed}
+                    onChange={(e) => sendRoverSpeed(Number(e.target.value))}
+                    className="w-full h-1 bg-[#EEF1F5] rounded-lg appearance-none cursor-pointer accent-[#121417]"
                   />
-                </label>
-              </div>
-
-              {scanNotice && (
-                <div className="p-2 rounded-xl bg-[#daf1de] text-[#051f20] text-xs font-bold flex items-center gap-2 animate-pulse border border-[#8eb69b]/50">
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#235347]" />
-                  <span>{scanNotice}</span>
+                  <div className="flex items-center justify-between gap-1 text-[9px] pt-0.5 border-t border-[#E2E7ED]/60">
+                    <span className="text-[#5E6977] font-semibold">Node IP:</span>
+                    <input
+                      type="text"
+                      value={roverIp}
+                      onChange={(e) => setRoverIp(e.target.value)}
+                      className="text-right font-mono font-bold text-[#121417] bg-transparent outline-none w-24 border-b border-dashed border-[#8E9BAA]"
+                    />
+                  </div>
                 </div>
-              )}
 
-              {/* Simulation Preset Buttons */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-0.5">
+                {/* Manual Camera Snap & AI Diagnostics Trigger */}
                 <button
-                  onClick={() => triggerCropScanOrDiagnosis("Early Blight (Alternaria solani)", "No Pests Detected", "Balanced N-P-K", "Stage 3: Flowering", 0.97, 0.94)}
+                  onClick={captureRoverPhotoManual}
                   disabled={scanProcessing}
-                  className="p-2.5 rounded-xl text-left border transition-all hover:scale-[1.02] active:scale-95 bg-gradient-to-br from-[#fff1f2] via-white to-white border-[#fca5a5] shadow-xs cursor-pointer"
+                  className="w-full py-1.5 px-2 rounded-xl bg-white hover:bg-[#D6EBE7] text-[#121417] text-[10px] font-black border border-[#E2E7ED] shadow-2xs active:scale-95 transition flex items-center justify-center gap-1.5"
                 >
-                  <div className="flex items-center gap-1.5 font-extrabold text-xs text-[#be123c]">
-                    <span>🦠</span>
-                    <span>Early Blight</span>
-                  </div>
-                  <p className="text-[10px] text-[#9f1239] mt-0.5 font-semibold">Critical Infection</p>
+                  <span>📸</span>
+                  <span>{scanProcessing ? "Analyzing Leaf Scan..." : "Click Photo & Run AI Diagnostic"}</span>
                 </button>
 
-                <button
-                  onClick={() => triggerCropScanOrDiagnosis("Healthy Foliage", "Aphids Pest Infestation", "Balanced N-P-K", "Stage 3: Flowering", 0.96, 0.95)}
-                  disabled={scanProcessing}
-                  className="p-2.5 rounded-xl text-left border transition-all hover:scale-[1.02] active:scale-95 bg-gradient-to-br from-[#fffbeb] via-white to-white border-[#fde68a] shadow-xs cursor-pointer"
-                >
-                  <div className="flex items-center gap-1.5 font-extrabold text-xs text-[#b45309]">
-                    <span>🐛</span>
-                    <span>Aphids Swarm</span>
-                  </div>
-                  <p className="text-[10px] text-[#92400e] mt-0.5 font-semibold">Pest Warning</p>
-                </button>
+                {/* Telemetry Footer */}
+                <div className="flex items-center justify-between w-full text-[9px] text-[#5E6977] font-semibold pt-1 border-t border-[#E2E7ED]">
+                  <span>Dist: {roverDistance}cm</span>
+                  <span>Cmd: <strong className="text-[#121417]">{roverAction}</strong></span>
+                </div>
+              </div>
 
+              {/* Avatar Cluster */}
+              <div className="flex items-center justify-between pt-0.5">
+                <div className="flex items-center -space-x-2">
+                  <div className="w-7 h-7 rounded-full bg-[#D6EBE7] border-2 border-white flex items-center justify-center text-xs">👩‍🌾</div>
+                  <div className="w-7 h-7 rounded-full bg-[#E8DFF5] border-2 border-white flex items-center justify-center text-xs">👨‍🌾</div>
+                  <div className="w-7 h-7 rounded-full bg-[#121417] text-white border-2 border-white flex items-center justify-center text-[10px] font-black">+6</div>
+                </div>
                 <button
-                  onClick={() => triggerCropScanOrDiagnosis("Healthy Foliage", "No Pests Detected", "Potassium Deficiency (Marginal Necrosis)", "Stage 3: Flowering", 0.96, 0.94)}
-                  disabled={scanProcessing}
-                  className="p-2.5 rounded-xl text-left border transition-all hover:scale-[1.02] active:scale-95 bg-gradient-to-br from-[#fefce8] via-white to-white border-[#fef08a] shadow-xs cursor-pointer"
+                  onClick={() => setActionNotice("👥 8 Field Nodes Connected to Hub")}
+                  className="text-[11px] font-black text-[#121417] hover:underline flex items-center gap-0.5"
                 >
-                  <div className="flex items-center gap-1.5 font-extrabold text-xs text-[#854d0e]">
-                    <span>🧪</span>
-                    <span>Potassium Def</span>
-                  </div>
-                  <p className="text-[10px] text-[#713f12] mt-0.5 font-semibold">Nutrient Advisory</p>
-                </button>
-
-                <button
-                  onClick={() => triggerCropScanOrDiagnosis("Healthy Foliage", "No Pests Detected", "Optimal N-P-K", "Stage 3: Flowering", 0.98, 0.96)}
-                  disabled={scanProcessing}
-                  className="p-2.5 rounded-xl text-left border transition-all hover:scale-[1.02] active:scale-95 bg-gradient-to-br from-[#daf1de]/60 via-white to-white border-[#8eb69b]/60 shadow-xs cursor-pointer"
-                >
-                  <div className="flex items-center gap-1.5 font-extrabold text-xs text-[#235347]">
-                    <span>🌱</span>
-                    <span>Clear / Healthy</span>
-                  </div>
-                  <p className="text-[10px] text-[#163832] mt-0.5 font-semibold">Nominal Baseline</p>
+                  <span>view all</span>
+                  <ChevronRight className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
-          </div>
 
-          {/* Field Scout Rover Card */}
-          <div id="roverSection" className="lg:col-span-5 glass-panel-glow rounded-[28px] p-5 space-y-4 flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Navigation className="w-5 h-5 text-[#235347]" />
-                <h3 className="text-sm font-extrabold text-[#051f20]">Field Scout Rover</h3>
+            {/* Card 2: Resources / Smart Actuators & Relays (Pumps Zone A & Zone B) */}
+            <div className="bento-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase text-[#121417] tracking-wide">
+                  Pump Controls <span className="text-[#8E9BAA] font-bold">Zone A & B</span>
+                </h3>
               </div>
-              <div className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={roverIp}
-                  onChange={(e) => setRoverIp(e.target.value.trim())}
-                  placeholder="Rover IP"
-                  className="w-24 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg bg-white/80 border border-[#8eb69b]/50 text-[#051f20] text-center focus:outline-none focus:ring-1 focus:ring-[#235347]"
-                  title="Rover ESP32 IP Address"
-                />
-                <span className="flex items-center gap-1 text-xs text-[#051f20] font-bold bg-[#daf1de] px-2.5 py-0.5 rounded-full border border-[#8eb69b]/50">
-                  <BatteryCharging className="w-3.5 h-3.5 text-[#235347]" /> {roverBattery}%
-                </span>
-              </div>
-            </div>
 
-            {/* Quick D-Pad Joystick Navigation */}
-            <div className="flex flex-col items-center justify-center gap-1.5 py-1">
-              <button
-                onClick={() => sendCommand("ROVER", "MOVE_FORWARD")}
-                className="w-11 h-10 rounded-xl glass-pill flex items-center justify-center text-[#051f20] hover:bg-[#8eb69b]/30 active:scale-90 transition shadow-sm font-bold"
-                title="Forward"
-              >
-                <ArrowUp className="w-4 h-4 text-[#051f20]" />
-              </button>
-              <div className="flex items-center gap-2">
+              {/* Toggle Rows */}
+              <div className="space-y-2">
+                {/* Relay 1: Smart Pump Zone A */}
+                <div className="bg-[#F8FAFC] rounded-2xl p-2.5 flex items-center justify-between border border-[#E2E7ED]">
+                  <div>
+                    <span className="text-xs font-black text-[#121417] block">Pump Zone A</span>
+                    <span className="text-[10px] text-[#5E6977]">Relay Pin 25 • 42 L/h</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
+                      className={`toggle-switch-capsule ${pumpZoneA ? "" : "off"}`}
+                    >
+                      <div className="toggle-dot" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Relay 2: Pump Zone B Misting */}
+                <div className="bg-[#F8FAFC] rounded-2xl p-2.5 flex items-center justify-between border border-[#E2E7ED]">
+                  <div>
+                    <span className="text-xs font-black text-[#121417] block">Misting Zone B</span>
+                    <span className="text-[10px] text-[#5E6977]">Relay Pin 26 • 24 L/h</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      onClick={() => sendCommand("PUMP_ZONE_B", pumpZoneB ? "OFF" : "ON")}
+                      className={`toggle-switch-capsule ${pumpZoneB ? "" : "off"}`}
+                    >
+                      <div className="toggle-dot" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Relay 3: Fertigation Injector */}
+                <div className="bg-[#F8FAFC] rounded-2xl p-2.5 flex items-center justify-between border border-[#E2E7ED]">
+                  <div>
+                    <span className="text-xs font-black text-[#121417] block">Fertigation</span>
+                    <span className="text-[10px] text-[#5E6977]">N-P-K Dosing 1.2 L/h</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div
+                      onClick={() => {
+                        const next = !fertigationActive;
+                        setFertigationActive(next);
+                        setActionNotice(next ? "🧪 Fertigation Injector ON" : "🛑 Fertigation Injector OFF");
+                      }}
+                      className={`toggle-switch-capsule ${fertigationActive ? "" : "off"}`}
+                    >
+                      <div className="toggle-dot" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Relay 4: Auto-Drip Schedule */}
+                <div className="bg-[#F8FAFC] rounded-2xl p-2.5 flex items-center justify-between border border-[#E2E7ED]">
+                  <div>
+                    <span className="text-xs font-black text-[#121417] block">Auto Schedule</span>
+                    <span className="text-[10px] text-[#5E6977]">07:00 AM Automated</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#E8DFF5] text-[#7C5CBF] text-[10px] font-black">
+                      active
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bottom Expand Row */}
+              <div className="flex items-center justify-between pt-1">
                 <button
-                  onClick={() => sendCommand("ROVER", "MOVE_LEFT")}
-                  className="w-11 h-10 rounded-xl glass-pill flex items-center justify-center text-[#051f20] hover:bg-[#8eb69b]/30 active:scale-90 transition shadow-sm font-bold"
-                  title="Left"
+                  onClick={() => setActiveTab("pumps")}
+                  className="text-[11px] font-black text-[#5E6977] hover:text-[#121417] flex items-center gap-1"
                 >
-                  <ArrowLeft className="w-4 h-4 text-[#051f20]" />
+                  <span>view all</span>
+                  <ChevronDown className="w-3 h-3" />
                 </button>
                 <button
-                  onClick={() => sendCommand("ROVER", "STOP")}
-                  className="w-12 h-10 rounded-xl bg-gradient-to-r from-[#be123c] to-[#9f1239] text-white flex items-center justify-center active:scale-90 transition shadow-md"
-                  title="EMERGENCY STOP"
+                  onClick={() => setActionNotice("➕ New Relay Actuator Configured")}
+                  className="px-3 py-1 rounded-full capsule-pill text-[10px] font-black text-[#121417]"
                 >
-                  <Square className="w-4 h-4 fill-white" />
-                </button>
-                <button
-                  onClick={() => sendCommand("ROVER", "MOVE_RIGHT")}
-                  className="w-11 h-10 rounded-xl glass-pill flex items-center justify-center text-[#051f20] hover:bg-[#8eb69b]/30 active:scale-90 transition shadow-sm font-bold"
-                  title="Right"
-                >
-                  <ArrowRight className="w-4 h-4 text-[#051f20]" />
+                  add +
                 </button>
               </div>
-              <button
-                onClick={() => sendCommand("ROVER", "MOVE_BACKWARD")}
-                className="w-11 h-10 rounded-xl glass-pill flex items-center justify-center text-[#051f20] hover:bg-[#8eb69b]/30 active:scale-90 transition shadow-sm font-bold"
-                title="Backward"
-              >
-                <ArrowDown className="w-4 h-4 text-[#051f20]" />
-              </button>
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-[#8eb69b]/30">
-              <span className="text-[#163832]">Rover State: <strong className="text-[#051f20]">{roverAction}</strong></span>
-              <span className="text-[#235347] font-bold">Heading: NW (312°)</span>
-            </div>
-          </div>
-        </section>
+            {/* Card 3: Storage / Cloud Sync Progress Capsule Card */}
+            <div className="bg-[#121417] text-white rounded-[28px] p-4 flex flex-col justify-between min-h-[150px] shadow-lg">
+              <div className="bg-white/10 rounded-2xl p-3 flex items-center justify-between border border-white/10">
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-0.5">
+                    {[1, 1, 1, 1, 1, 0, 0, 0, 0, 0].map((v, i) => (
+                      <span key={i} className={`w-1.5 h-1.5 rounded-full ${v ? "bg-white" : "bg-white/20"}`} />
+                    ))}
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-black text-white">17/60</span>
+                  <span className="text-[9px] text-white/60 block leading-none">resources</span>
+                </div>
+              </div>
 
-        {/* ========================================================================= */}
-        {/* TELEMETRY ANALYTICS CHART SECTION */}
-        {/* ========================================================================= */}
-        <section className="glass-panel rounded-[28px] p-5 space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-extrabold text-[#051f20]">Live Field Telemetry History</h3>
-              <p className="text-xs text-[#163832] font-semibold">Real-time root soil moisture & canopy temperature</p>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5 text-[#235347] font-extrabold">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#235347]" /> Moisture (%)
-              </span>
-              <span className="flex items-center gap-1.5 text-[#163832] font-extrabold">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#163832]" /> Temp (°C)
-              </span>
-            </div>
-          </div>
-
-          <div className="h-48 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="moistEmeraldGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#235347" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#235347" stopOpacity={0.0} />
-                  </linearGradient>
-                  <linearGradient id="tempSpruceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#163832" stopOpacity={0.35} />
-                    <stop offset="95%" stopColor="#163832" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(22, 56, 50, 0.08)" />
-                <XAxis dataKey="time" stroke="#163832" tick={{ fontSize: 10, fill: "#163832" }} />
-                <YAxis stroke="#163832" tick={{ fontSize: 10, fill: "#163832" }} />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "rgba(255, 255, 255, 0.95)",
-                    borderColor: "rgba(142, 182, 155, 0.5)",
-                    borderRadius: "12px",
-                    color: "#051f20",
-                    fontSize: "12px",
-                    boxShadow: "0 4px 20px rgba(5, 31, 32, 0.1)",
+              <div className="mt-3 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-black text-white">Expand your possibilities</h4>
+                  <p className="text-[10px] text-white/60">Upgrade your plan and expand your farm.</p>
+                </div>
+                <button
+                  onClick={() => {
+                    loadDashboardData();
+                    setActionNotice("✨ Cloud Gateway Sync Complete!");
                   }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="moisture"
-                  stroke="#235347"
-                  strokeWidth={2.5}
-                  fillOpacity={1}
-                  fill="url(#moistEmeraldGrad)"
-                />
-                <Area
-                  type="monotone"
-                  dataKey="temp"
-                  stroke="#163832"
-                  strokeWidth={2}
-                  fillOpacity={1}
-                  fill="url(#tempSpruceGrad)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+                  className="w-8 h-8 rounded-full bg-white text-[#121417] flex items-center justify-center font-black shadow-md hover:bg-[#D6EBE7] transition"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
           </div>
-        </section>
+
+        </div>
 
       </div>
-
-      {/* ========================================================================= */}
-      {/* FLOATING GLASS BOTTOM NAVIGATION BAR */}
-      {/* ========================================================================= */}
-      <footer className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-md">
-        <div className="bg-white/92 rounded-full px-6 py-3 flex items-center justify-between shadow-xl border border-[#8eb69b]/40 backdrop-blur-2xl">
-          <button
-            onClick={() => {
-              setCurrentTab("home");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className={`p-2 rounded-full transition-all ${
-              currentTab === "home" ? "bg-[#051f20] text-[#daf1de] shadow-md" : "text-[#163832] hover:text-[#051f20]"
-            }`}
-            title="Dashboard Home"
-          >
-            <Home className="w-5 h-5" />
-          </button>
-          
-          <button
-            onClick={() => {
-              setCurrentTab("gauges");
-              scrollToRainSensor();
-            }}
-            className={`p-2 rounded-full transition-all ${
-              currentTab === "gauges" ? "bg-[#051f20] text-[#daf1de] shadow-md" : "text-[#163832] hover:text-[#051f20]"
-            }`}
-            title="Sensors & Gauges"
-          >
-            <Sun className="w-5 h-5" />
-          </button>
-
-          <button
-            onClick={scrollToRainSensor}
-            className={`p-2 rounded-full transition-all relative ${
-              isRaining ? "bg-cyan-600 text-white shadow-md animate-pulse" : "text-[#163832] hover:text-[#051f20]"
-            }`}
-            title="Rain Sensor"
-          >
-            <CloudRain className="w-5 h-5" />
-            {isRaining && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-cyan-300 rounded-full animate-ping" />
-            )}
-          </button>
-
-          <button
-            onClick={scrollToWeather}
-            className={`p-2 rounded-full transition-all ${
-              currentTab === "weather" ? "bg-[#051f20] text-[#daf1de] shadow-md" : "text-[#163832] hover:text-[#051f20]"
-            }`}
-            title="7-Day Live Weather"
-          >
-            <CloudSun className="w-5 h-5" />
-          </button>
-
-          <button
-            onClick={scrollToAlerts}
-            className={`p-2 rounded-full transition-all relative ${
-              currentTab === "alerts" ? "bg-[#051f20] text-[#daf1de] shadow-md" : "text-[#163832] hover:text-[#051f20]"
-            }`}
-            title="Farm Alerts"
-          >
-            <AlertTriangle className={`w-5 h-5 ${activeAlerts.length > 0 ? "text-[#be123c]" : ""}`} />
-            {activeAlerts.length > 0 && (
-              <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-[#be123c] text-white text-[9px] font-extrabold rounded-full flex items-center justify-center">
-                {activeAlerts.length}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={scrollToPumps}
-            className={`p-2 rounded-full transition-all ${
-              currentTab === "pumps" ? "bg-[#051f20] text-[#daf1de] shadow-md" : "text-[#163832] hover:text-[#051f20]"
-            }`}
-            title="Smart Pumps"
-          >
-            <Droplets className="w-5 h-5" />
-          </button>
-
-          <button
-            onClick={scrollToAI}
-            className={`p-2 rounded-full transition-all ${
-              currentTab === "ai" ? "bg-[#051f20] text-[#daf1de] shadow-md" : "text-[#163832] hover:text-[#051f20]"
-            }`}
-            title="AI Vision Diagnostics"
-          >
-            <Sparkles className="w-5 h-5" />
-          </button>
-
-          <button
-            onClick={scrollToRover}
-            className={`p-2 rounded-full transition-all ${
-              currentTab === "rover" ? "bg-[#051f20] text-[#daf1de] shadow-md" : "text-[#163832] hover:text-[#051f20]"
-            }`}
-            title="Field Rover Scout"
-          >
-            <Navigation className="w-5 h-5" />
-          </button>
-        </div>
-      </footer>
     </div>
   );
 }
