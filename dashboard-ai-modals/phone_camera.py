@@ -9,7 +9,7 @@ import time
 # ============================================================
 
 # Your phone is the hotspot gateway / IP webcam
-PHONE_IP = os.getenv("PHONE_CAMERA_IP", "10.59.28.47")
+PHONE_IP = os.getenv("PHONE_CAMERA_IP", "10.195.234.77")
 
 # Camera server port shown by your phone
 PHONE_PORT = int(os.getenv("PHONE_CAMERA_PORT", "8080"))

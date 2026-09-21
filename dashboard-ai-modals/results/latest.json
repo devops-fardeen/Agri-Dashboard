@@ -1,18 +1,29 @@
 {
     "success": true,
-    "image": "a122b41256cf4b009280ea4b89b2ad58.jpg",
-    "blur_score": 201.44,
+    "image": "98f26098ab8244a6bc4031522e372c5e.jpg",
+    "blur_score": 397.94,
     "results": {
         "disease": [
             {
-                "class_id": 3,
-                "name": "Leaf Miner",
-                "confidence": 0.597,
+                "class_id": 1,
+                "name": "Healthy",
+                "confidence": 0.489,
                 "bbox": [
-                    26,
-                    26,
-                    346,
-                    350
+                    274,
+                    50,
+                    381,
+                    191
+                ]
+            },
+            {
+                "class_id": 1,
+                "name": "Healthy",
+                "confidence": 0.438,
+                "bbox": [
+                    51,
+                    0,
+                    298,
+                    179
                 ]
             }
         ],
@@ -20,47 +31,47 @@
             {
                 "class_id": 3,
                 "name": "Silverleaf whitefly",
-                "confidence": 0.371,
+                "confidence": 0.492,
                 "bbox": [
-                    337,
-                    217,
-                    422,
-                    290
+                    13,
+                    0,
+                    317,
+                    224
                 ]
             }
         ],
         "nutrition": [
             {
-                "class_id": 11,
-                "name": "Tomato leaf yellow virus",
-                "confidence": 0.53,
+                "class_id": 0,
+                "name": "Balanced N-P-K",
+                "confidence": 0.93,
                 "bbox": [
-                    23,
-                    52,
-                    336,
-                    355
+                    0,
+                    0,
+                    0,
+                    0
                 ]
             }
         ],
         "stage": [
             {
-                "class_id": 0,
-                "name": "Stage 1",
-                "confidence": 0.801,
+                "class_id": 2,
+                "name": "Stage 3: Flowering",
+                "confidence": 0.98,
                 "bbox": [
                     0,
                     0,
-                    618,
-                    370
+                    0,
+                    0
                 ]
             }
         ],
         "timing": {
-            "disease": 0.358,
-            "pest": 0.666,
-            "nutrition": 1.107,
-            "stage": 1.043,
-            "total": 3.174
+            "disease": 0.407,
+            "pest": 0.733,
+            "nutrition": 0.971,
+            "stage": 1.146,
+            "total": 3.257
         }
     }
 }
