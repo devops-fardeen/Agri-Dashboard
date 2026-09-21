@@ -350,6 +350,49 @@ void receiveLoRa() {
 }
 
 // =====================================================
+// PROCESS COMMANDS FROM RASPBERRY PI
+// =====================================================
+
+bool manualRelayOverride1 = false;
+bool manualRelayState1 = false;
+bool manualRelayOverride2 = false;
+bool manualRelayState2 = false;
+
+void processSerialCommands() {
+  while (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+    if (cmd.length() == 0) continue;
+
+    if (cmd.equalsIgnoreCase("PUMP1_ON")) {
+      manualRelayOverride1 = true;
+      manualRelayState1 = true;
+      setRelay(RELAY1_PIN, true);
+      Serial.println("ACK: PUMP1_ON");
+    } else if (cmd.equalsIgnoreCase("PUMP1_OFF")) {
+      manualRelayOverride1 = true;
+      manualRelayState1 = false;
+      setRelay(RELAY1_PIN, false);
+      Serial.println("ACK: PUMP1_OFF");
+    } else if (cmd.equalsIgnoreCase("PUMP2_ON")) {
+      manualRelayOverride2 = true;
+      manualRelayState2 = true;
+      setRelay(RELAY2_PIN, true);
+      Serial.println("ACK: PUMP2_ON");
+    } else if (cmd.equalsIgnoreCase("PUMP2_OFF")) {
+      manualRelayOverride2 = true;
+      manualRelayState2 = false;
+      setRelay(RELAY2_PIN, false);
+      Serial.println("ACK: PUMP2_OFF");
+    } else if (cmd.equalsIgnoreCase("AUTO_MODE")) {
+      manualRelayOverride1 = false;
+      manualRelayOverride2 = false;
+      Serial.println("ACK: AUTO_MODE");
+    }
+  }
+}
+
+// =====================================================
 // IRRIGATION LOGIC
 // =====================================================
 
@@ -379,28 +422,23 @@ void irrigationControl() {
   bool pump1On = false;
   bool pump2On = false;
 
-  if (node1Online && !rainDetected) {
-
-    if (slave1.soilMoisture < 30) {
-
+  if (manualRelayOverride1) {
+    pump1On = manualRelayState1;
+  } else if (node1Online && !rainDetected) {
+    if (slave1.soilMoisture > 0 && slave1.soilMoisture < 30) {
       pump1On = true;
-
     }
-
   }
 
-  if (node2Online && !rainDetected) {
-
-    if (slave2.soilMoisture < 30) {
-
+  if (manualRelayOverride2) {
+    pump2On = manualRelayState2;
+  } else if (node2Online && !rainDetected) {
+    if (slave2.soilMoisture > 0 && slave2.soilMoisture < 30) {
       pump2On = true;
-
     }
-
   }
 
   setRelay(RELAY1_PIN, pump1On);
-
   setRelay(RELAY2_PIN, pump2On);
 
   Serial.println();
@@ -524,7 +562,7 @@ void setup() {
 // =====================================================
 
 void loop() {
-
+  processSerialCommands();
   receiveLoRa();
 
   static unsigned long lastSensorRead = 0;

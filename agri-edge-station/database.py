@@ -197,10 +197,10 @@ def init_db():
 
 def log_telemetry(
     zone_id: str,
-    soil_moisture: float,
-    soil_temp: float,
-    ambient_temp: float,
-    ambient_humidity: float,
+    soil_moisture: Optional[float] = None,
+    soil_temp: Optional[float] = None,
+    ambient_temp: Optional[float] = None,
+    ambient_humidity: Optional[float] = None,
     pump_active: int = 0,
     light_lux: float = 0.0,
     barometric_pressure: float = 1013.25,
@@ -223,12 +223,15 @@ def log_telemetry(
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (
             zone_id, node_id, recorded_at,
-            round(soil_moisture, 2), round(soil_temp, 2),
-            round(ambient_temp, 2), round(ambient_humidity, 2),
-            round(light_lux, 2), round(barometric_pressure, 2),
+            round(soil_moisture, 2) if soil_moisture is not None else None,
+            round(soil_temp, 2) if soil_temp is not None else None,
+            round(ambient_temp, 2) if ambient_temp is not None else None,
+            round(ambient_humidity, 2) if ambient_humidity is not None else None,
+            round(light_lux, 2) if light_lux is not None else 0.0,
+            round(barometric_pressure, 2) if barometric_pressure is not None else 1013.25,
             1 if pump_active else 0,
             1 if rain_detected else 0,
-            round(battery_level, 1)
+            round(battery_level, 1) if battery_level is not None else 95.0
         ))
         conn.commit()
         return cursor.lastrowid

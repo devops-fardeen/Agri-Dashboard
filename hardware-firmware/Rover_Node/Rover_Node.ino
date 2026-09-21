@@ -4,8 +4,10 @@
 #include "soc/rtc_cntl_reg.h"
 
 // =====================================================
-// WIFI & CAMERA CONFIGURATION (Phone Mobile Hotspot)
-// IP Camera: http://10.195.234.77:8080/video
+// WIFI & IP CAMERA CONFIGURATION (Phone Mobile Hotspot)
+// Stream endpoint: http://10.195.234.77:8080/video
+// Snapshot endpoint: http://10.195.234.77:8080/shot.jpg
+// (No onboard AI Camera — phone acts as IP camera)
 // =====================================================
 const char* WIFI_SSID     = "realme";
 const char* WIFI_PASSWORD = "123456789";

@@ -2667,24 +2667,24 @@
       const pumpKey = currentSelectedField === 'FIELD_A' ? 'PUMP_ZONE_A' : 'PUMP_ZONE_B';
       const isPumpOn = Boolean(actuators[pumpKey]);
 
-      // Update Subnode sensor numbers
-      const ambTemp = t.ambient_temp ?? 28.2;
-      const ambHum = t.ambient_humidity ?? 64.0;
-      const soilMoist = t.soil_moisture ?? 62.5;
-      const soilTemp = t.soil_temp ?? 23.8;
+      // Update Subnode sensor numbers (Render dashes '--' if sensor is disconnected/null)
+      const ambTemp = (t.ambient_temp !== null && t.ambient_temp !== undefined) ? t.ambient_temp : null;
+      const ambHum = (t.ambient_humidity !== null && t.ambient_humidity !== undefined) ? t.ambient_humidity : null;
+      const soilMoist = (t.soil_moisture !== null && t.soil_moisture !== undefined) ? t.soil_moisture : null;
+      const soilTemp = (t.soil_temp !== null && t.soil_temp !== undefined) ? t.soil_temp : null;
       const subBatt = t.battery_level ?? (currentSelectedField === 'FIELD_A' ? 96.0 : 92.5);
 
-      document.getElementById('valAmbientTemp').textContent = ambTemp.toFixed(1);
-      document.getElementById('valAmbientHumidity').textContent = ambHum.toFixed(1);
-      document.getElementById('valSoilMoisture').textContent = soilMoist.toFixed(1);
-      document.getElementById('valSoilTemp').textContent = soilTemp.toFixed(1);
+      document.getElementById('valAmbientTemp').textContent = ambTemp !== null ? ambTemp.toFixed(1) : '--';
+      document.getElementById('valAmbientHumidity').textContent = ambHum !== null ? ambHum.toFixed(1) : '--';
+      document.getElementById('valSoilMoisture').textContent = soilMoist !== null ? soilMoist.toFixed(1) : '--';
+      document.getElementById('valSoilTemp').textContent = soilTemp !== null ? soilTemp.toFixed(1) : '--';
       document.getElementById('valSubnodeBattery').textContent = subBatt.toFixed(1);
 
       // Meter bars
-      document.getElementById('meterAmbientTemp').style.width = `${Math.min(100, (ambTemp / 45) * 100)}%`;
-      document.getElementById('meterAmbientHumidity').style.width = `${Math.min(100, ambHum)}%`;
-      document.getElementById('meterSoilMoisture').style.width = `${Math.min(100, soilMoist)}%`;
-      document.getElementById('meterSoilTemp').style.width = `${Math.min(100, (soilTemp / 40) * 100)}%`;
+      document.getElementById('meterAmbientTemp').style.width = ambTemp !== null ? `${Math.min(100, (ambTemp / 45) * 100)}%` : '0%';
+      document.getElementById('meterAmbientHumidity').style.width = ambHum !== null ? `${Math.min(100, ambHum)}%` : '0%';
+      document.getElementById('meterSoilMoisture').style.width = soilMoist !== null ? `${Math.min(100, soilMoist)}%` : '0%';
+      document.getElementById('meterSoilTemp').style.width = soilTemp !== null ? `${Math.min(100, (soilTemp / 40) * 100)}%` : '0%';
       document.getElementById('meterSubnodeBattery').style.width = `${Math.min(100, subBatt)}%`;
 
       // Pump status

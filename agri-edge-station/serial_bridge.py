@@ -206,14 +206,21 @@ class MasterSerialBridge:
             if "Received:" in packet_str:
                 packet_str = packet_str.split("Received:", 1)[1].strip()
 
-            match = re.search(r"NODE=(\d+),T=([-\d\.]+),H=([-\d\.]+),SM=(\d+),SMRAW=(\d+),ST=([-\d\.]+)", packet_str)
+            match = re.search(r"NODE=(\d+),T=([-\d\.]+),H=([-\d\.]+),SM=([-\d]+),SMRAW=([-\d]+),ST=([-\d\.]+)", packet_str)
             if match:
                 node_id = int(match.group(1))
-                air_t = float(match.group(2))
-                air_h = float(match.group(3))
-                soil_m = int(match.group(4))
-                soil_raw = int(match.group(5))
-                soil_t = float(match.group(6))
+                raw_air_t = float(match.group(2))
+                raw_air_h = float(match.group(3))
+                raw_soil_m = int(match.group(4))
+                raw_soil_raw = int(match.group(5))
+                raw_soil_t = float(match.group(6))
+
+                # Handle disconnected sensor sentinel values (-999, -1)
+                air_t = None if (raw_air_t <= -900.0 or raw_air_t >= 900.0) else raw_air_t
+                air_h = None if (raw_air_h <= -900.0 or raw_air_h >= 900.0) else raw_air_h
+                soil_m = None if (raw_soil_m < 0 or raw_soil_m > 100) else raw_soil_m
+                soil_raw = None if (raw_soil_raw < 0) else raw_soil_raw
+                soil_t = None if (raw_soil_t <= -900.0 or raw_soil_t >= 900.0) else raw_soil_t
 
                 self.last_hardware_time = now_ts
                 self.hardware_active = True
@@ -235,14 +242,17 @@ class MasterSerialBridge:
 
                 logger.info(
                     f"📥 [LORA PACKET INGEST] Node {node_id} ({zone_id}) -> "
-                    f"Air: {air_t}°C, Hum: {air_h}%, Soil: {soil_m}% (Raw: {soil_raw}), Soil Temp: {soil_t}°C"
+                    f"Air: {air_t if air_t is not None else '--'}°C, "
+                    f"Hum: {air_h if air_h is not None else '--'}%, "
+                    f"Soil: {soil_m if soil_m is not None else '--'}% (Raw: {soil_raw if soil_raw is not None else '--'}), "
+                    f"Soil Temp: {soil_t if soil_t is not None else '--'}°C"
                 )
 
-                # Log to SQLite telemetry
+                # Log authentic reading to SQLite telemetry buffer
                 database.log_telemetry(
                     zone_id=zone_id,
                     node_id=f"SLAVE_NODE_{node_id}",
-                    soil_moisture=float(soil_m),
+                    soil_moisture=soil_m,
                     soil_temp=soil_t,
                     ambient_temp=air_t,
                     ambient_humidity=air_h,

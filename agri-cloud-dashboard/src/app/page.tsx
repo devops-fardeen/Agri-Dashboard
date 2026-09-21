@@ -714,9 +714,12 @@ export default function DashboardPage() {
   const [edgeStationOnline, setEdgeStationOnline] = useState(false);
 
   // Field Telemetry Live State
-  const [fieldTelemetry, setFieldTelemetry] = useState({
-    fieldA: { airTemp: 28.5, humidity: 62, soilMoisture: 76.27, soilTemp: 23.8, battery: 92 },
-    fieldB: { airTemp: 26.8, humidity: 71, soilMoisture: 72, soilTemp: 22.4, battery: 88 },
+  const [fieldTelemetry, setFieldTelemetry] = useState<{
+    fieldA: { airTemp: number | null; humidity: number | null; soilMoisture: number | null; soilTemp: number | null; battery: number };
+    fieldB: { airTemp: number | null; humidity: number | null; soilMoisture: number | null; soilTemp: number | null; battery: number };
+  }>({
+    fieldA: { airTemp: null, humidity: null, soilMoisture: null, soilTemp: null, battery: 92 },
+    fieldB: { airTemp: null, humidity: null, soilMoisture: null, soilTemp: null, battery: 88 },
   });
 
   // Bidirectional Synchronization: Poll Edge Station & Cloud MongoDB for real-time pump & sensor state
@@ -751,17 +754,17 @@ export default function DashboardPage() {
 
             setFieldTelemetry({
               fieldA: {
-                airTemp: Number(zA.ambient_temp ?? 28.5),
-                humidity: Number(zA.ambient_humidity ?? 62),
-                soilMoisture: Number(zA.soil_moisture ?? 76.27),
-                soilTemp: Number(zA.soil_temp ?? 23.8),
+                airTemp: (zA.ambient_temp !== null && zA.ambient_temp !== undefined) ? Number(zA.ambient_temp) : null,
+                humidity: (zA.ambient_humidity !== null && zA.ambient_humidity !== undefined) ? Number(zA.ambient_humidity) : null,
+                soilMoisture: (zA.soil_moisture !== null && zA.soil_moisture !== undefined) ? Number(zA.soil_moisture) : null,
+                soilTemp: (zA.soil_temp !== null && zA.soil_temp !== undefined) ? Number(zA.soil_temp) : null,
                 battery: 92,
               },
               fieldB: {
-                airTemp: Number(zB.ambient_temp ?? 26.8),
-                humidity: Number(zB.ambient_humidity ?? 71),
-                soilMoisture: Number(zB.soil_moisture ?? 72),
-                soilTemp: Number(zB.soil_temp ?? 22.4),
+                airTemp: (zB.ambient_temp !== null && zB.ambient_temp !== undefined) ? Number(zB.ambient_temp) : null,
+                humidity: (zB.ambient_humidity !== null && zB.ambient_humidity !== undefined) ? Number(zB.ambient_humidity) : null,
+                soilMoisture: (zB.soil_moisture !== null && zB.soil_moisture !== undefined) ? Number(zB.soil_moisture) : null,
+                soilTemp: (zB.soil_temp !== null && zB.soil_temp !== undefined) ? Number(zB.soil_temp) : null,
                 battery: 88,
               },
             });
@@ -1894,9 +1897,11 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-2xl sm:text-3xl font-black tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">
-                  {fieldData.airTemp.toFixed(2)}<span className="text-sm font-bold text-[#EA580C] ml-1">°C</span>
+                  {fieldData.airTemp !== null ? fieldData.airTemp.toFixed(1) : "--"}<span className="text-sm font-bold text-[#EA580C] ml-1">°C</span>
                 </div>
-                <div className="text-xs text-[#64748B] dark:text-[#94A3B8] font-bold">Humidity: <span className="text-[#0F172A] dark:text-[#F8FAFC]">{fieldData.humidity}%</span></div>
+                <div className="text-xs text-[#64748B] dark:text-[#94A3B8] font-bold">
+                  Humidity: <span className="text-[#0F172A] dark:text-[#F8FAFC]">{fieldData.humidity !== null ? `${fieldData.humidity}%` : "--"}</span>
+                </div>
               </div>
 
               {/* Soil Moisture (Pastel Soft Sky) */}
@@ -1908,10 +1913,10 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-2xl sm:text-3xl font-black tracking-tight text-[#0284C7] dark:text-[#38BDF8]">
-                  {fieldData.soilMoisture.toFixed(2)}<span className="text-sm font-bold text-[#0284C7]/80 ml-1">%</span>
+                  {fieldData.soilMoisture !== null ? fieldData.soilMoisture.toFixed(1) : "--"}<span className="text-sm font-bold text-[#0284C7]/80 ml-1">%</span>
                 </div>
                 <div className="w-full bg-[#E0F2FE] dark:bg-white/10 h-2 rounded-full overflow-hidden mt-2">
-                  <div className="bg-[#0284C7] h-full rounded-full" style={{ width: `${Math.min(100, fieldData.soilMoisture)}%` }} />
+                  <div className="bg-[#0284C7] h-full rounded-full" style={{ width: `${fieldData.soilMoisture !== null ? Math.min(100, fieldData.soilMoisture) : 0}%` }} />
                 </div>
               </div>
 
@@ -1924,9 +1929,9 @@ export default function DashboardPage() {
                   </div>
                 </div>
                 <div className="text-2xl sm:text-3xl font-black tracking-tight text-[#E11D48] dark:text-[#FB7185]">
-                  {fieldData.soilTemp.toFixed(2)}<span className="text-sm font-bold text-[#E11D48]/80 ml-1">°C</span>
+                  {fieldData.soilTemp !== null ? fieldData.soilTemp.toFixed(1) : "--"}<span className="text-sm font-bold text-[#E11D48]/80 ml-1">°C</span>
                 </div>
-                <div className="text-xs text-[#059669] dark:text-[#34D399] font-bold">● Optimal Root Zone</div>
+                <div className="text-xs text-[#059669] dark:text-[#34D399] font-bold">● {fieldData.soilTemp !== null ? "Optimal Root Zone" : "Sensor Disconnected"}</div>
               </div>
 
               {/* Battery (Pastel Mint) */}
