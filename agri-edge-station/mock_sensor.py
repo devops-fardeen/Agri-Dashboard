@@ -26,7 +26,7 @@ class FieldSensorSimulator:
     Automatically yields when real ESP32 Master/Slave hardware is actively streaming data.
     """
     def __init__(self):
-        # Baseline state for Zone A
+        # Baseline state for Zone A (Field A)
         self.state_a = {
             "soil_moisture": 62.5,
             "soil_temp": 23.8,
@@ -34,9 +34,10 @@ class FieldSensorSimulator:
             "ambient_humidity": 64.0,
             "light_lux": 1450.0,
             "pressure": 1013.2,
-            "rain_detected": 0
+            "rain_detected": 0,
+            "battery_level": 96.0
         }
-        # Baseline state for Zone B
+        # Baseline state for Zone B (Field B)
         self.state_b = {
             "soil_moisture": 58.0,
             "soil_temp": 24.5,
@@ -44,7 +45,8 @@ class FieldSensorSimulator:
             "ambient_humidity": 61.5,
             "light_lux": 1520.0,
             "pressure": 1013.0,
-            "rain_detected": 0
+            "rain_detected": 0,
+            "battery_level": 92.5
         }
         self.running = False
         self._thread = None
@@ -76,6 +78,11 @@ class FieldSensorSimulator:
         state["light_lux"] = round(max(0.0, (200.0 if is_raining else 1450.0) + random.uniform(-20.0, 20.0)), 1)
         state["pressure"] = round(state["pressure"] + random.uniform(-0.05, 0.05), 2)
         state["rain_detected"] = 1 if is_raining else 0
+
+        # Subnode battery dynamics (solar charging during day, slow drain)
+        drain = random.uniform(0.005, 0.015)
+        solar_boost = 0.01 if state["light_lux"] > 1000.0 else 0.0
+        state["battery_level"] = round(max(15.0, min(100.0, state["battery_level"] - drain + solar_boost)), 1)
         
         return state
 
@@ -92,6 +99,7 @@ class FieldSensorSimulator:
                     self.state_a["soil_temp"] = latest_a.get("soil_temp", self.state_a["soil_temp"])
                     self.state_a["ambient_temp"] = latest_a.get("ambient_temp", self.state_a["ambient_temp"])
                     self.state_a["ambient_humidity"] = latest_a.get("ambient_humidity", self.state_a["ambient_humidity"])
+                    self.state_a["battery_level"] = latest_a.get("battery_level", self.state_a["battery_level"])
 
                 latest_b = database.get_latest_telemetry("ZONE_B")
                 if latest_b:
@@ -99,6 +107,7 @@ class FieldSensorSimulator:
                     self.state_b["soil_temp"] = latest_b.get("soil_temp", self.state_b["soil_temp"])
                     self.state_b["ambient_temp"] = latest_b.get("ambient_temp", self.state_b["ambient_temp"])
                     self.state_b["ambient_humidity"] = latest_b.get("ambient_humidity", self.state_b["ambient_humidity"])
+                    self.state_b["battery_level"] = latest_b.get("battery_level", self.state_b["battery_level"])
 
                 # Yield this cycle so fake data doesn't clobber live hardware telemetry
                 return
@@ -107,9 +116,36 @@ class FieldSensorSimulator:
 
         # If no active hardware stream, execute standard simulation
         actuators = database.get_all_actuators()
+        sensor_rain = bool(get_rain_detected())
+        
+        # Dual Rain Detection: Check rain sensor pin AND recent Weather API fetch data (last 15 min)
+        weather_rain = False
+        try:
+            cached_wx = database.get_cached_weather()
+            if cached_wx and cached_wx.get("forecast"):
+                curr = cached_wx["forecast"].get("current", {})
+                precip = float(curr.get("precipitation", 0.0))
+                cond = str(curr.get("condition", "")).lower()
+                age = float(cached_wx.get("age_minutes", 999))
+                if age <= 15.0 and (precip > 0.0 or "rain" in cond or "shower" in cond or "thunder" in cond or "drizzle" in cond):
+                    weather_rain = True
+        except Exception:
+            pass
+
+        is_raining = sensor_rain or weather_rain
+
+        # Auto-protection interlock: if rain is detected, force shut down pumps & park rover with 30-min drying timer
+        if is_raining:
+            if bool(actuators.get("PUMP_ZONE_A", 0)):
+                database.set_actuator_state("PUMP_ZONE_A", 0)
+            if bool(actuators.get("PUMP_ZONE_B", 0)):
+                database.set_actuator_state("PUMP_ZONE_B", 0)
+            actuators["PUMP_ZONE_A"] = 0
+            actuators["PUMP_ZONE_B"] = 0
+            database.set_rover_rain_hold(30)
+
         pump_a = bool(actuators.get("PUMP_ZONE_A", 0))
         pump_b = bool(actuators.get("PUMP_ZONE_B", 0))
-        is_raining = bool(get_rain_detected())
         now_iso = datetime.now(timezone.utc).isoformat()
         self._cycle_count += 1
         
@@ -126,6 +162,7 @@ class FieldSensorSimulator:
             light_lux=self.state_a["light_lux"],
             barometric_pressure=self.state_a["pressure"],
             rain_detected=1 if is_raining else 0,
+            battery_level=self.state_a["battery_level"],
             recorded_at=now_iso
         )
         
@@ -142,6 +179,7 @@ class FieldSensorSimulator:
             light_lux=self.state_b["light_lux"],
             barometric_pressure=self.state_b["pressure"],
             rain_detected=1 if is_raining else 0,
+            battery_level=self.state_b["battery_level"],
             recorded_at=now_iso
         )
 

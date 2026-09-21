@@ -1,3 +1,4 @@
+import json
 import time
 import os
 import requests
@@ -276,7 +277,7 @@ class CloudSyncWorker:
             f"latitude={lat}&longitude={lon}"
             f"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation"
             f"&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,uv_index_max"
-            f"&timezone=auto"
+            f"&forecast_days=14&timezone=auto"
         )
         try:
             res = requests.get(url, timeout=4.0)
@@ -294,12 +295,24 @@ class CloudSyncWorker:
 
                 formatted_days = []
                 today_str = datetime.now().strftime("%Y-%m-%d")
-                for i in range(min(len(dates), 7)):
+
+                # Find start index for today or subsequent days
+                start_idx = 0
+                for idx, d_str in enumerate(dates):
+                    if d_str >= today_str:
+                        start_idx = idx
+                        break
+
+                valid_indices = list(range(start_idx, min(len(dates), start_idx + 7)))
+                if not valid_indices:
+                    valid_indices = list(range(min(len(dates), 7)))
+
+                for pos, i in enumerate(valid_indices):
                     wcode = weather_codes[i] if i < len(weather_codes) else 0
                     condition, icon = self._interpret_wmo_code(wcode)
                     d_date = dates[i]
                     d_obj = datetime.fromisoformat(d_date)
-                    day_name = "Today" if (i == 0 or d_date == today_str) else d_obj.strftime("%a")
+                    day_name = "Today" if pos == 0 else d_obj.strftime("%a")
                     
                     formatted_days.append({
                         "date": d_date,

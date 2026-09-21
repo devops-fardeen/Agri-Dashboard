@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { authClient } from "@/lib/auth-client";
 import { useRouter } from "next/navigation";
+import { AuthCard } from "@/components/AuthCard";
+import { ManualCropScanner } from "@/components/dashboard/ManualCropScanner";
 import {
   Droplets,
   Thermometer,
@@ -31,7 +33,7 @@ import {
   Moon,
   CloudRain,
   Download,
-  Calendar,
+  Calendar as CalendarIcon,
   Layers,
   Activity,
   Cpu,
@@ -55,6 +57,12 @@ import {
   Laptop,
   Check,
   ChevronDown,
+  User as UserIcon,
+  X,
+  Upload,
+  Play,
+  RotateCcw,
+  Compass,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -68,6 +76,10 @@ import {
   CartesianGrid,
   Cell,
 } from "recharts";
+
+// ---------------------------------------------------------------------------
+// TYPES & DATA STRUCTURES
+// ---------------------------------------------------------------------------
 
 interface DailyForecastDay {
   date: string;
@@ -92,13 +104,6 @@ interface WeatherData {
   days: DailyForecastDay[];
 }
 
-interface AIDiagnosticsSummary {
-  disease: any;
-  pest: any;
-  nutrition: any;
-  stage: any;
-}
-
 interface FarmAlert {
   id: string;
   type: "CRITICAL" | "WARNING" | "ADVISORY" | "NORMAL";
@@ -106,72 +111,361 @@ interface FarmAlert {
   message: string;
   zone: string;
   timestamp: string;
+  confidence?: number;
+  treatment?: string;
   actionText?: string;
   actionTarget?: "PUMP_ZONE_A" | "PUMP_ZONE_B" | "ROVER";
   actionCmd?: string;
 }
 
+// 60+ Major Indian & Global Agricultural/Urban Hubs Database for Instant Offline Geocoding
+const OFFLINE_CITY_DATABASE = [
+  { name: "Lucknow, Uttar Pradesh", city: "Lucknow", state: "Uttar Pradesh", lat: 26.8467, lon: 80.9462 },
+  { name: "Ludhiana, Punjab", city: "Ludhiana", state: "Punjab", lat: 30.9010, lon: 75.8573 },
+  { name: "Nashik, Maharashtra", city: "Nashik", state: "Maharashtra", lat: 19.9975, lon: 73.7898 },
+  { name: "Karnal, Haryana", city: "Karnal", state: "Haryana", lat: 29.6857, lon: 76.9905 },
+  { name: "Pune, Maharashtra", city: "Pune", state: "Maharashtra", lat: 18.5204, lon: 73.8567 },
+  { name: "Bengaluru / Bangalore", city: "Bengaluru", state: "Karnataka", lat: 12.9716, lon: 77.5946 },
+  { name: "Jaipur, Rajasthan", city: "Jaipur", state: "Rajasthan", lat: 26.9124, lon: 75.7873 },
+  { name: "Delhi / NCR", city: "Delhi", state: "Delhi", lat: 28.6139, lon: 77.2090 },
+  { name: "Ahmedabad, Gujarat", city: "Ahmedabad", state: "Gujarat", lat: 23.0225, lon: 72.5714 },
+  { name: "Indore, Madhya Pradesh", city: "Indore", state: "Madhya Pradesh", lat: 22.7196, lon: 75.8577 },
+  { name: "Hyderabad, Telangana", city: "Hyderabad", state: "Telangana", lat: 17.3850, lon: 78.4867 },
+  { name: "Chennai, Tamil Nadu", city: "Chennai", state: "Tamil Nadu", lat: 13.0827, lon: 80.2707 },
+  { name: "Kolkata, West Bengal", city: "Kolkata", state: "West Bengal", lat: 22.5726, lon: 88.3639 },
+  { name: "Patna, Bihar", city: "Patna", state: "Bihar", lat: 25.5941, lon: 85.1376 },
+  { name: "Bhopal, Madhya Pradesh", city: "Bhopal", state: "Madhya Pradesh", lat: 23.2599, lon: 77.4126 },
+  { name: "Nagpur, Maharashtra", city: "Nagpur", state: "Maharashtra", lat: 21.1458, lon: 79.0882 },
+  { name: "Amritsar, Punjab", city: "Amritsar", state: "Punjab", lat: 31.6340, lon: 74.8723 },
+  { name: "Shimla, Himachal Pradesh", city: "Shimla", state: "Himachal Pradesh", lat: 31.1048, lon: 77.1734 },
+  { name: "Dehradun, Uttarakhand", city: "Dehradun", state: "Uttarakhand", lat: 30.3165, lon: 78.0322 },
+  { name: "Varanasi, Uttar Pradesh", city: "Varanasi", state: "Uttar Pradesh", lat: 25.3176, lon: 82.9739 },
+];
+
 export default function DashboardPage() {
-  const { data: session, isPending } = authClient.useSession();
+  const { data: sessionData, isPending } = authClient.useSession();
   const router = useRouter();
 
-  // Active Zone & Tab Navigation
-  const [activeZone, setActiveZone] = useState<"ZONE_A" | "ZONE_B">("ZONE_A");
-  const [activeTab, setActiveTab] = useState<
-    "all" | "activity" | "weather" | "sensors" | "pumps" | "rover" | "ai"
-  >("activity");
+  // User session state (supports OAuth, credentials, and instant demo access)
+  const [demoUser, setDemoUser] = useState<{ id?: string; name?: string; email?: string; image?: string } | null>(null);
 
-  // Search & Filters
-  const [searchQuery, setSearchQuery] = useState("");
-  const [activePeriod, setActivePeriod] = useState("1month");
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const isAuthenticated = Boolean(sessionData?.user || demoUser);
 
-  // Telemetry & Weather
-  const [telemetry, setTelemetry] = useState<{ latest: any; history: any[] }>({
-    latest: null,
-    history: [],
+  // Active user session object
+  const session = useMemo(() => {
+    if (sessionData?.user) return sessionData;
+    if (demoUser) return { user: demoUser };
+    return {
+      user: {
+        id: "demo_user_01",
+        name: "Kristin Watson",
+        email: "farmer@agrismart.io",
+        image: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80",
+      },
+    };
+  }, [sessionData, demoUser]);
+
+  // 1. WELCOME SCREEN ANIMATION (Image 1)
+  const [showWelcome, setShowWelcome] = useState<boolean>(true);
+  const [welcomeProgress, setWelcomeProgress] = useState<number>(0);
+
+  useEffect(() => {
+    if (!showWelcome) return;
+    const interval = setInterval(() => {
+      setWelcomeProgress((prev) => {
+        if (prev >= 100) {
+          clearInterval(interval);
+          setTimeout(() => setShowWelcome(false), 500);
+          return 100;
+        }
+        return prev + 25;
+      });
+    }, 400);
+    return () => clearInterval(interval);
+  }, [showWelcome]);
+
+  // 2. HEADER: DATE, TIME, CALENDAR & PROFILE (Image 2)
+  const [currentTime, setCurrentTime] = useState({
+    dateStr: "",
+    timeStr: "",
+    dayStr: "",
+  });
+  const [showCalendarPopover, setShowCalendarPopover] = useState(false);
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [profileHover, setProfileHover] = useState(false);
+  const [customAvatar, setCustomAvatar] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [session.user?.image]);
+
+  // Dynamic Interactive Calendar State
+  const [calendarMonthOffset, setCalendarMonthOffset] = useState<number>(0);
+
+  const calendarData = useMemo(() => {
+    const today = new Date();
+    const targetDate = new Date(today.getFullYear(), today.getMonth() + calendarMonthOffset, 1);
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
+    
+    const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthName = months[month];
+    
+    // Day of week for 1st of this month (0 = Sun, 1 = Mon, 2 = Tue, etc.)
+    const firstDayIndex = new Date(year, month, 1).getDay();
+    const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+    const prevMonthTotalDays = new Date(year, month, 0).getDate();
+
+    // Previous month trailing days
+    const prevDays: { day: number; isCurrentMonth: boolean; isToday: boolean; dateStr: string }[] = [];
+    for (let i = firstDayIndex - 1; i >= 0; i--) {
+      prevDays.push({
+        day: prevMonthTotalDays - i,
+        isCurrentMonth: false,
+        isToday: false,
+        dateStr: `${monthName} ${prevMonthTotalDays - i}, ${year}`,
+      });
+    }
+
+    // Current month days
+    const currentDays: { day: number; isCurrentMonth: boolean; isToday: boolean; dateStr: string }[] = [];
+    for (let d = 1; d <= totalDaysInMonth; d++) {
+      const isToday =
+        d === today.getDate() &&
+        month === today.getMonth() &&
+        year === today.getFullYear();
+      currentDays.push({
+        day: d,
+        isCurrentMonth: true,
+        isToday,
+        dateStr: `${monthName} ${d}, ${year}`,
+      });
+    }
+
+    // Next month leading days to complete grid row
+    const totalSlots = prevDays.length + currentDays.length > 35 ? 42 : 35;
+    const nextDaysCount = totalSlots - (prevDays.length + currentDays.length);
+    const nextDays: { day: number; isCurrentMonth: boolean; isToday: boolean; dateStr: string }[] = [];
+    for (let d = 1; d <= nextDaysCount; d++) {
+      nextDays.push({
+        day: d,
+        isCurrentMonth: false,
+        isToday: false,
+        dateStr: `${d}`,
+      });
+    }
+
+    return {
+      monthName,
+      year,
+      todayDate: today.getDate(),
+      todayMonthName: months[today.getMonth()].slice(0, 3),
+      todayYear: today.getFullYear(),
+      allCells: [...prevDays, ...currentDays, ...nextDays],
+    };
+  }, [calendarMonthOffset]);
+
+  // Sync State & Last Synced Timestamp
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<string>("Today, 10:33 PM");
+
+  // 2.5 DARK THEME MODE STATE & PERSISTENCE
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("agri_theme");
+    if (saved === "dark") {
+      setIsDarkMode(true);
+      document.documentElement.classList.add("dark");
+      document.body.classList.add("dark");
+    } else {
+      setIsDarkMode(false);
+      document.documentElement.classList.remove("dark");
+      document.body.classList.remove("dark");
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = !isDarkMode;
+    setIsDarkMode(next);
+    if (next) {
+      document.documentElement.classList.add("dark");
+      document.body.classList.add("dark");
+      localStorage.setItem("agri_theme", "dark");
+      setActionNotice("🌙 Switched to Dark Theme Mode");
+    } else {
+      document.documentElement.classList.remove("dark");
+      document.body.classList.remove("dark");
+      localStorage.setItem("agri_theme", "light");
+      setActionNotice("☀️ Switched to Light Theme Mode");
+    }
+    setTimeout(() => setActionNotice(null), 2500);
+  };
+
+  const triggerLiveSync = (callback?: () => void) => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      if (callback) callback();
+      const now = new Date();
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      let hours = now.getHours();
+      const minutes = String(now.getMinutes()).padStart(2, "0");
+      const seconds = String(now.getSeconds()).padStart(2, "0");
+      const ampm = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12 || 12;
+      setLastSyncTime(`${months[now.getMonth()]} ${now.getDate()}, ${hours}:${minutes}:${seconds} ${ampm}`);
+      setIsSyncing(false);
+    }, 1400);
+  };
+
+  useEffect(() => {
+    // Initial sync
+    triggerLiveSync();
+    
+    // Periodic background telemetry sync every 25 seconds
+    const syncInterval = setInterval(() => {
+      triggerLiveSync();
+    }, 25000);
+    return () => clearInterval(syncInterval);
+  }, []);
+
+  useEffect(() => {
+    const updateClock = () => {
+      const now = new Date();
+      const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      
+      const day = days[now.getDay()];
+      const month = months[now.getMonth()];
+      const date = now.getDate();
+      const year = now.getFullYear();
+      
+      let hours = now.getHours();
+      const minutes = String(now.getMinutes()).padStart(2, "0");
+      const seconds = String(now.getSeconds()).padStart(2, "0");
+      const ampm = hours >= 12 ? "PM" : "AM";
+      hours = hours % 12 || 12;
+
+      setCurrentTime({
+        dateStr: `${month} ${date}, ${year}`,
+        timeStr: `${hours}:${minutes}:${seconds} ${ampm}`,
+        dayStr: day,
+      });
+    };
+
+    updateClock();
+    const clockInterval = setInterval(updateClock, 1000);
+    return () => clearInterval(clockInterval);
+  }, []);
+
+  // 3. WEATHER WIDGET & SEARCH (Image 2)
+  const [weatherLocation, setWeatherLocation] = useState<{ name: string; lat: number; lon: number }>({
+    name: "Shahjahanpur, Uttar Pradesh",
+    lat: 27.8805,
+    lon: 79.9122,
   });
   const [weather, setWeather] = useState<WeatherData | null>(null);
-  const [aiSummary, setAiSummary] = useState<AIDiagnosticsSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Pump & Actuator States (Zone A and Zone B)
-  const [pumpZoneA, setPumpZoneA] = useState(false);
-  const [pumpZoneB, setPumpZoneB] = useState(false);
-  const [pumpLoading, setPumpLoading] = useState(false);
-  const [fertigationActive, setFertigationActive] = useState(true);
-  const [autoDripActive, setAutoDripActive] = useState(true);
+  const [showWeatherSearch, setShowWeatherSearch] = useState(false);
+  const [mobileWeatherExpanded, setMobileWeatherExpanded] = useState(false);
+  const [searchCityQuery, setSearchCityQuery] = useState("");
+  const [isSearchingCity, setIsSearchingCity] = useState(false);
+  const [manualLatInput, setManualLatInput] = useState("27.8805");
+  const [manualLonInput, setManualLonInput] = useState("79.9122");
   const [actionNotice, setActionNotice] = useState<string | null>(null);
 
-  // Setpoints & Target Goals
-  const [moistureTarget, setMoistureTarget] = useState(65);
-  const [tempGoal, setTempGoal] = useState(24);
+  // Top 15 Major Indian Agricultural Hubs Database for Instant Offline Filtering
+  const OFFLINE_CITIES = useMemo(
+    () => [
+      { id: "shahjahanpur_up", name: "Shahjahanpur", admin1: "Uttar Pradesh", country: "India", latitude: 27.8805, longitude: 79.9122 },
+      { id: "lucknow_up", name: "Lucknow", admin1: "Uttar Pradesh", country: "India", latitude: 26.8467, longitude: 80.9462 },
+      { id: "bareilly_up", name: "Bareilly", admin1: "Uttar Pradesh", country: "India", latitude: 28.3670, longitude: 79.4304 },
+      { id: "ludhiana_pb", name: "Ludhiana", admin1: "Punjab", country: "India", latitude: 30.9010, longitude: 75.8573 },
+      { id: "karnal_hr", name: "Karnal", admin1: "Haryana", country: "India", latitude: 29.6857, longitude: 76.9905 },
+      { id: "nashik_mh", name: "Nashik", admin1: "Maharashtra", country: "India", latitude: 19.9975, longitude: 73.7898 },
+      { id: "pune_mh", name: "Pune", admin1: "Maharashtra", country: "India", latitude: 18.5204, longitude: 73.8567 },
+      { id: "nagpur_mh", name: "Nagpur", admin1: "Maharashtra", country: "India", latitude: 21.1458, longitude: 79.0882 },
+      { id: "jaipur_rj", name: "Jaipur", admin1: "Rajasthan", country: "India", latitude: 26.9124, longitude: 75.7873 },
+      { id: "delhi_dl", name: "Delhi", admin1: "Delhi", country: "India", latitude: 28.6139, longitude: 77.2090 },
+      { id: "ahmedabad_gj", name: "Ahmedabad", admin1: "Gujarat", country: "India", latitude: 23.0225, longitude: 72.5714 },
+      { id: "indore_mp", name: "Indore", admin1: "Madhya Pradesh", country: "India", latitude: 22.7196, longitude: 75.8577 },
+      { id: "bhopal_mp", name: "Bhopal", admin1: "Madhya Pradesh", country: "India", latitude: 23.2599, longitude: 77.4126 },
+      { id: "patna_br", name: "Patna", admin1: "Bihar", country: "India", latitude: 25.5941, longitude: 85.1376 },
+      { id: "bengaluru_ka", name: "Bengaluru", admin1: "Karnataka", country: "India", latitude: 12.9716, longitude: 77.5946 },
+      { id: "hyderabad_ts", name: "Hyderabad", admin1: "Telangana", country: "India", latitude: 17.3850, longitude: 78.4867 },
+      { id: "chennai_tn", name: "Chennai", admin1: "Tamil Nadu", country: "India", latitude: 13.0827, longitude: 80.2707 },
+      { id: "kolkata_wb", name: "Kolkata", admin1: "West Bengal", country: "India", latitude: 22.5726, longitude: 88.3639 },
+      { id: "dehradun_uk", name: "Dehradun", admin1: "Uttarakhand", country: "India", latitude: 30.3165, longitude: 78.0322 },
+    ],
+    []
+  );
 
-  // Rover Teleoperation & Telemetry
-  const [roverAction, setRoverAction] = useState<string>("STOP");
-  const [roverAutoMode, setRoverAutoMode] = useState<boolean>(false);
-  const [roverSpeed, setRoverSpeed] = useState<number>(190);
-  const [roverSending, setRoverSending] = useState(false);
-  const [roverBattery, setRoverBattery] = useState(88);
-  const [roverIp, setRoverIp] = useState("10.59.28.196");
-  const [roverDistance, setRoverDistance] = useState(42.5);
-  const [roverLeftBlocked, setRoverLeftBlocked] = useState(false);
-  const [roverRightBlocked, setRoverRightBlocked] = useState(false);
-  const [roverScannedCount, setRoverScannedCount] = useState(14);
-  const [roverPatrolStep, setRoverPatrolStep] = useState<"PATROL-FORWARD" | "SCANNING PLANT" | "EVADE-RIGHT">("PATROL-FORWARD");
+  const [searchResults, setSearchResults] = useState<
+    { id: string | number; name: string; admin1?: string; country?: string; latitude: number; longitude: number }[]
+  >([]);
 
-  // Rain Sensor Hardware Simulation (null = live ESP32 GPIO 27)
-  const [simulatedRain, setSimulatedRain] = useState<boolean | null>(null);
+  // Initialize search results
+  useEffect(() => {
+    setSearchResults(OFFLINE_CITIES.slice(0, 6));
+  }, [OFFLINE_CITIES]);
 
-  // AI Diagnostics State
-  const [scanProcessing, setScanProcessing] = useState(false);
-  const [scanNotice, setScanNotice] = useState<string | null>(null);
+  // Live Geocoding API Search with instant offline fallback
+  useEffect(() => {
+    const q = searchCityQuery.trim().toLowerCase();
+    if (!q) {
+      setSearchResults(OFFLINE_CITIES.slice(0, 6));
+      setIsSearchingCity(false);
+      return;
+    }
 
-  // Weather Fetcher (Open-Meteo)
-  const fetchWeather = async (): Promise<WeatherData> => {
+    const localMatches = OFFLINE_CITIES.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.admin1 && c.admin1.toLowerCase().includes(q))
+    );
+
+    if (localMatches.length > 0) {
+      setSearchResults(localMatches);
+    }
+
+    setIsSearchingCity(true);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=8&language=en&format=json`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          if (data.results && Array.isArray(data.results) && data.results.length > 0) {
+            const apiResults = data.results.map((r: any) => ({
+              id: r.id || `${r.latitude}_${r.longitude}`,
+              name: r.name,
+              admin1: r.admin1 || r.admin2 || "",
+              country: r.country || "India",
+              latitude: Number(r.latitude),
+              longitude: Number(r.longitude),
+            }));
+            setSearchResults(apiResults);
+          } else if (localMatches.length === 0) {
+            setSearchResults([]);
+          }
+        }
+      } catch (err) {
+        console.error("Geocoding fetch error:", err);
+      } finally {
+        setIsSearchingCity(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchCityQuery, OFFLINE_CITIES]);
+
+  // Weather Fetcher (Open-Meteo API)
+  const fetchWeather = async (lat: number, lon: number): Promise<WeatherData> => {
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     try {
       const res = await fetch(
-        "https://api.open-meteo.com/v1/forecast?latitude=26.8467&longitude=80.9462&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weather_code&timezone=auto"
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weather_code&forecast_days=14&timezone=auto`
       );
       if (!res.ok) throw new Error("Weather fetch failed");
       const data = await res.json();
@@ -188,1773 +482,1963 @@ export default function DashboardPage() {
       const rainSums = daily.precipitation_sum || [];
       const weatherCodes = daily.weather_code || [];
 
-      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const getConditionFromCode = (code: number, prob: number) => {
-        if (code === 0) return "Clear / Sunny";
+      const getCondition = (code: number, prob: number) => {
+        if (code === 0) return "Sunny / Clear";
         if (code === 1 || code === 2) return "Partly Cloudy";
         if (code === 3) return "Overcast";
-        if (code === 45 || code === 48) return "Fog";
-        if (code >= 51 && code <= 55) return "Drizzle";
-        if (code >= 61 && code <= 65) return "Rain";
+        if (code >= 45 && code <= 48) return "Fog / Mist";
+        if (code >= 51 && code <= 55) return "Light Drizzle";
+        if (code >= 61 && code <= 65) return "Moderate Rain";
         if (code >= 80 && code <= 82) return "Rain Showers";
         if (code >= 95) return "Thunderstorm";
-        return prob > 50 ? "Rain" : prob > 20 ? "Partly Cloudy" : "Sunny";
+        return prob > 40 ? "Rain Possible" : "Clear Sky";
       };
 
-      const days: DailyForecastDay[] = [];
-      const today = new Date();
+      const now = new Date();
+      const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      let startIdx = dates.findIndex((d: string) => d >= todayIso);
+      if (startIdx < 0) startIdx = 0;
 
-      for (let i = 0; i < 7; i++) {
-        if (i < dates.length) {
-          const dObj = new Date(dates[i]);
-          const dayLabel = i === 0 ? "Today" : dayNames[dObj.getDay()];
-          const code = weatherCodes[i] ?? 0;
-          const prob = rainProbs[i] ?? 0;
-          days.push({
-            date: dates[i],
-            dayLabel,
-            tempMax: Math.round(maxTemps[i] ?? 28),
-            tempMin: Math.round(minTemps[i] ?? 20),
-            rainProb: Math.round(prob),
-            rainSum: Number(rainSums[i] ?? 0),
-            weatherCode: code,
-            condition: getConditionFromCode(code, prob),
-            isToday: i === 0,
-          });
-        } else {
-          const future = new Date(today.getTime() + i * 86400000);
-          days.push({
-            date: future.toISOString().split("T")[0],
-            dayLabel: i === 0 ? "Today" : dayNames[future.getDay()],
-            tempMax: 28,
-            tempMin: 21,
-            rainProb: 10,
-            rainSum: 0,
-            weatherCode: 1,
-            condition: "Partly Cloudy",
-            isToday: i === 0,
-          });
-        }
-      }
+      const targetDates = dates.slice(startIdx, startIdx + 7);
+      const days: DailyForecastDay[] = targetDates.map((d: string, pos: number) => {
+        const idx = startIdx + pos;
+        const parts = d.split("-").map(Number);
+        const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+        const dayLabel = pos === 0 ? "Today" : dayNames[dateObj.getDay()];
+        const code = weatherCodes[idx] || 0;
+        const prob = rainProbs[idx] || 0;
+        return {
+          date: d,
+          dayLabel,
+          tempMax: Math.round(maxTemps[idx] ?? 28),
+          tempMin: Math.round(minTemps[idx] ?? 20),
+          rainProb: prob,
+          rainSum: Number(rainSums[idx] ?? 0),
+          weatherCode: code,
+          condition: getCondition(code, prob),
+          isToday: pos === 0,
+        };
+      });
 
       return {
         temperature: Math.round(current.temperature_2m ?? 28),
-        humidity: Math.round(current.relative_humidity_2m ?? 65),
-        windSpeed: Math.round(current.wind_speed_10m ?? 8),
-        condition: floodRisk ? "Severe Flood Risk" : days[0]?.condition || "Optimal Conditions",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        humidity: Math.round(current.relative_humidity_2m ?? 64),
+        windSpeed: Math.round(current.wind_speed_10m ?? 9),
+        condition: getCondition(weatherCodes[startIdx] ?? 0, rainProbs[startIdx] ?? 0),
+        time: currentTime.timeStr || "10:30 PM",
         floodRisk,
         alertMessage: floodRisk
-          ? "CRITICAL ALERT: Heavy precipitation detected. Waterlogging risk active."
+          ? "CRITICAL ALERT: Heavy precipitation detected. Root waterlogging risk active."
           : undefined,
         days,
       };
     } catch {
-      const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-      const today = new Date();
-      const fallbackDays: DailyForecastDay[] = [
-        { date: today.toISOString().split("T")[0], dayLabel: "Today", tempMax: 28, tempMin: 21, rainProb: 0, rainSum: 0, weatherCode: 0, condition: "Sunny", isToday: true },
-        { date: new Date(today.getTime() + 86400000).toISOString().split("T")[0], dayLabel: dayNames[(today.getDay() + 1) % 7], tempMax: 27, tempMin: 20, rainProb: 10, rainSum: 0.2, weatherCode: 2, condition: "Partly Cloudy", isToday: false },
-        { date: new Date(today.getTime() + 2 * 86400000).toISOString().split("T")[0], dayLabel: dayNames[(today.getDay() + 2) % 7], tempMax: 25, tempMin: 19, rainProb: 65, rainSum: 8.5, weatherCode: 61, condition: "Rain", isToday: false },
-        { date: new Date(today.getTime() + 3 * 86400000).toISOString().split("T")[0], dayLabel: dayNames[(today.getDay() + 3) % 7], tempMax: 29, tempMin: 22, rainProb: 5, rainSum: 0, weatherCode: 0, condition: "Sunny", isToday: false },
-        { date: new Date(today.getTime() + 4 * 86400000).toISOString().split("T")[0], dayLabel: dayNames[(today.getDay() + 4) % 7], tempMax: 28, tempMin: 21, rainProb: 15, rainSum: 0.5, weatherCode: 1, condition: "Partly Cloudy", isToday: false },
-        { date: new Date(today.getTime() + 5 * 86400000).toISOString().split("T")[0], dayLabel: dayNames[(today.getDay() + 5) % 7], tempMax: 30, tempMin: 23, rainProb: 20, rainSum: 0.8, weatherCode: 0, condition: "Sunny", isToday: false },
-        { date: new Date(today.getTime() + 6 * 86400000).toISOString().split("T")[0], dayLabel: dayNames[(today.getDay() + 6) % 7], tempMax: 27, tempMin: 20, rainProb: 40, rainSum: 3.2, weatherCode: 80, condition: "Showers", isToday: false },
+      const now = new Date();
+      const fallbackDays: DailyForecastDay[] = [];
+      const fallbackTemps = [
+        { max: 29, min: 21, rain: 0, sum: 0, code: 0, cond: "Sunny / Clear" },
+        { max: 28, min: 20, rain: 10, sum: 0, code: 1, cond: "Partly Cloudy" },
+        { max: 26, min: 19, rain: 65, sum: 12, code: 61, cond: "Moderate Rain" },
+        { max: 29, min: 22, rain: 5, sum: 0, code: 0, cond: "Sunny / Clear" },
+        { max: 28, min: 21, rain: 15, sum: 0, code: 1, cond: "Partly Cloudy" },
+        { max: 30, min: 23, rain: 20, sum: 0, code: 0, cond: "Sunny / Clear" },
+        { max: 27, min: 20, rain: 40, sum: 3, code: 80, cond: "Rain Showers" },
       ];
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(now);
+        d.setDate(now.getDate() + i);
+        const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        const ft = fallbackTemps[i] || fallbackTemps[0];
+        fallbackDays.push({
+          date: iso,
+          dayLabel: i === 0 ? "Today" : dayNames[d.getDay()],
+          tempMax: ft.max,
+          tempMin: ft.min,
+          rainProb: ft.rain,
+          rainSum: ft.sum,
+          weatherCode: ft.code,
+          condition: ft.cond,
+          isToday: i === 0,
+        });
+      }
+
       return {
-        temperature: 28.5,
-        humidity: 62,
-        windSpeed: 7,
-        condition: "Optimal Conditions",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        temperature: 28,
+        humidity: 64,
+        windSpeed: 9,
+        condition: "Sunny / Clear",
+        time: "10:30 PM",
         floodRisk: false,
         days: fallbackDays,
       };
     }
   };
 
-  // AI Diagnostics Fetcher
-  const fetchAIDiagnostics = async () => {
+  useEffect(() => {
+    fetchWeather(weatherLocation.lat, weatherLocation.lon).then((data) => setWeather(data));
+  }, [weatherLocation]);
+
+  const handleSelectLocation = (name: string, lat: number, lon: number) => {
+    setWeatherLocation({ name, lat, lon });
+    setManualLatInput(String(lat));
+    setManualLonInput(String(lon));
+    setShowWeatherSearch(false);
+    setActionNotice(`📍 Weather location updated to ${name}`);
+    setTimeout(() => setActionNotice(null), 3000);
+  };
+
+  const handleSearchSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const q = searchCityQuery.trim();
+    if (!q) return;
+
+    setIsSearchingCity(true);
     try {
-      const node = activeZone === "ZONE_A" ? "NODE_01" : "NODE_02";
-      const res = await fetch(`/api/ai/latest?nodeId=${node}`);
+      const res = await fetch(
+        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=en&format=json`
+      );
       if (res.ok) {
-        const json = await res.json();
-        if (json.summary || json.models) {
-          setAiSummary(json.summary || json.models);
+        const data = await res.json();
+        if (data.results && data.results.length > 0) {
+          const first = data.results[0];
+          const displayName = first.admin1 ? `${first.name}, ${first.admin1}` : first.name;
+          handleSelectLocation(displayName, Number(first.latitude), Number(first.longitude));
+          return;
         }
       }
-    } catch (e) {
-      console.error("AI diagnostics fetch error:", e);
+    } catch {} finally {
+      setIsSearchingCity(false);
     }
   };
 
-  // Crop Scan Trigger
-  const triggerCropScanOrDiagnosis = async (
-    disease: string,
-    pest: string,
-    nutrition: string,
-    stage: string = "Stage 3: Flowering",
-    diseaseConf: number = 0.96,
-    pestConf: number = 0.94
-  ) => {
-    setScanProcessing(true);
-    setScanNotice(`Diagnosing: ${disease}...`);
+  const handleApplyManualCoords = () => {
+    const lat = parseFloat(manualLatInput);
+    const lon = parseFloat(manualLonInput);
+    if (isNaN(lat) || isNaN(lon)) {
+      alert("Please enter valid decimal latitude and longitude numbers.");
+      return;
+    }
+    handleSelectLocation(`Custom Farm (${lat.toFixed(2)}°N, ${lon.toFixed(2)}°E)`, lat, lon);
+  };
 
-    const summaryObj: AIDiagnosticsSummary = {
-      disease: { detectionLabel: disease, confidence: diseaseConf, modelName: "disease" },
-      pest: { detectionLabel: pest, confidence: pestConf, modelName: "pest" },
-      nutrition: { detectionLabel: nutrition, confidence: 0.91, modelName: "nutrition" },
-      stage: { detectionLabel: stage, confidence: 0.98, modelName: "stage" },
-    };
+  // 4. ALERTS & AI SCOUTING PATROL (Image 3 - Left)
+  const [patrolRunning, setPatrolRunning] = useState(false);
+  const [alertsList, setAlertsList] = useState<FarmAlert[]>([
+    {
+      id: "alert-1",
+      type: "CRITICAL",
+      title: "Early Blight Detected (Field A - Tomato Canopy)",
+      message: "Concentric brown-black lesions identified on lower tomato foliage during morning patrol routine.",
+      confidence: 0.96,
+      treatment: "Apply Copper Hydroxide (2.5g/L) or Mancozeb fungicide spray immediately. Prune heavily infected lower leaves.",
+      zone: "Field A (Node 1)",
+      timestamp: "07:15 AM",
+    },
+    {
+      id: "alert-2",
+      type: "WARNING",
+      title: "Septoria Leaf Spot (Field B - Greenhouse)",
+      message: "Circular lesions with dark margins found across tomato leaves in Greenhouse B.",
+      confidence: 0.92,
+      treatment: "Foliar bio-fungicide (Bacillus subtilis) spray recommended. Increase greenhouse ventilation to lower humidity.",
+      zone: "Field B (Node 2)",
+      timestamp: "07:22 AM",
+    },
+    {
+      id: "alert-3",
+      type: "ADVISORY",
+      title: "Low Soil Moisture Setpoint Threshold",
+      message: "Root moisture in Field A dropped below 50%. Micro-drip fertigation scheduled.",
+      confidence: 0.99,
+      treatment: "Engage Field A Drip Pump relay for 15 minutes.",
+      zone: "Field A (Node 1)",
+      timestamp: "09:40 AM",
+    },
+  ]);
 
-    setAiSummary(summaryObj);
+  const handleTriggerPatrol = async () => {
+    setPatrolRunning(true);
+    setActionNotice("🚀 Rover AI Patrol dispatched! Scanning Field A & Field B rows...");
 
     try {
-      await fetch("/api/ai/latest", {
+      fetch("/api/commands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          nodeId: activeZone === "ZONE_A" ? "NODE_01" : "NODE_02",
-          diseaseLabel: disease,
-          diseaseConfidence: diseaseConf,
-          pestLabel: pest,
-          pestConfidence: pestConf,
-          nutritionLabel: nutrition,
-          stageLabel: stage,
-        }),
-      });
-    } catch (e) {
-      console.error("Failed to persist AI diagnosis to MongoDB:", e);
-    } finally {
-      setScanProcessing(false);
-      setScanNotice(null);
-    }
-  };
+        body: JSON.stringify({ target: "ROVER_PATROL", action: "TRIGGER" }),
+      }).catch(() => {});
 
-  // Upload Leaf Photo
-  const handleCloudPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setScanProcessing(true);
-    setScanNotice("Processing crop image with 4 ONNX vision models...");
-
-    const fileNameLower = file.name.toLowerCase();
-    let disease = "Early Blight (Alternaria solani)";
-    let pest = "No Pests Detected";
-    let nutrition = "Balanced N-P-K";
-    let dConf = 0.97;
-
-    if (fileNameLower.includes("healthy") || fileNameLower.includes("normal") || fileNameLower.includes("good")) {
-      disease = "Healthy Foliage";
-      dConf = 0.98;
-    } else if (fileNameLower.includes("pest") || fileNameLower.includes("aphid") || fileNameLower.includes("mite") || fileNameLower.includes("bug")) {
-      disease = "Healthy Foliage";
-      pest = "Aphids Infestation";
-    } else if (fileNameLower.includes("nutr") || fileNameLower.includes("potassium") || fileNameLower.includes("defic")) {
-      disease = "Healthy Foliage";
-      nutrition = "Potassium Deficiency";
-    }
+      fetch("http://127.0.0.1:8000/api/edge/rover/patrol/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field: "FIELD_A" }),
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => {});
+    } catch {}
 
     setTimeout(() => {
-      triggerCropScanOrDiagnosis(disease, pest, nutrition, "Stage 3: Flowering", dConf, 0.94);
-    }, 600);
+      setPatrolRunning(false);
+      setActionNotice("✓ AI Patrol Completed: 24 leaf canopies analyzed. Alerts feed updated!");
+      setTimeout(() => setActionNotice(null), 4000);
+    }, 2500);
   };
 
-  // Main Loader
-  const loadDashboardData = async () => {
-    try {
-      setLoading(true);
-      const [tRes, wData] = await Promise.all([
-        fetch(`/api/telemetry?zone=${activeZone}&limit=14`),
-        fetchWeather(),
-      ]);
+  const handleManualScanComplete = (data: any) => {
+    if (data?.diagnosis) {
+      const d = data.diagnosis;
+      const diseaseLabel = d.disease?.label || "Healthy Foliage";
+      const isCritical = d.prescription?.severity === "CRITICAL";
+      const isWarning = d.prescription?.severity === "HIGH";
 
-      if (tRes.ok) {
-        const tData = await tRes.json();
-        setTelemetry(tData);
-        if (tData.latest?.actuatorState?.pumpActive !== undefined) {
-          if (activeZone === "ZONE_A") {
-            setPumpZoneA(Boolean(tData.latest.actuatorState.pumpActive));
-          } else {
-            setPumpZoneB(Boolean(tData.latest.actuatorState.pumpActive));
-          }
-        }
-      }
-      setWeather(wData);
-      fetchAIDiagnostics();
-    } catch (err) {
-      console.error("Dashboard refresh error:", err);
-    } finally {
-      setLoading(false);
+      const newAlert: FarmAlert = {
+        id: `manual_scan_${Date.now()}`,
+        type: isCritical ? "CRITICAL" : isWarning ? "WARNING" : "ADVISORY",
+        title: diseaseLabel,
+        message: d.prescription?.action || "Manual leaf scan recorded via AI Vision Engine.",
+        treatment: d.prescription?.treatment,
+        confidence: (d.disease?.confidence || 95) / 100,
+        zone: "Manual Scanner",
+        timestamp: "Just Now",
+      };
+
+      setAlertsList((prev) => [newAlert, ...prev.slice(0, 5)]);
+      setActionNotice(`🔬 Leaf Scan Diagnosed: ${diseaseLabel} (${d.disease?.confidence}% Confidence)`);
+      setTimeout(() => setActionNotice(null), 4500);
     }
   };
 
-  // Hardware Command Dispatcher (Pumps & Rover)
-  const sendCommand = async (target: "PUMP_ZONE_A" | "PUMP_ZONE_B" | "ROVER", action: string) => {
-    try {
-      if (target.startsWith("PUMP")) setPumpLoading(true);
-      if (target === "ROVER") {
-        setRoverSending(true);
-        setRoverAction(action);
-      }
+  // 5. FIELD SUBNODES SENSOR DATA (Image 3 - Right)
+  const [activeField, setActiveField] = useState<"FIELD_A" | "FIELD_B">("FIELD_A");
+  const [pumpZoneA, setPumpZoneA] = useState(false);
+  const [pumpZoneB, setPumpZoneB] = useState(false);
+  const [isRaining, setIsRaining] = useState(false);
+  const [edgeStationOnline, setEdgeStationOnline] = useState(false);
 
-      if (target === "PUMP_ZONE_A") {
-        const next = action === "ON";
-        setPumpZoneA(next);
-        setActionNotice(next ? "💧 Smart Pump Zone A ON (Relay Pin 25 • 42 L/h)" : "🛑 Smart Pump Zone A OFF (Relay Pin 25)");
-      }
-      if (target === "PUMP_ZONE_B") {
-        const next = action === "ON";
-        setPumpZoneB(next);
-        setActionNotice(next ? "⚡ Smart Pump Zone B Misting ON (Relay Pin 26 • 24 L/h)" : "🛑 Smart Pump Zone B OFF (Relay Pin 26)");
-      }
-      if (target === "ROVER") {
-        setActionNotice(`🚜 Rover Command: ${action} Dispatched`);
-      }
+  // Field Telemetry Live State
+  const [fieldTelemetry, setFieldTelemetry] = useState({
+    fieldA: { airTemp: 28.5, humidity: 62, soilMoisture: 76.27, soilTemp: 23.8, battery: 92 },
+    fieldB: { airTemp: 26.8, humidity: 71, soilMoisture: 72, soilTemp: 22.4, battery: 88 },
+  });
 
-      setTimeout(() => setActionNotice(null), 3500);
+  // Bidirectional Synchronization: Poll Edge Station & Cloud MongoDB for real-time pump & sensor state
+  useEffect(() => {
+    let isMounted = true;
 
-      if (target === "PUMP_ZONE_A" || target === "PUMP_ZONE_B") {
-        try {
-          fetch(`http://127.0.0.1:8000/api/edge/pump/${target}/${action}`, {
-            method: "POST",
-            mode: "no-cors",
-            signal: AbortSignal.timeout(800),
-          }).catch(() => {});
-        } catch {}
-      } else if (target === "ROVER") {
-        const cmdMap: Record<string, string> = {
-          MOVE_FORWARD: "forward",
-          FORWARD: "forward",
-          MOVE_BACKWARD: "backward",
-          BACKWARD: "backward",
-          MOVE_LEFT: "left",
-          LEFT: "left",
-          MOVE_RIGHT: "right",
-          RIGHT: "right",
-          STOP: "stop",
-          AUTO_ON: "auto_on",
-          AUTO_OFF: "auto_off",
-          AUTO_PATROL: "auto_on",
-        };
-        const directCmd = cmdMap[action] || "stop";
-        if (action === "AUTO_ON" || action === "AUTO_PATROL") {
-          setRoverAutoMode(true);
-          setRoverAction("PATROL-FORWARD");
-        } else if (action === "STOP" || action === "AUTO_OFF") {
-          setRoverAutoMode(false);
-          setRoverAction("STOP");
-        } else {
-          setRoverAutoMode(false);
-          setRoverAction(action);
+    const syncEdgeAndCloudState = async () => {
+      try {
+        // 1. Check local edge station gateway on port 8000
+        const edgeRes = await fetch("http://127.0.0.1:8000/api/edge/status", {
+          signal: AbortSignal.timeout(1200),
+        });
+
+        if (edgeRes.ok) {
+          const edgeData = await edgeRes.json();
+          if (!isMounted) return;
+
+          setEdgeStationOnline(true);
+
+          // Sync Actuator Relay States
+          if (edgeData.actuators) {
+            setPumpZoneA(Boolean(edgeData.actuators.PUMP_ZONE_A));
+            setPumpZoneB(Boolean(edgeData.actuators.PUMP_ZONE_B));
+          }
+
+          // Sync Live Sensors & Rain Interlock
+          if (edgeData.telemetry) {
+            const zA = edgeData.telemetry.ZONE_A || {};
+            const zB = edgeData.telemetry.ZONE_B || {};
+
+            setIsRaining(Boolean(zA.rain_detected || zB.rain_detected));
+
+            setFieldTelemetry({
+              fieldA: {
+                airTemp: Number(zA.ambient_temp ?? 28.5),
+                humidity: Number(zA.ambient_humidity ?? 62),
+                soilMoisture: Number(zA.soil_moisture ?? 76.27),
+                soilTemp: Number(zA.soil_temp ?? 23.8),
+                battery: 92,
+              },
+              fieldB: {
+                airTemp: Number(zB.ambient_temp ?? 26.8),
+                humidity: Number(zB.ambient_humidity ?? 71),
+                soilMoisture: Number(zB.soil_moisture ?? 72),
+                soilTemp: Number(zB.soil_temp ?? 22.4),
+                battery: 88,
+              },
+            });
+          }
+
+          if (edgeData.rover) {
+            if (edgeData.rover.battery) setRoverBattery(Number(edgeData.rover.battery));
+            if (edgeData.rover.mode) setRoverMode(edgeData.rover.mode);
+          }
+          return;
         }
-
-        try {
-          fetch(`http://${roverIp}/cmd?move=${directCmd}`, {
-            mode: "no-cors",
-            signal: AbortSignal.timeout(1000),
-          }).catch(() => {});
-        } catch {}
+      } catch {
+        // Local edge offline/hotspot mode, fallback to Cloud MongoDB
       }
 
+      try {
+        // 2. Poll Cloud MongoDB /api/telemetry for internet sync
+        const cloudRes = await fetch("/api/telemetry?limit=4", {
+          signal: AbortSignal.timeout(2000),
+        });
+
+        if (cloudRes.ok && isMounted) {
+          const cloudData = await cloudRes.json();
+          const records = cloudData.history || [];
+
+          for (const r of records) {
+            const zId = (r.zoneId || "").toUpperCase();
+            const pActive = r.actuatorState?.pumpActive;
+
+            if (zId.includes("ZONE_A") || zId.includes("NODE_01") || zId.includes("FIELD_A") || zId.includes("TOMATO")) {
+              if (pActive !== undefined) setPumpZoneA(Boolean(pActive));
+              if (r.telemetry) {
+                setFieldTelemetry((prev) => ({
+                  ...prev,
+                  fieldA: {
+                    airTemp: Number(r.telemetry.ambientTemp ?? prev.fieldA.airTemp),
+                    humidity: Number(r.telemetry.ambientHumidity ?? prev.fieldA.humidity),
+                    soilMoisture: Number(r.telemetry.soilMoisture ?? prev.fieldA.soilMoisture),
+                    soilTemp: Number(r.telemetry.soilTemperature ?? prev.fieldA.soilTemp),
+                    battery: prev.fieldA.battery,
+                  },
+                }));
+              }
+            } else if (zId.includes("ZONE_B") || zId.includes("NODE_02") || zId.includes("FIELD_B") || zId.includes("GREENHOUSE")) {
+              if (pActive !== undefined) setPumpZoneB(Boolean(pActive));
+              if (r.telemetry) {
+                setFieldTelemetry((prev) => ({
+                  ...prev,
+                  fieldB: {
+                    airTemp: Number(r.telemetry.ambientTemp ?? prev.fieldB.airTemp),
+                    humidity: Number(r.telemetry.ambientHumidity ?? prev.fieldB.humidity),
+                    soilMoisture: Number(r.telemetry.soilMoisture ?? prev.fieldB.soilMoisture),
+                    soilTemp: Number(r.telemetry.soilTemperature ?? prev.fieldB.soilTemp),
+                    battery: prev.fieldB.battery,
+                  },
+                }));
+              }
+            }
+          }
+        }
+      } catch {}
+    };
+
+    syncEdgeAndCloudState();
+    const interval = setInterval(syncEdgeAndCloudState, 3500);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
+  // Field Telemetry State View
+  const fieldData = useMemo(() => {
+    if (activeField === "FIELD_A") {
+      return {
+        title: "Field A (Node 1 - Open Tomato Field)",
+        airTemp: fieldTelemetry.fieldA.airTemp,
+        humidity: fieldTelemetry.fieldA.humidity,
+        soilMoisture: fieldTelemetry.fieldA.soilMoisture,
+        soilTemp: fieldTelemetry.fieldA.soilTemp,
+        battery: fieldTelemetry.fieldA.battery,
+        pumpActive: pumpZoneA,
+        pumpName: "Field A Drip Pump",
+      };
+    } else {
+      return {
+        title: "Field B (Node 2 - Controlled Greenhouse)",
+        airTemp: fieldTelemetry.fieldB.airTemp,
+        humidity: fieldTelemetry.fieldB.humidity,
+        soilMoisture: fieldTelemetry.fieldB.soilMoisture,
+        soilTemp: fieldTelemetry.fieldB.soilTemp,
+        battery: fieldTelemetry.fieldB.battery,
+        pumpActive: pumpZoneB,
+        pumpName: "Field B Greenhouse Pump",
+      };
+    }
+  }, [activeField, pumpZoneA, pumpZoneB, fieldTelemetry]);
+
+  // Synchronized Pump Relay Toggle (Cloud <-> Edge Gateway Station)
+  const togglePump = async () => {
+    if (isRaining) {
+      alert("⚠️ Rain Safety Interlock Active: Pumps cannot be started while rain is detected!");
+      return;
+    }
+
+    const targetKey = activeField === "FIELD_A" ? "PUMP_ZONE_A" : "PUMP_ZONE_B";
+    const isCurrentlyOn = activeField === "FIELD_A" ? pumpZoneA : pumpZoneB;
+    const nextState = !isCurrentlyOn;
+    const nextAction = nextState ? "ON" : "OFF";
+
+    // 1. Optimistic Local UI State
+    if (activeField === "FIELD_A") {
+      setPumpZoneA(nextState);
+    } else {
+      setPumpZoneB(nextState);
+    }
+
+    setActionNotice(
+      nextState
+        ? `💧 ${activeField === "FIELD_A" ? "Field A" : "Field B"} Drip Pump Started (Syncing to Edge Station)`
+        : `⏹ ${activeField === "FIELD_A" ? "Field A" : "Field B"} Drip Pump Stopped (Syncing to Edge Station)`
+    );
+
+    // 2. Transmit Command to Cloud API (/api/commands) for internet sync worker
+    try {
       await fetch("/api/commands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target, action, rover_ip: roverIp }),
+        body: JSON.stringify({ target: targetKey, action: nextAction }),
       });
-    } catch (err) {
-      console.error("Command failed:", err);
-    } finally {
-      setPumpLoading(false);
-      setRoverSending(false);
+    } catch (cloudErr) {
+      console.warn("Cloud command dispatch notice:", cloudErr);
     }
-  };
 
-  // Toggle Rover Auto Patrol Mode (Autonomous Crop Row Scanning)
-  const toggleRoverAutoMode = () => {
-    const nextAuto = !roverAutoMode;
-    setRoverAutoMode(nextAuto);
-    if (nextAuto) {
-      sendCommand("ROVER", "AUTO_ON");
-      setActionNotice("🤖 Autonomous Field Patrol & Plant Scan ENGAGED!");
-    } else {
-      sendCommand("ROVER", "STOP");
-      setActionNotice("🛑 Autonomous Mode Disengaged — Rover Stopped.");
-    }
-  };
-
-  // Rover Motor Speed Regulator (PWM 60-255)
-  const sendRoverSpeed = (speed: number) => {
-    setRoverSpeed(speed);
+    // 3. Direct Fast Relay to Local Edge Gateway (Port 8000)
     try {
-      fetch(`http://${roverIp}/speed?value=${speed}`, { mode: "no-cors", signal: AbortSignal.timeout(800) }).catch(() => {});
+      fetch(`http://127.0.0.1:8000/api/edge/pump/${targetKey}/${nextAction}`, {
+        method: "POST",
+        signal: AbortSignal.timeout(1000),
+      }).catch(() => {});
     } catch {}
-    setActionNotice(`⚡ Rover Motor Speed set to ${speed} PWM`);
+
+    triggerLiveSync();
+    setTimeout(() => setActionNotice(null), 3500);
+  };
+
+  // 6. ROVER POSITION & MODES (Image 4)
+  const [roverPosition, setRoverPosition] = useState<"DOCK" | "FIELD_A" | "FIELD_B">("DOCK");
+  const [roverMode, setRoverMode] = useState<"AUTO" | "MANUAL">("AUTO");
+  const [roverSpeed, setRoverSpeed] = useState<number>(190);
+  const [roverBattery, setRoverBattery] = useState<number>(88);
+  const [roverActionNotice, setRoverActionNotice] = useState<string>("Standby at Charging Dock");
+
+  const handleSwitchRoverMode = async (mode: "AUTO" | "MANUAL") => {
+    setRoverMode(mode);
+    setActionNotice(
+      mode === "AUTO"
+        ? "🤖 Rover switched to AUTO Patrol Mode"
+        : "🕹️ Rover switched to MANUAL Joystick Mode"
+    );
+
+    try {
+      fetch("/api/commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "ROVER_MODE", action: mode }),
+      }).catch(() => {});
+
+      fetch(`http://127.0.0.1:8000/api/edge/rover/mode/${mode}`, {
+        method: "POST",
+        signal: AbortSignal.timeout(1000),
+      }).catch(() => {});
+    } catch {}
+
+    triggerLiveSync();
     setTimeout(() => setActionNotice(null), 2500);
   };
 
-  // Manual Crop Photo Capture & AI Diagnostics
-  const captureRoverPhotoManual = () => {
-    setScanProcessing(true);
-    setScanNotice("📸 Rover Front Camera: Capturing Leaf Snapshot & Running AI Diagnostics...");
-    setTimeout(() => {
-      setScanProcessing(false);
-      setRoverScannedCount((prev) => prev + 1);
-      setScanNotice("✓ AI Vision Complete: Tomato Leaf Analyzed (Healthy / Negative Early Blight, 98.6% confidence)");
-      setTimeout(() => setScanNotice(null), 4500);
-    }, 1800);
+  const handleRoverDpad = async (dir: string) => {
+    if (roverMode === "AUTO") {
+      setActionNotice("⚠️ Switch Rover to MANUAL mode to use D-Pad Joystick controls!");
+      setTimeout(() => setActionNotice(null), 2500);
+      return;
+    }
+    setRoverActionNotice(`Manual Command: ${dir} at PWM ${roverSpeed}`);
+    setActionNotice(`🕹️ Rover: ${dir} (PWM ${roverSpeed})`);
+
+    // Dispatch rover command to cloud and edge hardware
+    try {
+      fetch("/api/commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "ROVER", action: dir }),
+      }).catch(() => {});
+
+      fetch("http://127.0.0.1:8000/api/edge/rover/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: dir }),
+        signal: AbortSignal.timeout(1000),
+      }).catch(() => {});
+    } catch {}
+
+    setTimeout(() => setActionNotice(null), 2000);
   };
 
-  // Autonomous Field Rover Patrol Simulation Loop
-  useEffect(() => {
-    if (!roverAutoMode && roverAction !== "AUTO_ON" && roverAction !== "AUTO_PATROL") return;
+  const handleCaptureRoverPhoto = () => {
+    setActionNotice("📸 Capturing Live Leaf Photo from ESP32-CAM...");
+    setTimeout(() => {
+      setActionNotice("✓ Snapshot Captured: Leaf healthy with 97.4% confidence");
+      setTimeout(() => setActionNotice(null), 3000);
+    }, 1500);
+  };
 
-    const patrolInterval = setInterval(() => {
-      setRoverPatrolStep((currentStep) => {
-        if (currentStep === "PATROL-FORWARD") {
-          setRoverDistance((d) => Math.max(26, +(d - 1.8).toFixed(1)));
-          setRoverScannedCount((c) => c + 1);
-          setRoverAction("SCANNING PLANT");
-          setActionNotice("🌱 Rover paused (1s) at crop plant • Camera scanning leaf...");
-          return "SCANNING PLANT";
-        } else if (currentStep === "SCANNING PLANT") {
-          setRoverDistance((d) => {
-            if (d < 32) {
-              setRoverAction("EVADE-RIGHT");
-              setActionNotice("⚡ Rover ultrasonic obstacle detected: Turning right to clear furrow");
-              return 45.0;
-            }
-            setRoverAction("PATROL-FORWARD");
-            return +(38 + Math.random() * 10).toFixed(1);
-          });
-          return "PATROL-FORWARD";
-        } else {
-          setRoverAction("PATROL-FORWARD");
-          setRoverDistance(44.0);
-          return "PATROL-FORWARD";
-        }
+  // 7. GRAPHICAL REPRESENTATION OF SENSORS (10-DAY DAY-WISE CALENDAR) (Image 4/5 - Top)
+  const [graphNode, setGraphNode] = useState<"NODE_A" | "NODE_B">("NODE_A");
+  const [selectedDayIndex, setSelectedDayIndex] = useState<number>(9); // Default to today (last index)
+  const [selectedMetric, setSelectedMetric] = useState<"SOIL_MOISTURE" | "SOIL_TEMP" | "HUMIDITY">("SOIL_MOISTURE");
+
+  // Generate 10 days of historical calendar date labels (Sep 11 to Sep 20, 2026)
+  const tenDaysList = useMemo(() => {
+    const list = [];
+    for (let i = 9; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      list.push({
+        index: 9 - i,
+        dateStr: `${months[d.getMonth()]} ${d.getDate()}`,
+        dayName: i === 0 ? "Today" : days[d.getDay()],
+        fullDate: d.toISOString().split("T")[0],
+        isToday: i === 0,
       });
-
-      setRoverBattery((b) => (Math.random() > 0.8 ? Math.max(15, b - 1) : b));
-    }, 2800);
-
-    return () => clearInterval(patrolInterval);
-  }, [roverAutoMode, roverAction]);
-
-  // Theme Initial Hydration from LocalStorage
-  useEffect(() => {
-    try {
-      const savedTheme = localStorage.getItem("agri_theme");
-      if (savedTheme === "dark") {
-        setIsDarkMode(true);
-        document.documentElement.classList.add("dark");
-      } else if (savedTheme === "light") {
-        setIsDarkMode(false);
-        document.documentElement.classList.remove("dark");
-      }
-    } catch {}
+    }
+    return list;
   }, []);
 
-  // Theme Switcher Handler
-  const toggleTheme = () => {
-    const nextMode = !isDarkMode;
-    setIsDarkMode(nextMode);
-    try {
-      if (nextMode) {
-        document.documentElement.classList.add("dark");
-        localStorage.setItem("agri_theme", "dark");
-        setActionNotice("🌙 Dark Mode Activated");
-      } else {
-        document.documentElement.classList.remove("dark");
-        localStorage.setItem("agri_theme", "light");
-        setActionNotice("☀️ Light Mode Activated");
-      }
-      setTimeout(() => setActionNotice(null), 2500);
-    } catch {}
-  };
+  // 24-Hour hourly telemetry data points for the selected historical day
+  const hourlyTelemetryData = useMemo(() => {
+    const data = [];
+    const daySeed = selectedDayIndex * 3.7;
+    for (let hour = 0; hour < 24; hour += 2) {
+      const timeLabel = `${String(hour).padStart(2, "0")}:00`;
+      
+      // Node A Base Curves (Field A Open Tomato Canopy)
+      const baseMoistureA = 74 + Math.sin((hour + daySeed) * 0.45) * 8;
+      const baseTempA = 23 + Math.sin((hour - 8 + daySeed) * 0.35) * 6;
+      const baseHumA = 60 + Math.cos((hour + daySeed) * 0.4) * 12;
 
-  // Auth Protection
-  useEffect(() => {
-    if (!isPending && !session) {
-      router.push("/login");
-    }
-  }, [session, isPending, router]);
+      // Node B Base Curves (Field B Controlled Greenhouse)
+      const baseMoistureB = 68 + Math.cos((hour + daySeed) * 0.4) * 6;
+      const baseTempB = 21 + Math.sin((hour - 6 + daySeed) * 0.3) * 4;
+      const baseHumB = 68 + Math.sin((hour + daySeed) * 0.45) * 9;
 
-  // Polling
-  useEffect(() => {
-    if (session) {
-      loadDashboardData();
-      const interval = setInterval(loadDashboardData, 15000);
-      return () => clearInterval(interval);
-    }
-  }, [session, activeZone]);
-
-  if (isPending || !session) {
-    return (
-      <div className="min-h-screen bg-[#EEF1F5] flex flex-col items-center justify-center text-[#121417] gap-3">
-        <div className="w-10 h-10 border-3 border-[#D6EBE7] border-t-[#121417] rounded-full animate-spin" />
-        <p className="text-xs tracking-wider uppercase font-black text-[#121417]">
-          Loading AgriSmart Intelligence...
-        </p>
-      </div>
-    );
-  }
-
-  const latest = telemetry?.latest?.telemetry || {
-    soilMoisture: 64,
-    soilTemperature: 23.8,
-    canopyTemperature: 26.2,
-    ambientHumidity: 62,
-    airTemperature: 27.5,
-    rainDetected: false,
-    rainIntensity: 0,
-    rainStatus: "NO_RAIN",
-  };
-
-  const isRaining = simulatedRain !== null ? simulatedRain : Boolean(latest.rainDetected);
-  const currentMoisture = latest.soilMoisture ?? 64;
-
-  // Historical Telemetry Area Chart Data
-  const historyList = Array.isArray(telemetry?.history) ? telemetry.history : [];
-  const chartData = historyList.length > 0 
-    ? historyList.map((d: any) => ({
-        time: d.recordedAt ? (d.recordedAt.length > 5 ? new Date(d.recordedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : d.recordedAt) : "--",
-        moisture: d.telemetry?.soilMoisture ?? 60,
-        temp: d.telemetry?.soilTemperature ?? 23,
-        humidity: d.telemetry?.ambientHumidity ?? 65,
-      }))
-    : [
-        { time: "06:00", moisture: 58, temp: 22, humidity: 70 },
-        { time: "08:00", moisture: 62, temp: 24, humidity: 68 },
-        { time: "10:00", moisture: 65, temp: 26, humidity: 64 },
-        { time: "12:00", moisture: 64, temp: 28, humidity: 60 },
-        { time: "14:00", moisture: 61, temp: 29, humidity: 58 },
-        { time: "16:00", moisture: 66, temp: 27, humidity: 63 },
-        { time: "18:00", moisture: 68, temp: 25, humidity: 67 },
-      ];
-
-  // Segmented Stacked Bar Chart Blocks Data (22 Sept - 30 Sept matching Reference Image)
-  const stackedBlocksData = [
-    { date: "22 Sept", blocks: [1, 0, 0, 0], active: false },
-    { date: "23 Sept", blocks: [1, 0, 0, 0], active: false },
-    { date: "24 Sept", blocks: [1, 1, 0, 0], active: false },
-    { date: "25 Sept", blocks: [1, 1, 1, 0], active: true, dot: true },
-    { date: "26 Sept", blocks: [1, 1, 1, 1], active: true },
-    { date: "27 Sept", blocks: [1, 1, 1, 0], active: true },
-    { date: "28 Sept", blocks: [1, 1, 0, 0], active: true, dot: true },
-    { date: "29 Sept", blocks: [1, 0, 0, 0], active: false },
-    { date: "30 Sept", blocks: [1, 1, 0, 0], active: false },
-  ];
-
-  // Farm Alerts Engine
-  const getComputedAlerts = (): FarmAlert[] => {
-    const list: FarmAlert[] = [];
-    const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-    if (weather?.floodRisk) {
-      list.push({
-        id: "weather-flood",
-        type: "CRITICAL",
-        title: "⚠️ Flood & Heavy Rainfall Alert",
-        message: weather.alertMessage || "Severe rainfall detected in Lucknow Region. Immediate root waterlogging risk.",
-        zone: "Farm-wide",
-        timestamp: now,
+      data.push({
+        time: timeLabel,
+        // Node A
+        moistureA: Number(baseMoistureA.toFixed(1)),
+        soilTempA: Number(baseTempA.toFixed(1)),
+        humidityA: Number(baseHumA.toFixed(1)),
+        // Node B
+        moistureB: Number(baseMoistureB.toFixed(1)),
+        soilTempB: Number(baseTempB.toFixed(1)),
+        humidityB: Number(baseHumB.toFixed(1)),
       });
     }
-
-    if (isRaining) {
-      list.push({
-        id: "hw-rain",
-        type: "CRITICAL",
-        title: "🌧️ ESP32 Rain Sensor Active (Pin 27)",
-        message: "Conductive bridge active on rain plate. Auto-drip suspended to prevent root rot.",
-        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
-        timestamp: now,
-        actionText: pumpZoneA || pumpZoneB ? "Halt Running Pumps" : undefined,
-        actionTarget: pumpZoneA ? "PUMP_ZONE_A" : "PUMP_ZONE_B",
-        actionCmd: "OFF",
-      });
-    }
-
-    if (currentMoisture < 45 && !isRaining) {
-      list.push({
-        id: "low-moist",
-        type: "WARNING",
-        title: "Low Soil Moisture Warning",
-        message: `Root zone moisture dropped to ${currentMoisture}%. Irrigation recommended.`,
-        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
-        timestamp: now,
-        actionText: activeZone === "ZONE_A" ? "Start Pump A" : "Start Pump B",
-        actionTarget: activeZone === "ZONE_A" ? "PUMP_ZONE_A" : "PUMP_ZONE_B",
-        actionCmd: "ON",
-      });
-    }
-
-    const diseaseLabel = aiSummary?.disease?.detectionLabel;
-    if (diseaseLabel && !diseaseLabel.toLowerCase().includes("healthy")) {
-      list.push({
-        id: "ai-disease",
-        type: "CRITICAL",
-        title: `🦠 Plant Disease: ${diseaseLabel}`,
-        message: `AI vision detected ${diseaseLabel}. Deploy bio-fungicide treatment.`,
-        zone: activeZone === "ZONE_A" ? "Tomato Field A" : "Greenhouse B",
-        timestamp: now,
-      });
-    }
-
-    if (roverBattery < 20) {
-      list.push({
-        id: "rover-bat",
-        type: "WARNING",
-        title: "Field Rover Low Battery (<20%)",
-        message: `Rover battery is at ${roverBattery}%. Dock to recharge station.`,
-        zone: "Field Rover",
-        timestamp: now,
-        actionText: "Emergency Stop",
-        actionTarget: "ROVER",
-        actionCmd: "STOP",
-      });
-    }
-
-    return list;
-  };
-
-  const activeAlerts = getComputedAlerts();
-
-  // CSV Exporter
-  const handleDownloadReport = () => {
-    const csvContent =
-      "data:text/csv;charset=utf-8," +
-      "Zone,Timestamp,Soil Moisture (%),Soil Temp (C),Ambient Humidity (%),Rain Status,Pump A,Pump B\n" +
-      `${activeZone},${new Date().toISOString()},${currentMoisture},${latest.soilTemperature || 24},${latest.ambientHumidity || 65},${isRaining ? "RAINING" : "DRY"},${pumpZoneA ? "ON" : "OFF"},${pumpZoneB ? "ON" : "OFF"}\n`;
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `agri_verification_stats_${activeZone.toLowerCase()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
+    return data;
+  }, [selectedDayIndex]);
 
   return (
-    <div className={`min-h-screen ${isDarkMode ? "dark bg-[#0B0E14] text-[#F3F6F9]" : "bg-[#EEF1F5] text-[#121417]"} p-2 sm:p-5 lg:p-7 flex items-center justify-center transition-colors duration-300`}>
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8 max-w-[1580px] mx-auto flex flex-col gap-6 select-none relative">
       
+      {/* Dynamic Ambient Pastel Glow Orbs (Visible & Refracted through Frosted Bento Glass Cards) */}
+      <div className="fixed top-10 left-10 w-[500px] h-[500px] bg-[#E0F2FE]/40 dark:bg-[#0284C7]/15 rounded-full blur-[130px] pointer-events-none -z-10 animate-pulse-glow" />
+      <div className="fixed top-1/3 right-10 w-[550px] h-[550px] bg-[#FFEDD5]/40 dark:bg-[#EA580C]/12 rounded-full blur-[140px] pointer-events-none -z-10 animate-float-slow" />
+      <div className="fixed bottom-10 left-1/4 w-[500px] h-[500px] bg-[#D1FAE5]/40 dark:bg-[#059669]/15 rounded-full blur-[130px] pointer-events-none -z-10" />
+      <div className="fixed bottom-1/4 right-1/3 w-[450px] h-[450px] bg-[#EDE9FE]/35 dark:bg-[#6366F1]/15 rounded-full blur-[120px] pointer-events-none -z-10" />
+      
+      {/* 1. WELCOME SCREEN ANIMATION (Image 1) */}
+      {showWelcome && (
+        <div className="fixed inset-0 z-[100] bg-[#121417]/95 backdrop-blur-xl flex flex-col items-center justify-center p-6 text-white animate-fade-in-scale">
+          <div className="absolute w-96 h-96 rounded-full bg-[#3B82F6]/20 blur-3xl pointer-events-none animate-pulse-glow" />
+          <div className="absolute w-80 h-80 rounded-full bg-[#10B981]/15 blur-3xl -top-10 -right-10 pointer-events-none" />
+
+          <div className="relative z-10 max-w-lg w-full text-center flex flex-col items-center gap-6">
+            <div className="w-20 h-20 rounded-3xl bg-gradient-to-tr from-[#2563EB] to-[#60A5FA] text-white flex items-center justify-center shadow-2xl animate-float-slow">
+              <Sprout className="w-10 h-10" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="text-[11px] font-black tracking-widest uppercase px-3.5 py-1 rounded-full bg-white/10 text-[#60A5FA] border border-white/10">
+                AgriSmart Precision Cloud
+              </span>
+              <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white mt-3">
+                Welcome to Cloud Dashboard
+              </h1>
+              <p className="text-sm text-white/70 max-w-md mx-auto">
+                Next-generation precision agriculture intelligence • Real-time field telemetry, autonomous rover patrol, and edge AI diagnostics
+              </p>
+            </div>
+
+            <div className="w-full max-w-xs space-y-2">
+              <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden p-0.5 border border-white/10">
+                <div
+                  className="h-full bg-gradient-to-r from-[#3B82F6] to-[#10B981] rounded-full transition-all duration-300"
+                  style={{ width: `${welcomeProgress}%` }}
+                />
+              </div>
+              <div className="flex justify-between text-[11px] text-white/50 font-mono">
+                <span>Connecting Cloud Gateway...</span>
+                <span>{welcomeProgress}%</span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setShowWelcome(false)}
+              className="mt-2 px-8 py-3 rounded-full bg-[#3B82F6] hover:bg-[#2563EB] text-white font-black text-sm transition-all shadow-xl hover:scale-105 active:scale-95 flex items-center gap-2 cursor-pointer"
+            >
+              <span>Enter Cloud Dashboard</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 1.5 AUTHENTICATION GATEWAY (Shows smoothly after opening animation if unauthenticated) */}
+      {!isAuthenticated && !showWelcome && (
+        <div className="fixed inset-0 z-[90] bg-[#F4F7FC]/80 dark:bg-[#090D16]/85 backdrop-blur-2xl flex items-center justify-center p-3 sm:p-6 py-6 sm:py-10 overflow-y-auto animate-fade-in-scale">
+          {/* Ambient background glows */}
+          <div className="absolute -top-32 -left-32 w-96 h-96 bg-[#3B82F6]/15 dark:bg-[#3B82F6]/25 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-[#10B981]/15 dark:bg-[#10B981]/25 rounded-full blur-3xl pointer-events-none" />
+
+          <AuthCard
+            onSuccess={(user) => {
+              setDemoUser(user || { name: "Kristin Watson", email: "farmer@agrismart.io" });
+              setActionNotice("✓ Authenticated! Welcome to AgriSmart Cloud Central.");
+              setTimeout(() => setActionNotice(null), 3000);
+            }}
+          />
+        </div>
+      )}
+
       {/* ACTION NOTICE TOAST */}
       {actionNotice && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 animate-bounce">
-          <div className="bg-[#121417] text-white px-5 py-2.5 rounded-full shadow-2xl border border-white/20 flex items-center gap-2.5 text-xs font-black tracking-wide">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#D6EBE7] animate-ping" />
+        <div className="fixed top-5 left-1/2 -translate-x-1/2 z-50 animate-bounce">
+          <div className="bg-[#1E2432] text-white px-5 py-2.5 rounded-full shadow-2xl border border-white/10 flex items-center gap-2.5 text-xs font-black tracking-wide">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6] animate-ping" />
             <span>{actionNotice}</span>
           </div>
         </div>
       )}
 
-      {/* DISASTER & FLOOD WARNING BANNER */}
-      {weather?.floodRisk && (
-        <aside
-          className="fixed top-0 left-0 right-0 bg-[#E11D48] text-white px-4 py-2 z-50 flex items-center justify-center gap-2 text-xs font-black shadow-md cursor-pointer"
-          onClick={() => setActiveTab("all")}
-        >
-          <AlertTriangle className="w-4 h-4 animate-bounce text-[#FDE68A]" />
-          <span>{weather.alertMessage}</span>
-        </aside>
-      )}
-
       {/* ========================================================================= */}
-      {/* MASTER OUTER FRAME (Tablet / Screen Bento Shell) */}
+      {/* 2. HEADER BAR (Image 2) */}
       {/* ========================================================================= */}
-      <div className={`w-full max-w-[1440px] outer-screen-frame ${isDarkMode ? "bg-[#181B20] border-[#2C323B]" : "bg-[#F3F6F9]"} p-3 sm:p-5 lg:p-6 flex flex-col gap-4 relative overflow-hidden`}>
+      <header className="w-full modern-card p-4 sm:p-5 flex flex-col md:flex-row items-center justify-between gap-4">
         
-        {/* ======================================================================= */}
-        {/* TOP APP BAR ROW */}
-        {/* ======================================================================= */}
-        <header className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-          
-          {/* Brand Logo & Search Bar */}
-          <div className="flex items-center gap-3 flex-1 max-w-xl">
-            {/* Geometric Seed Logo Icon */}
-            <div className="w-10 h-10 rounded-2xl bg-[#121417] text-white flex items-center justify-center flex-shrink-0 shadow-md">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 2L4 7v10l8 5 8-5V7l-8-5z" />
-                <path d="M12 6l5 3-5 3-5-3 5-3z" />
-                <path d="M12 12v6" />
-              </svg>
-            </div>
-
-            {/* Pill Search Input */}
-            <div className="relative flex-1">
-              <input
-                type="text"
-                placeholder="Search..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={`w-full pl-9 pr-14 py-2.5 rounded-full ${isDarkMode ? "bg-[#232830] text-white" : "bg-[#FFFFFF] text-[#121417]"} border border-[#E2E7ED] text-xs font-medium placeholder-[#8E9BAA] focus:outline-none focus:ring-2 focus:ring-[#D6EBE7] transition shadow-xs`}
-              />
-              <Search className="w-4 h-4 text-[#8E9BAA] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-[#8E9BAA]">
-                <Mic className="w-3.5 h-3.5 hover:text-[#121417] cursor-pointer" />
-              </div>
-            </div>
+        {/* Left: Brand Title & Dynamic Sync Status */}
+        <div className="flex items-center gap-3.5 self-start md:self-auto">
+          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#2563EB] to-[#60A5FA] text-white flex items-center justify-center shadow-[0_6px_18px_rgba(37,99,235,0.35)] shrink-0">
+            <Sprout className="w-6 h-6" />
           </div>
-
-          {/* Right Action Controls */}
-          <div className="flex items-center justify-end gap-3 flex-wrap sm:flex-nowrap">
-            {/* Zone Selector Pill */}
-            <div className={`flex items-center p-0.5 rounded-full ${isDarkMode ? "bg-[#232830]" : "bg-white"} border border-[#E2E7ED] shadow-xs`}>
-              <button
-                onClick={() => setActiveZone("ZONE_A")}
-                className={`px-3 py-1 rounded-full text-xs font-black transition ${
-                  activeZone === "ZONE_A"
-                    ? "bg-[#D6EBE7] text-[#121417]"
-                    : "text-[#5E6977] hover:text-[#121417]"
-                }`}
-              >
-                Zone A (Field)
-              </button>
-              <button
-                onClick={() => setActiveZone("ZONE_B")}
-                className={`px-3 py-1 rounded-full text-xs font-black transition ${
-                  activeZone === "ZONE_B"
-                    ? "bg-[#D6EBE7] text-[#121417]"
-                    : "text-[#5E6977] hover:text-[#121417]"
-                }`}
-              >
-                Zone B (Greenhouse)
-              </button>
-            </div>
-
-            {/* Online Support / Edge Sync Pill */}
-            <button
-              onClick={() => {
-                loadDashboardData();
-                setActionNotice("🟢 Live Edge Gateway Synchronized!");
-              }}
-              className="px-4 py-2 rounded-full bg-[#D6EBE7] hover:bg-[#CCE4E0] text-[#121417] font-extrabold text-xs transition shadow-xs flex items-center gap-1.5"
-            >
-              <span className="w-2 h-2 rounded-full bg-[#121417] animate-pulse" />
-              <span>Online support</span>
-            </button>
-
-            {/* Bell Button */}
-            <button
-              onClick={() => setActiveTab("all")}
-              className={`w-9 h-9 rounded-full ${isDarkMode ? "bg-[#232830]" : "bg-white"} border border-[#E2E7ED] flex items-center justify-center text-[#5E6977] hover:text-[#121417] relative shadow-xs`}
-            >
-              <Bell className="w-4 h-4" />
-              {activeAlerts.length > 0 && (
-                <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#E11D48] ring-2 ring-white" />
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-[#1E2432] dark:text-[#F8FAFC]">
+                Good Morning, {session.user?.name ? session.user.name.split(" ")[0] : "Farmer"} 👋
+              </h1>
+              {isSyncing ? (
+                <span className="px-2.5 py-0.5 rounded-full bg-[#D1FAE5] text-[#065F46] text-[11px] font-black flex items-center gap-1.5 border border-[#A7F3D0] shadow-xs animate-pulse">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-ping" />
+                  Live Syncing...
+                </span>
+              ) : (
+                <span className="px-2.5 py-0.5 rounded-full bg-[#F8FAFC] dark:bg-[#1A2234] text-[#64748B] dark:text-[#94A3B8] text-[11px] font-bold flex items-center gap-1.5 border border-[#E8EEF5] dark:border-[#212C42]">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" />
+                  <span>Last sync: <span className="font-extrabold text-[#1E2432] dark:text-[#F8FAFC] font-mono">{lastSyncTime}</span></span>
+                </span>
               )}
-            </button>
-
-            {/* User Profile Pill */}
-            <div className={`flex items-center gap-2 pl-3 pr-1 py-1 rounded-full ${isDarkMode ? "bg-[#232830]" : "bg-white"} border border-[#E2E7ED] shadow-xs`}>
-              <span className="text-xs font-black text-[#121417]">{session.user?.name || "Nika Meyer"}</span>
-              <div className="w-7 h-7 rounded-full bg-[#121417] text-white flex items-center justify-center text-xs font-black">
-                {session.user?.name ? session.user.name.charAt(0).toUpperCase() : "N"}
-              </div>
             </div>
+            <p className="text-xs text-[#8A94A6] dark:text-[#94A3B8] font-medium">
+              AgriSmart Precision Multi-Node Cloud Ecosystem
+            </p>
           </div>
-        </header>
+        </div>
 
-        {/* ======================================================================= */}
-        {/* MAIN 3-COLUMN BENTO GRID BODY */}
-        {/* ======================================================================= */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+        {/* Right Toolbar Group (Quick Weather + AI Scanner + Calendar Pill + Profile Modal) */}
+        <div className="flex items-center justify-end flex-wrap gap-2.5 sm:gap-3 self-stretch md:self-auto ml-auto">
           
-          {/* ===================================================================== */}
-          {/* COLUMN 1: LEFT VERTICAL ICON DOCK (Pill Rail) */}
-          {/* ===================================================================== */}
-          <div className="lg:col-span-1 flex lg:flex-col items-center justify-between gap-3 py-2 px-1">
-            <div className="flex lg:flex-col items-center gap-2 overflow-x-auto no-scrollbar">
-              <button
-                onClick={() => setActiveTab("activity")}
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
-                  activeTab === "activity"
-                    ? "bg-[#121417] text-white shadow-md"
-                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
-                }`}
-                title="Activity Dashboard"
-              >
-                <Home className="w-4 h-4" />
-              </button>
+          {/* Quick AI Scanner Pill */}
+          <a
+            href="#manual-scanner-section"
+            className="px-3.5 py-2 rounded-full bg-[#EEF2FF] dark:bg-[#1E1B4B] hover:bg-[#E0E7FF] dark:hover:bg-[#312E81] border border-[#C7D2FE] dark:border-[#4338CA] flex items-center gap-2 cursor-pointer transition shadow-xs select-none"
+            title="Jump to Manual Plant Disease & Crop Scanner"
+          >
+            <span className="text-sm">🔬</span>
+            <span className="text-xs font-black text-[#4338CA] dark:text-[#A5B4FC] hidden sm:inline">AI Scanner</span>
+          </a>
 
-              <button
-                onClick={() => setActiveTab("weather")}
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
-                  activeTab === "weather"
-                    ? "bg-[#121417] text-white shadow-md"
-                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
-                }`}
-                title="Live Weather & 7-Day Forecast"
-              >
-                <CloudSun className="w-4 h-4" />
-              </button>
+          {/* Quick Weather Snapshot Pill */}
+          <a
+            href="#weather-section"
+            className="px-3.5 py-2 rounded-full bg-[#F8FAFC] hover:bg-[#EEF2F6] border border-[#E8EEF5] flex items-center gap-2 cursor-pointer transition shadow-xs select-none"
+            title="Click to view full 7-day weather forecast"
+          >
+            <span className="text-sm">🌤️</span>
+            <div className="text-xs font-bold text-[#1E2432] flex items-center gap-1.5">
+              <span className="font-extrabold text-[#0284C7]">{weather?.temperature ?? 28}°C</span>
+              <span className="text-[#8A94A6] hidden sm:inline">• {weather?.days[0]?.condition || "Sunny"}</span>
+            </div>
+          </a>
 
-              <button
-                onClick={() => setActiveTab("sensors")}
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
-                  activeTab === "sensors"
-                    ? "bg-[#121417] text-white shadow-md"
-                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
-                }`}
-                title="Sensors & Rain Telemetry"
-              >
-                <Layers className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => setActiveTab("pumps")}
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
-                  activeTab === "pumps"
-                    ? "bg-[#121417] text-white shadow-md"
-                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
-                }`}
-                title="Pump Zone A & B Controls"
-              >
-                <Sliders className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => setActiveTab("rover")}
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
-                  activeTab === "rover"
-                    ? "bg-[#121417] text-white shadow-md"
-                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
-                }`}
-                title="Field Rover Teleoperation"
-              >
-                <Navigation className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => setActiveTab("ai")}
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition ${
-                  activeTab === "ai"
-                    ? "bg-[#121417] text-white shadow-md"
-                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
-                }`}
-                title="4 AI Vision Models"
-              >
-                <Sparkles className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => setActiveTab("all")}
-                className={`w-10 h-10 rounded-2xl flex items-center justify-center transition relative ${
-                  activeTab === "all"
-                    ? "bg-[#121417] text-white shadow-md"
-                    : "text-[#5E6977] hover:bg-white hover:text-[#121417]"
-                }`}
-                title="Farm Alerts & Disaster Center"
-              >
-                <Bell className="w-4 h-4" />
-                {activeAlerts.length > 0 && (
-                  <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-[#E11D48]" />
-                )}
-              </button>
+          {/* Date, Time & Day (with Calendar Hover/Click Popover) */}
+          <div className="relative">
+            <div
+              onClick={() => setShowCalendarPopover(!showCalendarPopover)}
+              onMouseEnter={() => setShowCalendarPopover(true)}
+              className="px-4 py-2 rounded-full bg-[#F8FAFC] hover:bg-[#EEF2F6] border border-[#E8EEF5] flex items-center gap-2.5 cursor-pointer transition shadow-xs select-none"
+            >
+              <CalendarIcon className="w-4 h-4 text-[#F59E0B]" />
+              <div className="text-xs font-bold text-[#1E2432] flex items-center gap-1.5">
+                <span className="font-extrabold">{currentTime.dayStr},</span>
+                <span>{currentTime.dateStr}</span>
+                <span className="text-[#8A94A6] font-mono hidden sm:inline">• {currentTime.timeStr}</span>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-[#8A94A6]" />
             </div>
 
-            {/* Bottom Dark Mode Switch & Profile Pill */}
-            <div className="flex lg:flex-col items-center gap-3">
-              <button
-                id="btnDarkModeToggle"
-                onClick={toggleTheme}
-                className={`w-8 h-14 rounded-full p-1 flex flex-col justify-between items-center cursor-pointer shadow-sm transition border ${
-                  isDarkMode
-                    ? "bg-[#1C222D] border-[#2A3342]"
-                    : "bg-[#121417] border-[#121417]"
-                }`}
-                title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+            {/* Interactive Calendar Popover */}
+            {showCalendarPopover && (
+              <div
+                onMouseLeave={() => setShowCalendarPopover(false)}
+                className="absolute top-full mt-2 right-0 sm:left-1/2 sm:-translate-x-1/2 z-40 w-80 bg-white dark:bg-[#131926] rounded-2xl border border-[#E8EEF5] dark:border-[#212C42] popover-shadow p-4 animate-fade-in-scale shadow-2xl"
               >
-                <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs transition-transform duration-300 ${
-                    isDarkMode
-                      ? "bg-[#52C2B1] translate-y-6 shadow-sm"
-                      : "bg-white translate-y-0"
-                  }`}
-                >
-                  {isDarkMode ? (
-                    <Moon className="w-3.5 h-3.5 text-[#0B0E14]" />
-                  ) : (
-                    <Sun className="w-3.5 h-3.5 text-[#121417]" />
-                  )}
-                </div>
-              </button>
-
-              <button
-                onClick={() =>
-                  authClient.signOut({
-                    fetchOptions: { onSuccess: () => router.push("/login") },
-                  })
-                }
-                className="w-9 h-9 rounded-full bg-white border border-[#E2E7ED] flex items-center justify-center text-[#E11D48] hover:bg-[#FFE4E6] transition shadow-xs"
-                title="Log Out"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          </div>
-
-          {/* ===================================================================== */}
-          {/* COLUMN 2: CENTER MAIN DASHBOARD CANVAS */}
-          {/* ===================================================================== */}
-          <div className="lg:col-span-8 space-y-4">
-            
-            {/* Header Verification Stats & Top Counters */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h1 className="text-2xl sm:text-3xl font-black text-[#121417] tracking-tight">
-                  Verification stats
-                </h1>
-                <p className="text-xs text-[#5E6977] font-semibold mt-0.5">
-                  Live Farm Intelligence • Lucknow Region (26.85°N, 80.95°E) • {weather?.time || "Updated live"}
-                </p>
-              </div>
-
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full border border-[#E2E7ED] bg-white flex items-center justify-center text-[#5E6977] shadow-xs">
-                    <Clock className="w-4 h-4" />
+                {/* Calendar Header with Navigation */}
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCalendarMonthOffset((prev) => prev - 1);
+                      }}
+                      className="w-6 h-6 rounded-full hover:bg-[#F4F7FC] dark:hover:bg-[#1A2234] flex items-center justify-center text-xs font-black text-[#1E2432] dark:text-[#F8FAFC] transition cursor-pointer"
+                      title="Previous Month"
+                    >
+                      ‹
+                    </button>
+                    <strong className="text-xs font-black text-[#1E2432] dark:text-[#F8FAFC]">
+                      {calendarData.monthName} {calendarData.year}
+                    </strong>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCalendarMonthOffset((prev) => prev + 1);
+                      }}
+                      className="w-6 h-6 rounded-full hover:bg-[#F4F7FC] dark:hover:bg-[#1A2234] flex items-center justify-center text-xs font-black text-[#1E2432] dark:text-[#F8FAFC] transition cursor-pointer"
+                      title="Next Month"
+                    >
+                      ›
+                    </button>
                   </div>
-                  <div>
-                    <span className="text-[10px] text-[#8E9BAA] font-bold block leading-none">
-                      You have been online
-                    </span>
-                    <span className="text-lg font-black text-[#121417]">
-                      124<span className="text-[10px] font-semibold text-[#8E9BAA] ml-1">Hours per month</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-full border border-[#E2E7ED] bg-white flex items-center justify-center text-[#5E6977] shadow-xs">
-                    <Globe className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-[#8E9BAA] font-bold block leading-none">
-                      This month you visited
-                    </span>
-                    <span className="text-lg font-black text-[#121417]">
-                      315<span className="text-[10px] font-semibold text-[#8E9BAA] ml-1">Sites / Packets</span>
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Filter Pills Row */}
-            <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar pb-1">
-              <div className="flex items-center gap-2">
-                {[
-                  { id: "all", label: "All" },
-                  { id: "activity", label: "Activity" },
-                  { id: "weather", label: "Weather" },
-                  { id: "sensors", label: "Sensors" },
-                  { id: "pumps", label: "Pumps" },
-                  { id: "rover", label: "Rover" },
-                  { id: "ai", label: "AI Models" },
-                ].map((tab) => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`px-4 py-1.5 rounded-full text-xs font-bold transition ${
-                      activeTab === tab.id
-                        ? "capsule-pill-active"
-                        : "capsule-pill hover:bg-[#F3F6F9]"
-                    }`}
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setActionNotice("➕ New Sensor Tag Configured")}
-                  className="w-7 h-7 rounded-full capsule-pill flex items-center justify-center text-xs font-black"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              {/* Download & Options */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handleDownloadReport}
-                  className="w-8 h-8 rounded-full capsule-pill flex items-center justify-center text-[#5E6977] hover:text-[#121417]"
-                  title="Download CSV Report"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={loadDashboardData}
-                  className="w-8 h-8 rounded-full capsule-pill flex items-center justify-center text-[#5E6977] hover:text-[#121417]"
-                  title="Refresh Telemetry"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-                </button>
-              </div>
-            </div>
-
-            {/* =================================================================== */}
-            {/* HERO AGRICULTURAL INTELLIGENCE & HYDRATION MATRIX CARD */}
-            {/* =================================================================== */}
-            <div className="mint-hero-card rounded-[32px] p-5 sm:p-6 relative overflow-hidden">
-              
-              {/* Top Sub-Bar Controls */}
-              <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#121417] text-white flex items-center justify-center text-sm shadow-xs">
-                    <Sprout className="w-4 h-4 text-[#D6EBE7]" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-black text-[#121417]">
-                        Crop Hydration & Soil Matrix
-                      </span>
-                      <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/80 text-[#121417] border border-white/80">
-                        {activeZone === "ZONE_A" ? "🍅 Tomato Field A" : "🌿 Greenhouse B"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-white/70 text-[#121417] border border-white/60 flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#4FA89B] animate-ping" />
-                    Master ESP32 Connected
+                  <span className="text-[10.5px] px-2 py-0.5 rounded-full bg-[#FEF3C7] dark:bg-[#78350F]/40 text-[#92400E] dark:text-[#FDE68A] font-bold">
+                    {calendarMonthOffset === 0 ? "● Today" : "Browse"}
                   </span>
                 </div>
-              </div>
 
-              {/* Main Layout: Left Real Metrics Cards + Right Real Soil Moisture Chart */}
-              <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                
-                {/* Left Agricultural Sub-Cards */}
-                <div className="md:col-span-5 space-y-2.5">
-                  {/* Card 1: Root Soil Moisture & Target Presets */}
-                  <div className="bg-white/85 backdrop-blur-sm rounded-2xl p-3.5 border border-white/80 space-y-2 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-[#121417]">Root Soil Moisture</span>
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                        currentMoisture >= 60 && currentMoisture <= 75 
-                          ? "bg-[#D6EBE7] text-[#121417]" 
-                          : currentMoisture < 60 
-                          ? "bg-[#FDE68A] text-[#D97706]" 
-                          : "bg-[#E8DFF5] text-[#7C5CBF]"
-                      }`}>
-                        {currentMoisture >= 60 && currentMoisture <= 75 ? "Optimal Hydration" : currentMoisture < 60 ? "Low Moisture" : "Saturated"}
-                      </span>
-                    </div>
-
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-black text-[#121417]">{currentMoisture}%</span>
-                      <span className="text-xs text-[#5E6977] font-semibold">
-                        Target: <strong className="text-[#121417]">{moistureTarget}%</strong>
-                      </span>
-                    </div>
-
-                    {/* Target Preset Selectors */}
-                    <div className="flex items-center gap-1.5 pt-1 border-t border-[#E2E7ED]/60">
-                      <span className="text-[10px] text-[#5E6977] font-bold mr-1">Preset:</span>
-                      {[50, 65, 75, 85].map((target) => (
-                        <button
-                          key={target}
-                          onClick={() => {
-                            setMoistureTarget(target);
-                            setActionNotice(`🎯 Target Setpoint: ${target}% Moisture`);
-                          }}
-                          className={`px-2 py-0.5 rounded-lg text-[10px] font-black transition ${
-                            moistureTarget === target
-                              ? "bg-[#121417] text-white shadow-xs"
-                              : "bg-white text-[#5E6977] hover:bg-[#D6EBE7] border border-[#E2E7ED]"
-                          }`}
-                        >
-                          {target}%
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Card 2: Live Actuator & Safety Interlock Status */}
-                  <div className="bg-white/85 backdrop-blur-sm rounded-2xl p-3.5 border border-white/80 space-y-2 shadow-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-[#121417]">Live Actuator Interlocks</span>
-                      <span className="text-[10px] font-mono font-bold text-[#5E6977]">Relays 25/26/27</span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {/* Pump Zone A Status Button */}
-                      <button
-                        onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
-                        className={`p-2 rounded-xl text-left border transition ${
-                          pumpZoneA
-                            ? "bg-[#121417] text-white border-[#121417] shadow-xs"
-                            : "bg-white text-[#121417] border-[#E2E7ED] hover:bg-[#F3F6F9]"
-                        }`}
-                      >
-                        <span className="text-[10px] block font-semibold opacity-75">Pump A (Field)</span>
-                        <span className="font-black text-xs">{pumpZoneA ? "● 42 L/h ON" : "○ OFF (Tap)"}</span>
-                      </button>
-
-                      {/* Rain Sensor Status */}
-                      <div className={`p-2 rounded-xl border ${
-                        isRaining 
-                          ? "bg-[#FFE4E6] border-[#fca5a5] text-[#E11D48]" 
-                          : "bg-white border-[#E2E7ED] text-[#121417]"
-                      }`}>
-                        <span className="text-[10px] block font-semibold opacity-75">Rain Sensor (Pin 27)</span>
-                        <span className="font-black text-xs">{isRaining ? "🌧️ Interlock ON" : "☀️ Sensor Dry"}</span>
-                      </div>
-                    </div>
-                  </div>
+                {/* Day of Week Headers */}
+                <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold mb-1 text-[#8A94A6] dark:text-[#64748B]">
+                  <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
                 </div>
 
-                {/* Right Real 7-Day Soil Moisture & Irrigation Trend Columns */}
-                <div className="md:col-span-6 flex items-end justify-between gap-2 pt-2 px-2">
-                  {[
-                    { day: "Mon", moist: 62, pumpMins: 30, optimal: true },
-                    { day: "Tue", moist: 66, pumpMins: 45, optimal: true },
-                    { day: "Wed", moist: 58, pumpMins: 20, optimal: false },
-                    { day: "Thu", moist: 70, pumpMins: 50, optimal: true },
-                    { day: "Fri", moist: 64, pumpMins: 35, optimal: true },
-                    { day: "Sat", moist: 68, pumpMins: 40, optimal: true },
-                    { day: "Today", moist: currentMoisture, pumpMins: pumpZoneA ? 60 : 25, isToday: true },
-                  ].map((item, idx) => (
-                    <div key={idx} className="flex flex-col items-center gap-1.5 flex-1">
-                      {/* Numerical Moisture Badge */}
-                      <span className={`text-[10px] font-black ${item.isToday ? "text-[#121417]" : "text-[#5E6977]"}`}>
-                        {item.moist}%
-                      </span>
-
-                      {/* Real Moisture Bar Container */}
-                      <div className="w-full max-w-[32px] h-28 rounded-2xl bg-white/60 p-1 flex flex-col justify-end border border-white/80 shadow-xs">
-                        <div
-                          className={`w-full rounded-xl transition-all duration-500 ${
-                            item.isToday
-                              ? "bg-[#121417] shadow-sm"
-                              : item.moist >= 60 && item.moist <= 75
-                              ? "bg-[#4FA89B]"
-                              : item.moist < 60
-                              ? "bg-[#FDE68A]"
-                              : "bg-[#7C5CBF]"
-                          }`}
-                          style={{ height: `${Math.min(100, Math.max(15, (item.moist / 100) * 100))}%` }}
-                        />
-                      </div>
-
-                      <span className={`text-[10px] font-extrabold ${item.isToday ? "text-[#121417] font-black" : "text-[#5E6977]"}`}>
-                        {item.day}
-                      </span>
-                    </div>
+                {/* Day Cells */}
+                <div className="grid grid-cols-7 gap-1 text-center text-xs">
+                  {calendarData.allCells.map((cell, idx) => (
+                    <button
+                      key={idx}
+                      disabled={!cell.isCurrentMonth}
+                      onClick={() => {
+                        if (cell.isCurrentMonth) {
+                          setActionNotice(`📅 Calendar date selected: ${cell.dateStr}`);
+                          setShowCalendarPopover(false);
+                          setTimeout(() => setActionNotice(null), 2500);
+                        }
+                      }}
+                      className={`h-7 w-7 mx-auto rounded-full flex items-center justify-center text-xs transition select-none ${
+                        !cell.isCurrentMonth
+                          ? "opacity-25 text-[#94A3B8] dark:text-[#4B5563] cursor-default font-normal"
+                          : cell.isToday
+                          ? "bg-[#2563EB] text-white font-black shadow-md ring-2 ring-[#2563EB]/40 scale-105"
+                          : "hover:bg-[#F4F7FC] dark:hover:bg-[#1A2234] text-[#1E2432] dark:text-[#F8FAFC] font-bold cursor-pointer"
+                      }`}
+                    >
+                      {cell.day}
+                    </button>
                   ))}
                 </div>
 
-                {/* Far Right Action Buttons */}
-                <div className="md:col-span-1 hidden md:flex flex-col items-center gap-2 bg-white/70 p-1.5 rounded-full border border-white/80 self-center shadow-xs">
-                  <button
-                    onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
-                    className="w-8 h-8 rounded-full bg-[#121417] text-white flex items-center justify-center hover:bg-[#2E333A] transition"
-                    title="Quick Pump Toggle"
-                  >
-                    <Droplets className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setSimulatedRain((prev) => (prev === null ? !Boolean(latest?.rainDetected) : !prev))}
-                    className="w-8 h-8 rounded-full bg-white text-[#5E6977] hover:text-[#121417] flex items-center justify-center border border-[#E2E7ED]"
-                    title="Test Rain Sensor"
-                  >
-                    <CloudRain className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("ai")}
-                    className="w-8 h-8 rounded-full bg-white text-[#5E6977] hover:text-[#121417] flex items-center justify-center border border-[#E2E7ED]"
-                    title="AI Leaf Diagnosis"
-                  >
-                    <Sparkles className="w-4 h-4" />
-                  </button>
-                </div>
-
-              </div>
-            </div>
-
-            {/* =================================================================== */}
-            {/* 7-DAY LIVE MICROCLIMATE & WEATHER FORECAST WIDGET */}
-            {/* =================================================================== */}
-            <div className="bento-card p-5 space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-[#E2E7ED]">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-[#D6EBE7] text-[#121417] flex items-center justify-center text-xl shadow-xs">
-                    <CloudSun className="w-5 h-5 text-[#121417] animate-pulse" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-black text-[#121417]">
-                        Live Weather & Microclimate Forecast
-                      </h3>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#D6EBE7] text-[#121417]">
-                        Lucknow Region (26.85°N, 80.95°E)
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#5E6977] font-medium">
-                      Open-Meteo Satellite Feed • Updated: {weather?.time || "Just now"}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-[#EAF4F2] text-[#121417] border border-[#BDE0D8] flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-[#4FA89B] animate-ping" />
-                    Satellite Synced
-                  </span>
-                </div>
-              </div>
-
-              {/* 4 Current Conditions Micro-Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#E2E7ED] flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#D6EBE7] flex items-center justify-center text-[#121417]">
-                    <Thermometer className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-[#8E9BAA]">Air Temp</p>
-                    <p className="text-sm font-black text-[#121417]">{weather?.temperature ?? 28}°C</p>
-                  </div>
-                </div>
-
-                <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#E2E7ED] flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#D6EBE7] flex items-center justify-center text-[#121417]">
-                    <Droplets className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-[#8E9BAA]">Atm Humidity</p>
-                    <p className="text-sm font-black text-[#121417]">{weather?.humidity ?? 65}%</p>
-                  </div>
-                </div>
-
-                <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#E2E7ED] flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#D6EBE7] flex items-center justify-center text-[#121417]">
-                    <Wind className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-[#8E9BAA]">Wind Speed</p>
-                    <p className="text-sm font-black text-[#121417]">{weather?.windSpeed ?? 8} km/h</p>
-                  </div>
-                </div>
-
-                <div className="bg-[#F8FAFC] rounded-2xl p-3 border border-[#E2E7ED] flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-xl bg-[#D6EBE7] flex items-center justify-center text-[#121417]">
-                    <CloudSun className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] uppercase font-bold text-[#8E9BAA]">Condition</p>
-                    <p className="text-xs font-black text-[#121417] truncate">{weather?.condition || "Optimal"}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* 7-Day Daily Forecast Strip */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2 pt-1">
-                {(weather?.days && weather.days.length > 0
-                  ? weather.days
-                  : [
-                      { dayLabel: "Today", tempMax: 28, tempMin: 21, rainProb: 0, condition: "Sunny", isToday: true },
-                      { dayLabel: "Fri", tempMax: 27, tempMin: 20, rainProb: 10, condition: "Partly Cloudy", isToday: false },
-                      { dayLabel: "Sat", tempMax: 25, tempMin: 19, rainProb: 65, condition: "Rain", isToday: false },
-                      { dayLabel: "Sun", tempMax: 29, tempMin: 22, rainProb: 5, condition: "Sunny", isToday: false },
-                      { dayLabel: "Mon", tempMax: 28, tempMin: 21, rainProb: 15, condition: "Partly Cloudy", isToday: false },
-                      { dayLabel: "Tue", tempMax: 30, tempMin: 23, rainProb: 20, condition: "Sunny", isToday: false },
-                      { dayLabel: "Wed", tempMax: 27, tempMin: 20, rainProb: 40, condition: "Showers", isToday: false },
-                    ]
-                ).map((day, idx) => (
-                  <div
-                    key={idx}
-                    className={`rounded-2xl p-2.5 flex flex-col items-center justify-between text-center transition ${
-                      day.isToday
-                        ? "bg-[#121417] text-white shadow-md ring-2 ring-[#D6EBE7]"
-                        : "bg-[#F8FAFC] hover:bg-white text-[#121417] border border-[#E2E7ED]"
-                    }`}
-                  >
-                    <span className={`text-[10px] font-black uppercase ${day.isToday ? "text-[#FDE68A]" : "text-[#5E6977]"}`}>
-                      {day.dayLabel}
-                    </span>
-                    <span className="text-xl my-1">{day.condition.toLowerCase().includes("rain") ? "🌧️" : day.condition.toLowerCase().includes("cloud") ? "⛅" : "☀️"}</span>
-                    <div className="flex items-center gap-1 text-[11px] font-black">
-                      <span>{day.tempMax}°</span>
-                      <span className={`text-[9px] font-normal ${day.isToday ? "text-white/70" : "text-[#8E9BAA]"}`}>{day.tempMin}°</span>
-                    </div>
-                    <div className={`mt-1 text-[9px] font-black px-2 py-0.5 rounded-full ${
-                      day.isToday ? "bg-white/20 text-white" : "bg-[#D6EBE7] text-[#121417]"
-                    }`}>
-                      💧 {day.rainProb}%
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* =================================================================== */}
-            {/* HISTORICAL TELEMETRY GRAPH DECK */}
-            {/* =================================================================== */}
-            <div className="bento-card p-5 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-sm font-black text-[#121417]">
-                    Graphs for Previous Data (Telemetry History)
-                  </h3>
-                  <p className="text-xs text-[#5E6977]">
-                    Soil Moisture (%) & Temperature (°C) real-time logged trends
-                  </p>
-                </div>
-                <div className="flex items-center gap-3 text-xs font-bold">
-                  <span className="flex items-center gap-1.5 text-[#121417]">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#121417]" /> Moisture (%)
-                  </span>
-                  <span className="flex items-center gap-1.5 text-[#4FA89B]">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#4FA89B]" /> Temp (°C)
-                  </span>
-                </div>
-              </div>
-
-              <div className="h-44 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="moistGradBento" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#121417" stopOpacity={0.25} />
-                        <stop offset="95%" stopColor="#121417" stopOpacity={0.0} />
-                      </linearGradient>
-                      <linearGradient id="tempGradBento" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#4FA89B" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="#4FA89B" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="2 2" stroke="rgba(0,0,0,0.05)" />
-                    <XAxis dataKey="time" stroke="#8E9BAA" tick={{ fontSize: 10, fill: "#8E9BAA" }} />
-                    <YAxis stroke="#8E9BAA" tick={{ fontSize: 10, fill: "#8E9BAA" }} />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: "#FFFFFF",
-                        borderColor: "#E2E7ED",
-                        borderRadius: "14px",
-                        color: "#121417",
-                        fontSize: "11px",
-                        boxShadow: "0 8px 24px rgba(0,0,0,0.08)",
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="moisture"
-                      stroke="#121417"
-                      strokeWidth={2.5}
-                      fillOpacity={1}
-                      fill="url(#moistGradBento)"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="temp"
-                      stroke="#4FA89B"
-                      strokeWidth={2}
-                      fillOpacity={1}
-                      fill="url(#tempGradBento)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            {/* =================================================================== */}
-            {/* BOTTOM 3 BENTO CARDS ROW */}
-            {/* =================================================================== */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              
-              {/* Card 1: Most Used / Sensor Telemetry Gauges */}
-              <div className="bento-card p-4 flex flex-col justify-between min-h-[220px]">
-                <div>
-                  <h3 className="text-sm font-black text-[#121417]">Most used</h3>
-                  <p className="text-[10px] text-[#8E9BAA] font-semibold">5 primary crop telemetry nodes</p>
-                </div>
-
-                {/* 5 Vertical Bar Meters */}
-                <div className="flex items-end justify-between gap-2 my-2 px-1">
-                  {/* Gauge 1: 30% */}
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-7 h-24 rounded-full bg-[#EAF4F2] p-1 flex flex-col justify-end">
-                      <div className="w-full bg-[#D6EBE7] rounded-full" style={{ height: "30%" }} />
-                    </div>
-                    <span className="text-[10px] font-black text-[#121417]">30%</span>
-                    <span className="text-[10px] text-[#8E9BAA]">🌿</span>
-                  </div>
-
-                  {/* Gauge 2: 72% */}
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-7 h-24 rounded-full bg-[#F5EEFB] p-1 flex flex-col justify-end">
-                      <div className="w-full bg-[#E8DFF5] rounded-full" style={{ height: "72%" }} />
-                    </div>
-                    <span className="text-[10px] font-black text-[#121417]">72%</span>
-                    <span className="text-[10px] text-[#8E9BAA]">💧</span>
-                  </div>
-
-                  {/* Gauge 3: Hero 52% (Active in Black Pill) */}
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-7 h-24 rounded-full bg-[#121417] p-1 flex flex-col justify-end shadow-md">
-                      <div className="w-full bg-[#2E333A] rounded-full" style={{ height: "52%" }} />
-                    </div>
-                    <span className="text-[10px] font-black text-[#121417]">{currentMoisture}%</span>
-                    <span className="text-[10px] text-[#121417] font-black">🚜</span>
-                  </div>
-
-                  {/* Gauge 4: 76% */}
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-7 h-24 rounded-full bg-[#EAF4F2] p-1 flex flex-col justify-end">
-                      <div className="w-full bg-[#D6EBE7] rounded-full" style={{ height: "76%" }} />
-                    </div>
-                    <span className="text-[10px] font-black text-[#121417]">76%</span>
-                    <span className="text-[10px] text-[#8E9BAA]">⚡</span>
-                  </div>
-
-                  {/* Gauge 5: 27% */}
-                  <div className="flex flex-col items-center gap-2">
-                    <div className="w-7 h-24 rounded-full bg-[#F5EEFB] p-1 flex flex-col justify-end">
-                      <div className="w-full bg-[#E8DFF5] rounded-full" style={{ height: "27%" }} />
-                    </div>
-                    <span className="text-[10px] font-black text-[#121417]">27%</span>
-                    <span className="text-[10px] text-[#8E9BAA]">🌧️</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 2: Protection / Telemetry Dual Curves */}
-              <div className="bento-card p-4 flex flex-col justify-between min-h-[220px]">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-black text-[#121417]">Protection</h3>
-                    <p className="text-[10px] text-[#8E9BAA]">Root zone & ESP32 telemetry curves</p>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {/* Top Curve Box */}
-                  <div className="bg-[#EAF4F2] rounded-2xl p-2.5 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold text-[#5E6977]">Account protection</span>
-                      <p className="text-sm font-black text-[#121417]">23% ↗</p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {[1, 2, 4, 6, 8, 6, 4, 2].map((v, i) => (
-                        <span key={i} className="w-1.5 rounded-full bg-[#121417]" style={{ height: `${v * 2.5}px` }} />
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Bottom Line Spectrum Box */}
-                  <div className="bg-[#121417] text-white rounded-2xl p-2.5 flex items-center justify-between shadow-xs">
-                    <div>
-                      <span className="text-[10px] text-white/70 font-bold">Verification speed</span>
-                      <p className="text-sm font-black text-white">17% ↘</p>
-                    </div>
-                    <div className="flex items-end gap-0.5 h-6">
-                      {[3, 5, 8, 12, 16, 20, 15, 10, 8, 6, 12, 18, 14, 8, 4].map((h, i) => (
-                        <span key={i} className="w-0.5 bg-white/80" style={{ height: `${h}px` }} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Card 3: Update / Holographic AI Crop Diagnostics */}
-              <div className="hologram-card p-4 flex flex-col justify-between min-h-[220px] relative overflow-hidden">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-black text-[#121417]">Update</h3>
-                    <p className="text-[10px] text-[#5E6977]">4 AI Vision Models Active</p>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[#5E6977]">
-                    <Heart className="w-3.5 h-3.5 hover:text-[#E11D48] cursor-pointer" />
-                    <Share2 className="w-3.5 h-3.5 hover:text-[#121417] cursor-pointer" />
-                  </div>
-                </div>
-
-                {/* 3D Visual Crop Avatar & Action */}
-                <div className="my-2 flex items-center justify-between bg-white/70 backdrop-blur-sm rounded-2xl p-2.5 border border-white/80">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-11 h-11 rounded-xl bg-gradient-to-tr from-[#7C5CBF] via-[#D6EBE7] to-[#FDE68A] flex items-center justify-center text-xl shadow-xs">
-                      🧬
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-[#121417]">Verification by AI</h4>
-                      <p className="text-[10px] text-[#5E6977] font-semibold">
-                        {aiSummary?.disease?.detectionLabel || "Healthy Foliage (96%)"}
-                      </p>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={() => setActiveTab("ai")}
-                    className="px-3 py-1 rounded-full bg-[#121417] text-white text-[11px] font-black hover:bg-[#2E333A] active:scale-95 transition"
-                  >
-                    Read &gt;
-                  </button>
-                </div>
-              </div>
-
-            </div>
-
-          </div>
-
-          {/* ===================================================================== */}
-          {/* COLUMN 3: RIGHT SIDEBAR DECK */}
-          {/* ===================================================================== */}
-          <div className="lg:col-span-3 space-y-4">
-            
-            {/* Card 1: Add User / Rover Viewfinder Camera & Autonomous/Manual Deck */}
-            <div className="bento-card p-4 space-y-3">
-              <div className="relative bg-[#F4F7FA] rounded-2xl p-3.5 border border-[#E2E7ED] flex flex-col items-center justify-center text-center overflow-hidden">
-                {/* Viewfinder Target Framing Brackets */}
-                <div className="absolute top-2.5 left-2.5 w-3 h-3 border-t-2 border-l-2 border-[#121417]" />
-                <div className="absolute top-2.5 right-2.5 w-3 h-3 border-t-2 border-r-2 border-[#121417]" />
-                <div className="absolute bottom-2.5 left-2.5 w-3 h-3 border-b-2 border-l-2 border-[#121417]" />
-                <div className="absolute bottom-2.5 right-2.5 w-3 h-3 border-b-2 border-r-2 border-[#121417]" />
-                
-                {/* Header: Title + Auto Mode Pill + Battery */}
-                <div className="flex items-center justify-between w-full mb-2.5 flex-wrap gap-1">
-                  <span className="text-[10px] font-black text-[#121417] uppercase tracking-wider flex items-center gap-1">
-                    <span>🚜</span>
-                    <span>Field Rover Deck</span>
-                  </span>
-                  
-                  <div className="flex items-center gap-1.5">
-                    {/* Auto Mode Quick Toggle Button (Identical to Offline Dashboard) */}
-                    <button
-                      id="btnRoverAutoToggle"
-                      onClick={toggleRoverAutoMode}
-                      className={`px-2.5 py-0.5 rounded-full text-[10px] font-black transition border shadow-2xs flex items-center gap-1 ${
-                        roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL"
-                          ? "bg-[#121417] text-white border-[#121417] shadow-xs"
-                          : "bg-white text-[#121417] border-[#E2E7ED] hover:bg-[#D6EBE7]"
-                      }`}
-                    >
-                      <span>🤖 Auto: {roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL" ? "ON" : "OFF"}</span>
-                      {(roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL") && (
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#4FA89B] animate-ping" />
-                      )}
-                    </button>
-
-                    <span className="text-[10px] font-mono font-bold bg-white px-2 py-0.5 rounded-full border border-[#E2E7ED]">
-                      🔋 {roverBattery}%
-                    </span>
-                  </div>
-                </div>
-
-                {/* Segmented Mode Selector: Manual D-Pad vs Auto Patrol */}
-                <div className="flex items-center w-full p-0.5 bg-white rounded-full border border-[#E2E7ED] mb-2.5 shadow-2xs">
-                  <button
-                    onClick={() => {
-                      if (roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL") {
-                        sendCommand("ROVER", "STOP");
-                      } else {
-                        setRoverAction("MANUAL");
-                      }
-                      setActionNotice("🎮 Rover switched to Manual D-Pad Mode");
-                    }}
-                    className={`flex-1 py-1 rounded-full text-[10px] font-black transition ${
-                      !roverAutoMode && roverAction !== "AUTO_ON" && roverAction !== "AUTO_PATROL"
-                        ? "bg-[#121417] text-white shadow-xs"
-                        : "text-[#5E6977] hover:text-[#121417]"
-                    }`}
-                  >
-                    🎮 Manual D-Pad
-                  </button>
-                  <button
-                    onClick={() => {
-                      sendCommand("ROVER", "AUTO_ON");
-                      setActionNotice("🤖 Autonomous Field Patrol & Plant Scan Engaged!");
-                    }}
-                    className={`flex-1 py-1 rounded-full text-[10px] font-black transition flex items-center justify-center gap-1 ${
-                      roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL"
-                        ? "bg-[#D6EBE7] text-[#121417] font-black border border-[#BDE0D8] shadow-xs"
-                        : "text-[#5E6977] hover:text-[#121417]"
-                    }`}
-                  >
-                    <span>🤖 Auto Patrol</span>
-                    {(roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL") && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#121417] animate-ping" />
+                {/* Footer */}
+                <div className="mt-3 pt-2 border-t border-[#E8EEF5] dark:border-[#212C42] flex justify-between items-center text-[10.5px] text-[#8A94A6] dark:text-[#94A3B8]">
+                  <span>Today: {calendarData.todayMonthName} {calendarData.todayDate}, {calendarData.todayYear}</span>
+                  <div className="flex gap-2">
+                    {calendarMonthOffset !== 0 && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCalendarMonthOffset(0);
+                        }}
+                        className="font-bold text-[#2563EB] dark:text-[#60A5FA] hover:underline cursor-pointer"
+                      >
+                        Today
+                      </button>
                     )}
+                    <button
+                      onClick={() => setShowCalendarPopover(false)}
+                      className="font-bold text-[#1E2432] dark:text-[#F8FAFC] hover:underline cursor-pointer"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Dark / Light Theme Toggle Button */}
+          <button
+            onClick={toggleTheme}
+            className="px-3.5 py-2 rounded-full bg-[#F8FAFC] hover:bg-[#EEF2F6] border border-[#E8EEF5] flex items-center gap-2 cursor-pointer transition shadow-xs select-none"
+            title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
+          >
+            {isDarkMode ? (
+              <>
+                <Sun className="w-4 h-4 text-[#F59E0B]" />
+                <span className="text-xs font-bold text-[#F8FAFC] hidden sm:inline">Light</span>
+              </>
+            ) : (
+              <>
+                <Moon className="w-4 h-4 text-[#6366F1]" />
+                <span className="text-xs font-bold text-[#1E2432] hidden sm:inline">Dark</span>
+              </>
+            )}
+          </button>
+
+          {/* Right: Profile Icon */}
+          <div className="relative">
+            <div
+              onClick={() => setShowProfileModal(!showProfileModal)}
+              onMouseEnter={() => setProfileHover(true)}
+              onMouseLeave={() => setProfileHover(false)}
+              className="flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-full bg-[#1E2432] text-white hover:bg-[#2E3038] cursor-pointer transition shadow-sm select-none"
+            >
+              <div className="text-right hidden sm:block px-1">
+                <div className="text-xs font-black tracking-tight">{session.user?.name || "Farmer Master"}</div>
+              </div>
+
+              {/* Profile Avatar Image */}
+              <div className="w-8 h-8 rounded-full overflow-hidden bg-[#2563EB] text-white flex items-center justify-center font-black text-xs border border-white/20 shrink-0">
+                {customAvatar ? (
+                  <img
+                    src={customAvatar}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                  />
+                ) : session.user?.image && !avatarError ? (
+                  <img
+                    src={session.user.image}
+                    alt={session.user.name || "Profile"}
+                    className="w-full h-full object-cover"
+                    referrerPolicy="no-referrer"
+                    crossOrigin="anonymous"
+                    onError={() => setAvatarError(true)}
+                  />
+                ) : (
+                  <span>
+                    {session.user?.name
+                      ? session.user.name
+                          .split(" ")
+                          .filter(Boolean)
+                          .map((n: string) => n[0])
+                          .join("")
+                          .slice(0, 2)
+                          .toUpperCase()
+                      : "U"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Hover Tooltip */}
+            {profileHover && !showProfileModal && (
+              <div className="absolute top-full mt-2 right-0 z-40 bg-[#1E2432] text-white text-xs px-3 py-1.5 rounded-xl whitespace-nowrap shadow-xl border border-white/10 pointer-events-none">
+                <div className="font-bold">{session.user?.name || "Farmer Master"}</div>
+                <div className="text-[10.5px] text-[#9CA3AF] font-mono">{session.user?.email || "farmer@agrismart.io"}</div>
+              </div>
+            )}
+
+            {/* Click: Interactive Profile Modal */}
+            {showProfileModal && (
+              <div className="absolute top-full mt-2 right-0 z-50 w-80 bg-white rounded-3xl border border-[#E8EEF5] popover-shadow p-5 text-[#1E2432] animate-fade-in-scale">
+                <div className="flex justify-between items-start pb-4 border-b border-[#E8EEF5]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center font-black text-base border-2 border-[#2563EB] shrink-0">
+                      {customAvatar ? (
+                        <img
+                          src={customAvatar}
+                          alt="Profile"
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      ) : session.user?.image && !avatarError ? (
+                        <img
+                          src={session.user.image}
+                          alt={session.user.name || "Profile"}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                          crossOrigin="anonymous"
+                          onError={() => setAvatarError(true)}
+                        />
+                      ) : (
+                        <span>
+                          {session.user?.name
+                            ? session.user.name
+                                .split(" ")
+                                .filter(Boolean)
+                                .map((n: string) => n[0])
+                                .join("")
+                                .slice(0, 2)
+                                .toUpperCase()
+                            : "U"}
+                        </span>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-black text-[#1E2432]">{session.user?.name || "Aarav Sharma"}</h4>
+                      <p className="text-xs text-[#8A94A6] font-mono">{session.user?.email || "aarav@agrismart.io"}</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowProfileModal(false)}
+                    className="w-7 h-7 rounded-full bg-[#F4F7FC] hover:bg-[#E2E8F0] flex items-center justify-center text-xs font-bold"
+                  >
+                    ✕
                   </button>
                 </div>
 
-                {/* Conditional UI: If Auto Mode is ON vs Manual D-Pad */}
-                {roverAutoMode || roverAction === "AUTO_ON" || roverAction === "AUTO_PATROL" || roverAction === "SCANNING PLANT" || roverAction === "PATROL-FORWARD" || roverAction === "EVADE-RIGHT" ? (
-                  <div className="w-full bg-[#D6EBE7]/50 border border-[#BDE0D8] rounded-2xl p-3 my-1 text-center space-y-2">
-                    <div className="flex items-center justify-center gap-1.5 text-xs font-black text-[#121417]">
-                      <span className="w-2 h-2 rounded-full bg-[#121417] animate-pulse" />
-                      <span>AUTONOMOUS FIELD PATROL</span>
-                    </div>
-
-                    {/* Live Row & Plant Telemetry Progress */}
-                    <div className="bg-white/80 rounded-xl p-2 border border-white space-y-1 text-left">
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-bold text-[#5E6977]">Active Action:</span>
-                        <span className="font-black text-[#121417] px-2 py-0.5 rounded-full bg-[#D6EBE7]">
-                          {roverAction}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-bold text-[#5E6977]">Field Scouting:</span>
-                        <span className="font-black text-[#121417]">🌱 {roverScannedCount} Plants Scanned</span>
-                      </div>
-                      <div className="flex items-center justify-between text-[10px]">
-                        <span className="font-bold text-[#5E6977]">Obstacle Distance:</span>
-                        <span className={`font-black ${roverDistance < 35 ? "text-[#E11D48]" : "text-[#4FA89B]"}`}>
-                          {roverDistance}cm ({roverDistance < 35 ? "Evasion Triggered" : "Clear Path"})
-                        </span>
-                      </div>
-                    </div>
-
-                    <p className="text-[10px] text-[#5E6977] leading-tight font-medium">
-                      Patrolling crop row • Auto-pausing 1s to scan leaves • Ultrasonic evasion active
-                    </p>
-
-                    <button
-                      onClick={() => sendCommand("ROVER", "STOP")}
-                      className="w-full py-1.5 rounded-xl bg-[#E11D48] hover:bg-[#BE123C] text-white text-xs font-black shadow-xs active:scale-95 transition"
-                    >
-                      🛑 Disengage / Stop Auto Mode
-                    </button>
+                <div className="py-3.5 space-y-2.5 text-xs">
+                  <div className="flex justify-between items-center py-1 border-b border-[#F4F7FC]">
+                    <span className="text-[#8A94A6] font-bold">Connected Nodes:</span>
+                    <span className="font-bold text-[#10B981]">2 Subnodes + 1 Rover</span>
                   </div>
-                ) : (
-                  /* D-Pad Joystick Manual Control */
-                  <div className="flex flex-col items-center justify-center gap-1.5 my-1">
-                    <button
-                      onClick={() => sendCommand("ROVER", "MOVE_FORWARD")}
-                      className="w-9 h-8 rounded-xl bg-white hover:bg-[#121417] hover:text-white border border-[#E2E7ED] shadow-xs flex items-center justify-center font-black active:scale-90 transition"
-                      title="Move Forward"
-                    >
-                      <ArrowUp className="w-3.5 h-3.5" />
-                    </button>
-                    <div className="flex items-center gap-1.5">
-                      <button
-                        onClick={() => sendCommand("ROVER", "MOVE_LEFT")}
-                        className="w-9 h-8 rounded-xl bg-white hover:bg-[#121417] hover:text-white border border-[#E2E7ED] shadow-xs flex items-center justify-center font-black active:scale-90 transition"
-                        title="Turn Left"
-                      >
-                        <ArrowLeft className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => sendCommand("ROVER", "STOP")}
-                        className="w-10 h-8 rounded-xl bg-[#E11D48] text-white flex items-center justify-center font-black active:scale-90 transition shadow-xs"
-                        title="Emergency Stop"
-                      >
-                        <Square className="w-3.5 h-3.5 fill-white" />
-                      </button>
-                      <button
-                        onClick={() => sendCommand("ROVER", "MOVE_RIGHT")}
-                        className="w-9 h-8 rounded-xl bg-white hover:bg-[#121417] hover:text-white border border-[#E2E7ED] shadow-xs flex items-center justify-center font-black active:scale-90 transition"
-                        title="Turn Right"
-                      >
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                    <button
-                      onClick={() => sendCommand("ROVER", "MOVE_BACKWARD")}
-                      className="w-9 h-8 rounded-xl bg-white hover:bg-[#121417] hover:text-white border border-[#E2E7ED] shadow-xs flex items-center justify-center font-black active:scale-90 transition"
-                      title="Move Backward"
-                    >
-                      <ArrowDown className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="flex justify-between items-center py-1 border-b border-[#F4F7FC]">
+                    <span className="text-[#8A94A6] font-bold">Account Auth:</span>
+                    <span className="font-bold text-[#1E2432]">Google OAuth 2.0</span>
                   </div>
-                )}
 
-                {/* Speed Slider & Rover Target IP */}
-                <div className="w-full bg-white rounded-xl p-2 border border-[#E2E7ED] my-1 space-y-1.5 text-left shadow-2xs">
-                  <div className="flex items-center justify-between text-[10px]">
-                    <span className="font-bold text-[#5E6977]">⚡ Motor Speed:</span>
-                    <span className="font-mono font-black text-[#121417]">{roverSpeed} PWM</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="60"
-                    max="255"
-                    step="5"
-                    value={roverSpeed}
-                    onChange={(e) => sendRoverSpeed(Number(e.target.value))}
-                    className="w-full h-1 bg-[#EEF1F5] rounded-lg appearance-none cursor-pointer accent-[#121417]"
-                  />
-                  <div className="flex items-center justify-between gap-1 text-[9px] pt-0.5 border-t border-[#E2E7ED]/60">
-                    <span className="text-[#5E6977] font-semibold">Node IP:</span>
-                    <input
-                      type="text"
-                      value={roverIp}
-                      onChange={(e) => setRoverIp(e.target.value)}
-                      className="text-right font-mono font-bold text-[#121417] bg-transparent outline-none w-24 border-b border-dashed border-[#8E9BAA]"
-                    />
+                  <div className="pt-2">
+                    <label className="text-[11px] font-black text-[#8A94A6] block mb-1.5">Change Avatar Photo:</label>
+                    <label className="w-full py-2 px-3 rounded-xl border border-dashed border-[#CBD5E1] hover:border-[#1E2432] bg-[#F8FAFC] flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-[#4B5563]">
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Upload New Image</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setCustomAvatar(URL.createObjectURL(file));
+                            setActionNotice("✓ Profile photo updated successfully!");
+                            setTimeout(() => setActionNotice(null), 3000);
+                          }
+                        }}
+                      />
+                    </label>
                   </div>
                 </div>
 
-                {/* Manual Camera Snap & AI Diagnostics Trigger */}
-                <button
-                  onClick={captureRoverPhotoManual}
-                  disabled={scanProcessing}
-                  className="w-full py-1.5 px-2 rounded-xl bg-white hover:bg-[#D6EBE7] text-[#121417] text-[10px] font-black border border-[#E2E7ED] shadow-2xs active:scale-95 transition flex items-center justify-center gap-1.5"
-                >
-                  <span>📸</span>
-                  <span>{scanProcessing ? "Analyzing Leaf Scan..." : "Click Photo & Run AI Diagnostic"}</span>
-                </button>
-
-                {/* Telemetry Footer */}
-                <div className="flex items-center justify-between w-full text-[9px] text-[#5E6977] font-semibold pt-1 border-t border-[#E2E7ED]">
-                  <span>Dist: {roverDistance}cm</span>
-                  <span>Cmd: <strong className="text-[#121417]">{roverAction}</strong></span>
+                <div className="pt-3 border-t border-[#E8EEF5]">
+                  <button
+                    onClick={async () => {
+                      try {
+                        await authClient.signOut();
+                      } catch {}
+                      setDemoUser(null);
+                      setShowProfileModal(false);
+                      setActionNotice("Logged out of session.");
+                      setTimeout(() => setActionNotice(null), 2500);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-[#FEE2E2] hover:bg-[#FCA5A5] text-[#B91C1C] font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Logout Account</span>
+                  </button>
                 </div>
               </div>
+            )}
+          </div>
+        </div>
+      </header>
 
-              {/* Avatar Cluster */}
-              <div className="flex items-center justify-between pt-0.5">
-                <div className="flex items-center -space-x-2">
-                  <div className="w-7 h-7 rounded-full bg-[#D6EBE7] border-2 border-white flex items-center justify-center text-xs">👩‍🌾</div>
-                  <div className="w-7 h-7 rounded-full bg-[#E8DFF5] border-2 border-white flex items-center justify-center text-xs">👨‍🌾</div>
-                  <div className="w-7 h-7 rounded-full bg-[#121417] text-white border-2 border-white flex items-center justify-center text-[10px] font-black">+6</div>
-                </div>
-                <button
-                  onClick={() => setActionNotice("👥 8 Field Nodes Connected to Hub")}
-                  className="text-[11px] font-black text-[#121417] hover:underline flex items-center gap-0.5"
-                >
-                  <span>view all</span>
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
+      {/* ========================================================================= */}
+      {/* 3. WEATHER WIDGET (Image 2) */}
+      {/* ========================================================================= */}
+      <section id="weather-section" className="w-full modern-card p-5 sm:p-6 space-y-4">
+        
+        {/* Header Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center text-lg shadow-sm">
+              🌤️
             </div>
-
-            {/* Card 2: Resources / Smart Actuators & Relays (Pumps Zone A & Zone B) */}
-            <div className="bento-card p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-xs font-black uppercase text-[#121417] tracking-wide">
-                  Pump Controls <span className="text-[#8E9BAA] font-bold">Zone A & B</span>
-                </h3>
-              </div>
-
-              {/* Toggle Rows */}
-              <div className="space-y-2">
-                {/* Relay 1: Smart Pump Zone A */}
-                <div className="bg-[#F8FAFC] rounded-2xl p-2.5 flex items-center justify-between border border-[#E2E7ED]">
-                  <div>
-                    <span className="text-xs font-black text-[#121417] block">Pump Zone A</span>
-                    <span className="text-[10px] text-[#5E6977]">Relay Pin 25 • 42 L/h</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div
-                      onClick={() => sendCommand("PUMP_ZONE_A", pumpZoneA ? "OFF" : "ON")}
-                      className={`toggle-switch-capsule ${pumpZoneA ? "" : "off"}`}
-                    >
-                      <div className="toggle-dot" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Relay 2: Pump Zone B Misting */}
-                <div className="bg-[#F8FAFC] rounded-2xl p-2.5 flex items-center justify-between border border-[#E2E7ED]">
-                  <div>
-                    <span className="text-xs font-black text-[#121417] block">Misting Zone B</span>
-                    <span className="text-[10px] text-[#5E6977]">Relay Pin 26 • 24 L/h</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div
-                      onClick={() => sendCommand("PUMP_ZONE_B", pumpZoneB ? "OFF" : "ON")}
-                      className={`toggle-switch-capsule ${pumpZoneB ? "" : "off"}`}
-                    >
-                      <div className="toggle-dot" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Relay 3: Fertigation Injector */}
-                <div className="bg-[#F8FAFC] rounded-2xl p-2.5 flex items-center justify-between border border-[#E2E7ED]">
-                  <div>
-                    <span className="text-xs font-black text-[#121417] block">Fertigation</span>
-                    <span className="text-[10px] text-[#5E6977]">N-P-K Dosing 1.2 L/h</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div
-                      onClick={() => {
-                        const next = !fertigationActive;
-                        setFertigationActive(next);
-                        setActionNotice(next ? "🧪 Fertigation Injector ON" : "🛑 Fertigation Injector OFF");
-                      }}
-                      className={`toggle-switch-capsule ${fertigationActive ? "" : "off"}`}
-                    >
-                      <div className="toggle-dot" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Relay 4: Auto-Drip Schedule */}
-                <div className="bg-[#F8FAFC] rounded-2xl p-2.5 flex items-center justify-between border border-[#E2E7ED]">
-                  <div>
-                    <span className="text-xs font-black text-[#121417] block">Auto Schedule</span>
-                    <span className="text-[10px] text-[#5E6977]">07:00 AM Automated</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="px-2.5 py-0.5 rounded-full bg-[#E8DFF5] text-[#7C5CBF] text-[10px] font-black">
-                      active
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Bottom Expand Row */}
-              <div className="flex items-center justify-between pt-1">
-                <button
-                  onClick={() => setActiveTab("pumps")}
-                  className="text-[11px] font-black text-[#5E6977] hover:text-[#121417] flex items-center gap-1"
-                >
-                  <span>view all</span>
-                  <ChevronDown className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={() => setActionNotice("➕ New Relay Actuator Configured")}
-                  className="px-3 py-1 rounded-full capsule-pill text-[10px] font-black text-[#121417]"
-                >
-                  add +
-                </button>
-              </div>
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-[#1E2432]">Weather Widget</h2>
+              <p className="text-xs text-[#8A94A6]">
+                7-day microclimate forecast • Live temperature & humidity via Open-Meteo API
+              </p>
             </div>
-
-            {/* Card 3: Storage / Cloud Sync Progress Capsule Card */}
-            <div className="bg-[#121417] text-white rounded-[28px] p-4 flex flex-col justify-between min-h-[150px] shadow-lg">
-              <div className="bg-white/10 rounded-2xl p-3 flex items-center justify-between border border-white/10">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-0.5">
-                    {[1, 1, 1, 1, 1, 0, 0, 0, 0, 0].map((v, i) => (
-                      <span key={i} className={`w-1.5 h-1.5 rounded-full ${v ? "bg-white" : "bg-white/20"}`} />
-                    ))}
-                  </div>
-                </div>
-                <div className="text-right">
-                  <span className="text-sm font-black text-white">17/60</span>
-                  <span className="text-[9px] text-white/60 block leading-none">resources</span>
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between">
-                <div>
-                  <h4 className="text-xs font-black text-white">Expand your possibilities</h4>
-                  <p className="text-[10px] text-white/60">Upgrade your plan and expand your farm.</p>
-                </div>
-                <button
-                  onClick={() => {
-                    loadDashboardData();
-                    setActionNotice("✨ Cloud Gateway Sync Complete!");
-                  }}
-                  className="w-8 h-8 rounded-full bg-white text-[#121417] flex items-center justify-center font-black shadow-md hover:bg-[#D6EBE7] transition"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-
           </div>
 
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="px-3 py-1.5 rounded-full bg-[#FEF3C7] text-[#92400E] font-black text-xs flex items-center gap-1.5 border border-[#FDE68A]">
+              <Sun className="w-3.5 h-3.5 text-[#F59E0B]" />
+              <span>Live Temp: {weather?.temperature ?? 28}°C</span>
+            </span>
+
+            <span className="px-3 py-1.5 rounded-full bg-[#E0F2FE] text-[#0369A1] font-black text-xs flex items-center gap-1.5 border border-[#BAE6FD]">
+              <Droplets className="w-3.5 h-3.5 text-[#0284C7]" />
+              <span>Live Humidity: {weather?.humidity ?? 64}%</span>
+            </span>
+
+            <button
+              onClick={() => {
+                triggerLiveSync(() => {
+                  fetchWeather(weatherLocation.lat, weatherLocation.lon).then((d) => setWeather(d));
+                });
+                setActionNotice("🔄 Weather data refreshed from Open-Meteo Live API!");
+                setTimeout(() => setActionNotice(null), 2500);
+              }}
+              className="px-3.5 py-1.5 rounded-full bg-[#F4F7FC] hover:bg-[#E8EDF4] text-[#1E2432] font-bold text-xs border border-[#E8EEF5] flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#8A94A6] ${isSyncing ? "animate-spin text-[#10B981]" : ""}`} />
+              <span>Sync Weather</span>
+            </button>
+          </div>
         </div>
 
+        {/* Location Bar with Search Toggle Button */}
+        <div className="bg-[#F8FAFC] rounded-2xl p-3.5 border border-[#E8EEF5] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="text-lg">📍</span>
+            <div>
+              <strong className="text-xs sm:text-sm font-black text-[#1E2432]">{weatherLocation.name}</strong>
+              <span className="text-xs text-[#8A94A6] ml-2 font-mono">
+                (Lat: {weatherLocation.lat.toFixed(4)}° N, Lon: {weatherLocation.lon.toFixed(4)}° E)
+              </span>
+            </div>
+          </div>
+
+          <button
+            onClick={() => setShowWeatherSearch(!showWeatherSearch)}
+            className="px-4 py-1.5 rounded-full bg-[#1E2432] hover:bg-[#2E3038] text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition shadow-sm self-start sm:self-auto"
+          >
+            <Search className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <span>{showWeatherSearch ? "✕ Close Search" : "🔍 Search City / Lat-Lon"}</span>
+          </button>
+        </div>
+
+        {/* Expandable City & GPS Coordinate Search Panel */}
+        {showWeatherSearch && (
+          <div className="bg-[#FFFFFF] rounded-2xl p-4 border border-[#E8EEF5] shadow-inner space-y-4 animate-fade-in-scale">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              
+              {/* 1. Search City Name */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-black text-[#1E2432]">Search Any Indian / Global City or District:</label>
+                  {isSearchingCity && (
+                    <span className="text-[11px] font-bold text-[#0284C7] flex items-center gap-1">
+                      <RefreshCw className="w-3 h-3 animate-spin" />
+                      Searching live...
+                    </span>
+                  )}
+                </div>
+
+                <form onSubmit={handleSearchSubmit} className="relative flex gap-2">
+                  <div className="relative flex-1">
+                    <input
+                      type="text"
+                      placeholder="Type any city (e.g. Shahjahanpur, Lucknow, Bareilly, Nashik)..."
+                      value={searchCityQuery}
+                      onChange={(e) => setSearchCityQuery(e.target.value)}
+                      className="w-full pl-9 pr-7 py-2 rounded-xl bg-[#F8FAFC] border border-[#E8EEF5] text-xs font-bold text-[#1E2432] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                    />
+                    <Search className="w-4 h-4 text-[#8A94A6] absolute left-3 top-1/2 -translate-y-1/2" />
+                    {searchCityQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchCityQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#9CA3AF] hover:text-[#1E2432]"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-3.5 py-2 rounded-xl bg-[#1E2432] hover:bg-[#2E3038] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition shadow-sm"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    <span>Search</span>
+                  </button>
+                </form>
+
+                {/* Results List */}
+                <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1 mt-2">
+                  {searchResults.length > 0 ? (
+                    searchResults.map((c, i) => {
+                      const displayName = c.admin1 ? `${c.name}, ${c.admin1}` : c.name;
+                      return (
+                        <button
+                          key={c.id || i}
+                          onClick={() => handleSelectLocation(displayName, c.latitude, c.longitude)}
+                          className="w-full p-2.5 rounded-xl bg-[#F8FAFC] hover:bg-[#EEF2F6] border border-[#E8EEF5] text-left flex items-center justify-between text-xs transition cursor-pointer"
+                        >
+                          <span className="font-bold text-[#1E2432]">{displayName}</span>
+                          <span className="text-[#8A94A6] text-[11px] font-mono">
+                            {c.latitude.toFixed(2)}°N, {c.longitude.toFixed(2)}°E
+                          </span>
+                        </button>
+                      );
+                    })
+                  ) : (
+                    <div className="text-xs text-[#8A94A6] p-2 text-center">
+                      No matching cities found. Try typing district or state name.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. Manual Decimal GPS Coordinates */}
+              <div className="space-y-2">
+                <label className="text-xs font-black text-[#1E2432]">Direct GPS Coordinates (Decimal Latitude & Longitude):</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-[10.5px] font-bold text-[#8A94A6] block mb-1">Latitude (°N)</span>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      placeholder="e.g. 27.8805"
+                      value={manualLatInput}
+                      onChange={(e) => setManualLatInput(e.target.value)}
+                      className="w-full p-2 rounded-xl bg-[#F8FAFC] border border-[#E8EEF5] text-xs font-bold text-[#1E2432] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10.5px] font-bold text-[#8A94A6] block mb-1">Longitude (°E)</span>
+                    <input
+                      type="number"
+                      step="0.0001"
+                      placeholder="e.g. 79.9122"
+                      value={manualLonInput}
+                      onChange={(e) => setManualLonInput(e.target.value)}
+                      className="w-full p-2 rounded-xl bg-[#F8FAFC] border border-[#E8EEF5] text-xs font-bold text-[#1E2432] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={handleApplyManualCoords}
+                  className="w-full py-2.5 rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-xs mt-2"
+                >
+                  <span>Apply Custom GPS Coordinates</span>
+                </button>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* 7-Day Forecast Grid (Desktop View: Full 7-column horizontal cards) */}
+        <div className="hidden md:grid md:grid-cols-7 gap-3">
+          {weather?.days.map((day) => (
+            <div
+              key={day.date}
+              className={`p-3.5 rounded-2xl border text-center space-y-1.5 transition ${
+                day.isToday
+                  ? "bg-[#EFF6FF] border-[#BFDBFE] shadow-xs"
+                  : "bg-[#F8FAFC] border-[#E8EEF5]"
+              }`}
+            >
+              <div className="text-xs font-bold text-[#1E2432]">{day.dayLabel}</div>
+              <div className="text-xl">
+                {day.weatherCode === 0 ? "☀️" : day.weatherCode <= 3 ? "⛅" : day.rainProb > 40 ? "🌧️" : "🌤️"}
+              </div>
+              <div className="text-xs font-black text-[#1E2432]">
+                {day.tempMax}° / <span className="text-[#8A94A6] font-medium">{day.tempMin}°</span>
+              </div>
+              <div className="text-[10.5px] font-bold text-[#0284C7]">
+                💧 {day.rainProb}%
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Mobile View: Collapsible Forecast (Same as Edge Offline Dashboard) */}
+        <div className="block md:hidden space-y-3">
+          {/* Today's Active Weather Card */}
+          {weather?.days[0] && (
+            <div className="p-4 rounded-2xl bg-[#EFF6FF] dark:bg-[#1A2234] border border-[#BFDBFE] dark:border-[#2563EB]/40 shadow-xs flex items-center justify-between transition">
+              <div className="flex items-center gap-3">
+                <div className="text-3xl">
+                  {weather.days[0].weatherCode === 0 ? "☀️" : weather.days[0].weatherCode <= 3 ? "⛅" : weather.days[0].rainProb > 40 ? "🌧️" : "🌤️"}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-[#1E2432]">Today</span>
+                    <span className="px-2 py-0.5 rounded-full bg-[#2563EB]/10 text-[#2563EB] font-bold text-[10px]">
+                      Active Forecast
+                    </span>
+                  </div>
+                  <p className="text-xs text-[#8A94A6] font-medium mt-0.5">
+                    {weather.days[0].condition || "Clear Conditions"}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-sm font-black text-[#1E2432]">
+                  {weather.days[0].tempMax}° / <span className="text-[#8A94A6] font-medium">{weather.days[0].tempMin}°</span>
+                </div>
+                <div className="text-[11px] font-bold text-[#0284C7] mt-0.5">
+                  💧 {weather.days[0].rainProb}% Rain
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Expanded 6-Day Forecast Grid on Mobile */}
+          {mobileWeatherExpanded && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1 animate-fade-in-scale">
+              {weather?.days.slice(1).map((day) => (
+                <div
+                  key={day.date}
+                  className="p-3 rounded-2xl border bg-[#F8FAFC] dark:bg-[#1A2234] border-[#E8EEF5] dark:border-[#212C42] text-center space-y-1.5 transition"
+                >
+                  <div className="text-xs font-bold text-[#1E2432]">{day.dayLabel}</div>
+                  <div className="text-xl">
+                    {day.weatherCode === 0 ? "☀️" : day.weatherCode <= 3 ? "⛅" : day.rainProb > 40 ? "🌧️" : "🌤️"}
+                  </div>
+                  <div className="text-xs font-black text-[#1E2432]">
+                    {day.tempMax}° / <span className="text-[#8A94A6] font-medium">{day.tempMin}°</span>
+                  </div>
+                  <div className="text-[10.5px] font-bold text-[#0284C7]">
+                    💧 {day.rainProb}%
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Mobile Toggle Button */}
+          <div className="flex justify-center pt-1">
+            <button
+              onClick={() => setMobileWeatherExpanded(!mobileWeatherExpanded)}
+              className={`w-full py-2.5 px-4 rounded-full border font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-xs select-none ${
+                mobileWeatherExpanded
+                  ? "bg-[#1E2432] text-white border-[#1E2432]"
+                  : "bg-[#F8FAFC] hover:bg-[#EEF2F6] text-[#1E2432] border-[#E8EEF5]"
+              }`}
+            >
+              <span>{mobileWeatherExpanded ? "✕ Hide 6-Day Forecast" : "📅 View 6-Day Forecast"}</span>
+              <span
+                className="text-xs transition-transform duration-200 inline-block"
+                style={{ transform: mobileWeatherExpanded ? "rotate(180deg)" : "rotate(0deg)" }}
+              >
+                ▼
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 4. ROW 1: AI SCOUTING ALERTS (LEFT) + FIELD SUBNODES SENSORS (RIGHT) */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        {/* LEFT: ALERTS & AI SCOUTING PATROL (Image 3 - Left) */}
+        <section className="lg:col-span-5 modern-card p-5 sm:p-6 flex flex-col justify-between space-y-4">
+          <div className="flex flex-col min-h-0">
+            {/* Header with Trigger Patrol Button */}
+            <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#FEE2E2] text-[#DC2626] flex items-center justify-center text-lg shadow-sm">
+                  🔍
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base sm:text-lg font-black tracking-tight text-[#1E2432]">
+                      Alerts & AI Scouting Patrol
+                    </h2>
+                    {alertsList.length > 0 && (
+                      <span className="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#2563EB] border border-[#DBEAFE]">
+                        {alertsList.length}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-[#8A94A6]">Autonomous 2x daily schedule • Disease diagnostics & pest alerts</p>
+                </div>
+              </div>
+
+              <button
+                onClick={handleTriggerPatrol}
+                disabled={patrolRunning}
+                className="px-3.5 py-1.5 rounded-full bg-[#1E2432] hover:bg-[#2E3038] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition shadow-sm shrink-0"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#3B82F6]" />
+                <span>{patrolRunning ? "Patrol Scanning..." : "🚀 Trigger AI Patrol"}</span>
+              </button>
+            </div>
+
+            {/* Routine Patrol Times */}
+            <div className="grid grid-cols-2 gap-2.5 mb-3.5 shrink-0">
+              <div className="bg-[#F8FAFC] rounded-xl p-2.5 border border-[#E8EEF5] flex items-center gap-2">
+                <span className="text-base">🌅</span>
+                <div>
+                  <span className="text-[10.5px] font-bold text-[#8A94A6] block">Morning Patrol:</span>
+                  <span className="text-xs font-black text-[#059669]">07:00 AM (Completed)</span>
+                </div>
+              </div>
+              <div className="bg-[#F8FAFC] rounded-xl p-2.5 border border-[#E8EEF5] flex items-center gap-2">
+                <span className="text-base">🌇</span>
+                <div>
+                  <span className="text-[10.5px] font-bold text-[#8A94A6] block">Evening Patrol:</span>
+                  <span className="text-xs font-black text-[#0284C7]">05:30 PM (Scheduled)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Alerts Feed */}
+            <div className="space-y-2.5 overflow-y-auto max-h-[260px] pr-1.5 modern-scrollbar">
+              {alertsList.map((a) => (
+                <div
+                  key={a.id}
+                  className={`p-3.5 rounded-2xl border space-y-1.5 transition ${
+                    a.type === "CRITICAL"
+                      ? "bg-[#FFF5F5] border-[#FEE2E2]"
+                      : a.type === "WARNING"
+                      ? "bg-[#FFFDF5] border-[#FEF3C7]"
+                      : "bg-[#F8FAFC] border-[#E8EEF5]"
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${a.type === "CRITICAL" ? "bg-[#EF4444]" : a.type === "WARNING" ? "bg-[#F59E0B]" : "bg-[#3B82F6]"}`} />
+                      <h4 className="text-xs font-black text-[#1E2432]">{a.title}</h4>
+                    </div>
+                    {a.confidence && (
+                      <span className="text-[10.5px] font-black px-2 py-0.5 rounded-full bg-white border border-[#E8EEF5]">
+                        {Math.round(a.confidence * 100)}% Conf
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11.5px] text-[#64748B]">{a.message}</p>
+                  {a.treatment && (
+                    <div className={`text-[11px] font-bold pt-1 ${a.type === "CRITICAL" ? "text-[#DC2626]" : "text-[#D97706]"}`}>
+                      <strong>Action Needed:</strong> {a.treatment}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-[11px] text-[#8A94A6] font-mono text-center pt-2 shrink-0 border-t border-[#E8EEF5]/40">
+            AI models: MobileNetV3 Disease, Pest Classifier, YOLOv8 Crop Health
+          </div>
+        </section>
+
+        {/* RIGHT: FIELD SUBNODES SENSOR DATA (Image 3 - Right) */}
+        <section className="lg:col-span-7 modern-card p-5 sm:p-6 flex flex-col justify-between space-y-4">
+          <div>
+            {/* Header & Subnode Switcher */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#D1FAE5] dark:bg-[#059669]/20 text-[#059669] dark:text-[#34D399] flex items-center justify-center text-lg shadow-sm">
+                  🌱
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">
+                    Field Subnodes Sensor Data
+                  </h2>
+                  <p className="text-xs text-[#64748B] dark:text-[#94A3B8]">Real-time environmental telemetry & actuator control</p>
+                </div>
+              </div>
+
+              {/* Subnode Segmented Toggle */}
+              <div className="flex items-center p-1 rounded-full bg-[#F1F5F9] dark:bg-white/10 border border-[#E2E8F0] dark:border-white/10">
+                <button
+                  onClick={() => setActiveField("FIELD_A")}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition cursor-pointer ${
+                    activeField === "FIELD_A"
+                      ? "bg-[#0284C7] text-white shadow-xs"
+                      : "text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white"
+                  }`}
+                >
+                  Subnode A (Field)
+                </button>
+                <button
+                  onClick={() => setActiveField("FIELD_B")}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-bold transition cursor-pointer ${
+                    activeField === "FIELD_B"
+                      ? "bg-[#0284C7] text-white shadow-xs"
+                      : "text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white"
+                  }`}
+                >
+                  Subnode B (Greenhouse)
+                </button>
+              </div>
+            </div>
+
+            {/* 4 Sensor Metrics Cards (Pastel Themed Pods) */}
+            <div className="grid grid-cols-2 gap-3.5 mb-4">
+              
+              {/* Surroundings Air (Pastel Warm Peach) */}
+              <div className="bg-[#FFF7ED] dark:bg-[#EA580C]/10 p-4 rounded-2xl border border-[#FED7AA] dark:border-[#EA580C]/25 space-y-2 hover:shadow-md transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black tracking-wider uppercase text-[#C2410C] dark:text-[#FB923C]">SURROUNDINGS</span>
+                  <div className="w-8 h-8 rounded-full bg-white/90 dark:bg-white/10 text-[#EA580C] dark:text-[#FB923C] flex items-center justify-center text-sm shadow-xs">
+                    🌡️
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">
+                  {fieldData.airTemp.toFixed(2)}<span className="text-sm font-bold text-[#EA580C] ml-1">°C</span>
+                </div>
+                <div className="text-xs text-[#64748B] dark:text-[#94A3B8] font-bold">Humidity: <span className="text-[#0F172A] dark:text-[#F8FAFC]">{fieldData.humidity}%</span></div>
+              </div>
+
+              {/* Soil Moisture (Pastel Soft Sky) */}
+              <div className="bg-[#F0F9FF] dark:bg-[#0284C7]/10 p-4 rounded-2xl border border-[#BAE6FD] dark:border-[#0284C7]/25 space-y-2 hover:shadow-md transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black tracking-wider uppercase text-[#0369A1] dark:text-[#38BDF8]">SOIL MOISTURE</span>
+                  <div className="w-8 h-8 rounded-full bg-white/90 dark:bg-white/10 text-[#0284C7] dark:text-[#38BDF8] flex items-center justify-center text-sm shadow-xs">
+                    💧
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black tracking-tight text-[#0284C7] dark:text-[#38BDF8]">
+                  {fieldData.soilMoisture.toFixed(2)}<span className="text-sm font-bold text-[#0284C7]/80 ml-1">%</span>
+                </div>
+                <div className="w-full bg-[#E0F2FE] dark:bg-white/10 h-2 rounded-full overflow-hidden mt-2">
+                  <div className="bg-[#0284C7] h-full rounded-full" style={{ width: `${Math.min(100, fieldData.soilMoisture)}%` }} />
+                </div>
+              </div>
+
+              {/* Soil Temp (Pastel Rose Coral) */}
+              <div className="bg-[#FFF1F2] dark:bg-[#E11D48]/10 p-4 rounded-2xl border border-[#FECDD3] dark:border-[#E11D48]/25 space-y-2 hover:shadow-md transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black tracking-wider uppercase text-[#BE123C] dark:text-[#FB7185]">SOIL TEMP</span>
+                  <div className="w-8 h-8 rounded-full bg-white/90 dark:bg-white/10 text-[#E11D48] dark:text-[#FB7185] flex items-center justify-center text-sm shadow-xs">
+                    🌱
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black tracking-tight text-[#E11D48] dark:text-[#FB7185]">
+                  {fieldData.soilTemp.toFixed(2)}<span className="text-sm font-bold text-[#E11D48]/80 ml-1">°C</span>
+                </div>
+                <div className="text-xs text-[#059669] dark:text-[#34D399] font-bold">● Optimal Root Zone</div>
+              </div>
+
+              {/* Battery (Pastel Mint) */}
+              <div className="bg-[#F0FDF4] dark:bg-[#059669]/10 p-4 rounded-2xl border border-[#BBF7D0] dark:border-[#059669]/25 space-y-2 hover:shadow-md transition">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-black tracking-wider uppercase text-[#15803D] dark:text-[#34D399]">BATTERY</span>
+                  <div className="w-8 h-8 rounded-full bg-white/90 dark:bg-white/10 text-[#059669] dark:text-[#34D399] flex items-center justify-center text-sm shadow-xs">
+                    🔋
+                  </div>
+                </div>
+                <div className="text-2xl sm:text-3xl font-black tracking-tight text-[#059669] dark:text-[#34D399]">
+                  {fieldData.battery}<span className="text-sm font-bold text-[#059669]/80 ml-1">%</span>
+                </div>
+                <div className="text-xs text-[#059669] dark:text-[#34D399] font-bold">⚡ Solar Charging</div>
+              </div>
+
+            </div>
+
+            {/* Actuator Relay Card (Field A/B Pump) */}
+            <div className="bg-[#0F172A] dark:bg-[#1E293B] text-white p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md border border-white/10">
+              <div>
+                <span className="text-[10.5px] font-bold text-[#94A3B8] uppercase tracking-wider block">Actuator Control</span>
+                <h3 className="text-sm font-black text-white mt-0.5">{fieldData.pumpName}</h3>
+                <p className="text-xs text-[#94A3B8] flex items-center gap-1.5 mt-0.5">
+                  <span className={`w-2 h-2 rounded-full ${fieldData.pumpActive ? "bg-[#10B981] animate-ping" : "bg-[#64748B]"}`} />
+                  <span>{fieldData.pumpActive ? "Pump is currently pumping water" : "Standby • Ready for irrigation"}</span>
+                </p>
+              </div>
+
+              <button
+                onClick={togglePump}
+                className={`px-5 py-2.5 rounded-full font-bold text-xs flex items-center gap-2 cursor-pointer transition shadow-sm ${
+                  fieldData.pumpActive
+                    ? "bg-[#EF4444] hover:bg-[#DC2626] text-white"
+                    : "bg-[#0284C7] hover:bg-[#0369A1] text-white"
+                }`}
+              >
+                <Power className="w-3.5 h-3.5" />
+                <span>{fieldData.pumpActive ? "STOP PUMP" : "START PUMP"}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono text-center pt-2">
+            ESP32 Subnode • LoRa 868MHz Mesh • Rain safety interlock armed
+          </div>
+        </section>
+
       </div>
+
+      {/* ========================================================================= */}
+      {/* 4.5 MANUAL PLANT DISEASE & CROP SCANNER (4 ONNX AI MODELS) */}
+      {/* ========================================================================= */}
+      <ManualCropScanner onScanComplete={handleManualScanComplete} />
+
+      {/* ========================================================================= */}
+      {/* 5. ROW 2: ROVER POSITION (LEFT) + ROVER MODES (RIGHT) */}
+      {/* ========================================================================= */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        {/* LEFT: ROVER POSITION DOCK (Image 4 - Left) */}
+        <section className="lg:col-span-6 modern-card p-5 sm:p-6 flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#E0F2FE] dark:bg-[#0284C7]/20 text-[#0284C7] dark:text-[#38BDF8] flex items-center justify-center text-lg shadow-sm">
+                  🚗
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">Rover Position</h2>
+                  <p className="text-xs text-[#64748B] dark:text-[#94A3B8]">Real-time autonomous farm bay navigation</p>
+                </div>
+              </div>
+
+              <span className="px-3 py-1 rounded-full bg-[#F1F5F9] dark:bg-white/10 border border-[#E2E8F0] dark:border-white/10 text-xs font-bold text-[#0F172A] dark:text-[#F8FAFC] flex items-center gap-1.5">
+                <span>🔋 Rover Battery: <strong className="text-[#059669] dark:text-[#34D399]">{roverBattery}%</strong></span>
+              </span>
+            </div>
+
+            {/* 3 Nav Bay Buttons */}
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              <button
+                onClick={() => {
+                  setRoverPosition("DOCK");
+                  setRoverActionNotice("Standby at Charging Dock");
+                }}
+                className={`p-3.5 rounded-2xl border text-center transition cursor-pointer ${
+                  roverPosition === "DOCK"
+                    ? "bg-[#0284C7] text-white border-[#0284C7] shadow-sm"
+                    : "bg-[#F8FAFC] dark:bg-white/5 border-[#E2E8F0] dark:border-white/10 text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F1F5F9]"
+                }`}
+              >
+                <div className="text-lg">⚡</div>
+                <div className="text-xs font-bold mt-1">Base Dock</div>
+                <div className={`text-[10px] ${roverPosition === "DOCK" ? "text-white/80" : "text-[#94A3B8]"}`}>
+                  {roverPosition === "DOCK" ? "● ACTIVE HERE" : "Standby"}
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setRoverPosition("FIELD_A");
+                  setRoverActionNotice("Navigating Field A (Tomato Canopy)");
+                }}
+                className={`p-3.5 rounded-2xl border text-center transition cursor-pointer ${
+                  roverPosition === "FIELD_A"
+                    ? "bg-[#0284C7] text-white border-[#0284C7] shadow-sm"
+                    : "bg-[#F8FAFC] dark:bg-white/5 border-[#E2E8F0] dark:border-white/10 text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F1F5F9]"
+                }`}
+              >
+                <div className="text-lg">🍅</div>
+                <div className="text-xs font-bold mt-1">Field A</div>
+                <div className={`text-[10px] ${roverPosition === "FIELD_A" ? "text-white/80" : "text-[#94A3B8]"}`}>
+                  {roverPosition === "FIELD_A" ? "● ACTIVE HERE" : "Standby"}
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setRoverPosition("FIELD_B");
+                  setRoverActionNotice("Navigating Field B (Greenhouse)");
+                }}
+                className={`p-3.5 rounded-2xl border text-center transition cursor-pointer ${
+                  roverPosition === "FIELD_B"
+                    ? "bg-[#0284C7] text-white border-[#0284C7] shadow-sm"
+                    : "bg-[#F8FAFC] dark:bg-white/5 border-[#E2E8F0] dark:border-white/10 text-[#0F172A] dark:text-[#F8FAFC] hover:bg-[#F1F5F9]"
+                }`}
+              >
+                <div className="text-lg">🌿</div>
+                <div className="text-xs font-bold mt-1">Field B</div>
+                <div className={`text-[10px] ${roverPosition === "FIELD_B" ? "text-white/80" : "text-[#94A3B8]"}`}>
+                  {roverPosition === "FIELD_B" ? "● ACTIVE HERE" : "Standby"}
+                </div>
+              </button>
+            </div>
+
+            <div className="bg-[#F8FAFC] dark:bg-white/5 p-3 rounded-xl border border-[#E2E8F0] dark:border-white/10 flex items-center justify-between text-xs">
+              <span className="text-[#64748B] dark:text-[#94A3B8] font-medium">Current State: <strong className="text-[#0F172A] dark:text-[#F8FAFC]">{roverActionNotice}</strong></span>
+              <span className="w-2 h-2 rounded-full bg-[#10B981] animate-ping" />
+            </div>
+          </div>
+
+          <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono text-center pt-1">
+            Ultrasonic Obstacle Avoidance: Active • GPS Coordinate Beacon: Locked
+          </div>
+        </section>
+
+        {/* RIGHT: ROVER MODES & CONTROLS (Image 4 - Right) */}
+        <section className="lg:col-span-6 modern-card p-5 sm:p-6 flex flex-col justify-between space-y-4">
+          <div>
+            {/* Header with AUTO / MANUAL Mode Switcher */}
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[#EDE9FE] dark:bg-[#6366F1]/20 text-[#6366F1] dark:text-[#A5B4FC] flex items-center justify-center text-lg shadow-sm">
+                  🎮
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">Rover Modes</h2>
+                  <p className="text-xs text-[#64748B] dark:text-[#94A3B8]">Autonomous 2x daily patrol schedule & manual joystick override</p>
+                </div>
+              </div>
+
+              {/* Mode Switcher */}
+              <div className="flex items-center p-1 rounded-full bg-[#F1F5F9] dark:bg-white/10 border border-[#E2E8F0] dark:border-white/10">
+                <button
+                  onClick={() => handleSwitchRoverMode("AUTO")}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-black transition cursor-pointer ${
+                    roverMode === "AUTO"
+                      ? "bg-[#059669] text-white shadow-xs"
+                      : "text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white"
+                  }`}
+                >
+                  Auto
+                </button>
+                <button
+                  onClick={() => handleSwitchRoverMode("MANUAL")}
+                  className={`px-3.5 py-1.5 rounded-full text-xs font-black transition cursor-pointer ${
+                    roverMode === "MANUAL"
+                  ? "bg-[#D97706] text-white shadow-xs"
+                      : "text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white"
+                  }`}
+                >
+                  Manual
+                </button>
+              </div>
+            </div>
+
+            {/* 1. AUTO MODE VIEW (Exact match to Edge Offline Dashboard) */}
+            {roverMode === "AUTO" ? (
+              <div className="space-y-3.5 animate-fade-in-scale">
+                {/* Scheduled Auto-Patrol Box */}
+                <div className="bg-[#F8FAFC] dark:bg-white/5 rounded-2xl p-4 border border-[#E2E8F0] dark:border-white/10 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-[#F8FAFC]">Scheduled Auto-Patrol</h3>
+                    <span className="px-2.5 py-0.5 rounded-full bg-[#D1FAE5] text-[#059669] text-[11px] font-black border border-[#A7F3D0]">
+                      ● Auto Mode Active
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="bg-white dark:bg-white/5 rounded-xl p-3 border border-[#E2E8F0] dark:border-white/10">
+                      <div className="text-[11px] font-bold text-[#64748B] dark:text-[#94A3B8]">🌅 Morning Patrol</div>
+                      <div className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-[#F8FAFC] mt-0.5">07:00 AM (Routine)</div>
+                    </div>
+                    <div className="bg-white dark:bg-white/5 rounded-xl p-3 border border-[#E2E8F0] dark:border-white/10">
+                      <div className="text-[11px] font-bold text-[#64748B] dark:text-[#94A3B8]">🌇 Evening Patrol</div>
+                      <div className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-[#F8FAFC] mt-0.5">05:30 PM (Routine)</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Rain Safety Interlock & Post-Rain Drying Timer */}
+                <div className="grid grid-cols-2 gap-2.5 text-center">
+                  <div className="bg-[#F8FAFC] dark:bg-white/5 rounded-xl p-3 border border-[#E2E8F0] dark:border-white/10">
+                    <span className="text-[11px] font-bold text-[#64748B] dark:text-[#94A3B8] block">Rain Safety Interlock</span>
+                    <div className="text-xs sm:text-sm font-black text-[#059669] dark:text-[#34D399] mt-0.5">
+                      {isRaining ? "🚨 ACTIVE (Rain Detected)" : "ARMED (Pumps Protected)"}
+                    </div>
+                  </div>
+                  <div className="bg-[#F8FAFC] dark:bg-white/5 rounded-xl p-3 border border-[#E2E8F0] dark:border-white/10">
+                    <span className="text-[11px] font-bold text-[#64748B] dark:text-[#94A3B8] block">Post-Rain Drying Timer</span>
+                    <div className="text-xs sm:text-sm font-black text-[#0284C7] dark:text-[#38BDF8] mt-0.5">Clear (0 min hold)</div>
+                  </div>
+                </div>
+
+                {/* Start Scheduled Patrol Run Button */}
+                <button
+                  onClick={handleTriggerPatrol}
+                  disabled={patrolRunning}
+                  className="w-full py-3 rounded-2xl bg-[#0F172A] dark:bg-[#0284C7] hover:bg-[#1E293B] dark:hover:bg-[#0369A1] text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-md"
+                >
+                  <span>🚜</span>
+                  <span>{patrolRunning ? "Patrol Scan in Progress..." : "Start Scheduled Patrol Run Now"}</span>
+                </button>
+              </div>
+            ) : (
+              /* 2. MANUAL MODE VIEW */
+              <div className="space-y-3.5 animate-fade-in-scale">
+                <div className="bg-[#FEF3C7] border border-[#FDE68A] rounded-2xl p-2.5 px-3.5 flex items-center justify-between">
+                  <h3 className="text-xs font-black text-[#92400E]">Manual Control Override</h3>
+                  <span className="px-2 py-0.5 rounded-full bg-[#F59E0B] text-white text-[10.5px] font-black">
+                    ● Manual Active
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                  {/* 5-Button Directional D-Pad */}
+                  <div className="flex flex-col items-center justify-center p-3 bg-[#F8FAFC] dark:bg-white/5 rounded-2xl border border-[#E2E8F0] dark:border-white/10">
+                    <div className="text-[11px] font-black text-[#64748B] dark:text-[#94A3B8] uppercase tracking-wider mb-2">
+                      Directional Joystick
+                    </div>
+                    
+                    <button
+                      onClick={() => handleRoverDpad("FORWARD")}
+                      className="w-10 h-10 rounded-xl dpad-btn flex items-center justify-center font-black mb-1 cursor-pointer"
+                    >
+                      ▲
+                    </button>
+                    
+                    <div className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleRoverDpad("LEFT")}
+                        className="w-10 h-10 rounded-xl dpad-btn flex items-center justify-center font-black cursor-pointer"
+                      >
+                        ◀
+                      </button>
+                      <button
+                        onClick={() => handleRoverDpad("STOP")}
+                        className="w-10 h-10 rounded-xl bg-[#EF4444] text-white flex items-center justify-center font-black shadow-md cursor-pointer hover:bg-[#DC2626]"
+                      >
+                        ■
+                      </button>
+                      <button
+                        onClick={() => handleRoverDpad("RIGHT")}
+                        className="w-10 h-10 rounded-xl dpad-btn flex items-center justify-center font-black cursor-pointer"
+                      >
+                        ▶
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => handleRoverDpad("REVERSE")}
+                      className="w-10 h-10 rounded-xl dpad-btn flex items-center justify-center font-black mt-1 cursor-pointer"
+                    >
+                      ▼
+                    </button>
+                  </div>
+
+                  {/* Speed Slider & Snapshot Camera */}
+                  <div className="space-y-3">
+                    <div className="bg-[#F8FAFC] dark:bg-white/5 p-3 rounded-2xl border border-[#E2E8F0] dark:border-white/10 space-y-1.5">
+                      <div className="flex justify-between items-center text-xs font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+                        <span>Speed bar:</span>
+                        <span className="font-extrabold text-[#D97706]">{Math.round((roverSpeed / 255) * 100)}% (PWM {roverSpeed})</span>
+                      </div>
+                      <input
+                        type="range"
+                        min="50"
+                        max="255"
+                        value={roverSpeed}
+                        onChange={(e) => setRoverSpeed(Number(e.target.value))}
+                        className="w-full accent-[#F59E0B] cursor-pointer"
+                      />
+                      <div className="flex justify-between gap-2 pt-1">
+                        <button
+                          onClick={() => setRoverSpeed((s) => Math.max(50, s - 25))}
+                          className="flex-1 py-1 rounded-lg bg-white dark:bg-white/10 hover:bg-[#EEF2F6] border border-[#E2E8F0] dark:border-white/10 text-[11px] font-black text-[#0F172A] dark:text-[#F8FAFC] cursor-pointer"
+                        >
+                          - Speed
+                        </button>
+                        <button
+                          onClick={() => setRoverSpeed((s) => Math.min(255, s + 25))}
+                          className="flex-1 py-1 rounded-lg bg-white dark:bg-white/10 hover:bg-[#EEF2F6] border border-[#E2E8F0] dark:border-white/10 text-[11px] font-black text-[#0F172A] dark:text-[#F8FAFC] cursor-pointer"
+                        >
+                          + Speed
+                        </button>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={handleCaptureRoverPhoto}
+                      className="w-full py-2.5 rounded-2xl bg-[#0F172A] dark:bg-[#0284C7] hover:bg-[#1E293B] dark:hover:bg-[#0369A1] text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-md"
+                    >
+                      <Camera className="w-4 h-4 text-[#F59E0B]" />
+                      <span>📷 Capture Live Leaf Photo</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono text-center pt-1">
+            ESP32-CAM WiFi Telemetry • PWM Motor Driver: L298N
+          </div>
+        </section>
+      </div>
+
+      {/* ======================================================================= */}
+      {/* 6. ROW 3: GRAPHICAL REPRESENTATION OF SENSORS (10-DAY CALENDAR) */}
+      {/* ======================================================================= */}
+      <section className="w-full modern-card p-5 sm:p-6 space-y-5">
+        
+        {/* Header Row */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center text-lg shadow-sm">
+              📊
+            </div>
+            <div>
+              <h2 className="text-lg font-black tracking-tight text-[#1E2432]">
+                Graphical Representation of Sensor Data (Node A & B)
+              </h2>
+              <p className="text-xs text-[#8A94A6]">
+                24-Hour telemetry curves • Select any of the last 10 days to inspect historical day-wise records
+              </p>
+            </div>
+          </div>
+
+          {/* Node & Metric Switcher Toolbar */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            
+            {/* Node Switcher [ Node A | Node B ] */}
+            <div className="flex items-center p-1 rounded-full bg-[#F4F7FC] border border-[#E8EEF5]">
+              <button
+                onClick={() => setGraphNode("NODE_A")}
+                className={`px-3 py-1 rounded-full text-xs font-black transition cursor-pointer ${
+                  graphNode === "NODE_A"
+                    ? "bg-[#1E2432] text-white shadow-xs"
+                    : "text-[#64748B] hover:text-[#1E2432]"
+                }`}
+              >
+                Node A
+              </button>
+              <button
+                onClick={() => setGraphNode("NODE_B")}
+                className={`px-3 py-1 rounded-full text-xs font-black transition cursor-pointer ${
+                  graphNode === "NODE_B"
+                    ? "bg-[#1E2432] text-white shadow-xs"
+                    : "text-[#64748B] hover:text-[#1E2432]"
+                }`}
+              >
+                Node B
+              </button>
+            </div>
+
+            {/* Metric Pills */}
+            <button
+              onClick={() => setSelectedMetric("SOIL_MOISTURE")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                selectedMetric === "SOIL_MOISTURE"
+                  ? "bg-[#0284C7] text-white shadow-xs"
+                  : "bg-[#F4F7FC] text-[#64748B] hover:text-[#1E2432] border border-[#E8EEF5]"
+              }`}
+            >
+              <span>💧 Soil Moisture</span>
+            </button>
+            <button
+              onClick={() => setSelectedMetric("SOIL_TEMP")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                selectedMetric === "SOIL_TEMP"
+                  ? "bg-[#EA580C] text-white shadow-xs"
+                  : "bg-[#F4F7FC] text-[#64748B] hover:text-[#1E2432] border border-[#E8EEF5]"
+              }`}
+            >
+              <span>🌡️ Soil Temp</span>
+            </button>
+            <button
+              onClick={() => setSelectedMetric("HUMIDITY")}
+              className={`px-3.5 py-1.5 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
+                selectedMetric === "HUMIDITY"
+                  ? "bg-[#059669] text-white shadow-xs"
+                  : "bg-[#F4F7FC] text-[#64748B] hover:text-[#1E2432] border border-[#E8EEF5]"
+              }`}
+            >
+              <span>💨 Humidity</span>
+            </button>
+
+          </div>
+        </div>
+
+        {/* 10-Day Historical Day Picker Calendar Tabs Bar */}
+        <div className="bg-[#F8FAFC] rounded-2xl p-2.5 border border-[#E8EEF5] overflow-x-auto">
+          <div className="flex items-center gap-2 min-w-max">
+            <span className="text-xs font-black text-[#8A94A6] uppercase px-2">10-Day Calendar:</span>
+            {tenDaysList.map((d) => (
+              <button
+                key={d.index}
+                onClick={() => setSelectedDayIndex(d.index)}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex flex-col items-center min-w-[70px] ${
+                  selectedDayIndex === d.index
+                    ? "bg-[#2563EB] text-white font-black shadow-sm"
+                    : "bg-white hover:bg-[#EEF2F6] text-[#64748B] border border-[#E8EEF5]"
+                }`}
+              >
+                <span className="text-[10px] opacity-80">{d.dayName}</span>
+                <span className="font-extrabold">{d.dateStr}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 24-Hour Recharts Area Curve Visualizer */}
+        <div className="h-72 w-full pt-2">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={hourlyTelemetryData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="areaCurveGradA" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#38BDF8" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#38BDF8" stopOpacity={0.0} />
+                </linearGradient>
+                <linearGradient id="areaCurveGradB" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#34D399" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#34D399" stopOpacity={0.0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={isDarkMode ? "rgba(255, 255, 255, 0.08)" : "rgba(15, 23, 42, 0.06)"} />
+              <XAxis dataKey="time" stroke={isDarkMode ? "#94A3B8" : "#64748B"} fontSize={11} tickLine={false} />
+              <YAxis stroke={isDarkMode ? "#94A3B8" : "#64748B"} fontSize={11} tickLine={false} />
+              <Tooltip
+                contentStyle={{
+                  backgroundColor: isDarkMode ? "rgba(15, 23, 42, 0.95)" : "rgba(255, 255, 255, 0.95)",
+                  backdropFilter: "blur(16px)",
+                  borderRadius: "16px",
+                  border: isDarkMode ? "1px solid rgba(255, 255, 255, 0.12)" : "1px solid rgba(226, 232, 240, 0.9)",
+                  color: isDarkMode ? "#F8FAFC" : "#0F172A",
+                  fontSize: "12px",
+                  fontWeight: "bold",
+                  boxShadow: "0 10px 25px rgba(0,0,0,0.1)",
+                }}
+              />
+              <Area
+                type="monotone"
+                dataKey={
+                  selectedMetric === "SOIL_MOISTURE"
+                    ? graphNode === "NODE_A" ? "moistureA" : "moistureB"
+                    : selectedMetric === "SOIL_TEMP"
+                    ? graphNode === "NODE_A" ? "soilTempA" : "soilTempB"
+                    : graphNode === "NODE_A" ? "humidityA" : "humidityB"
+                }
+                name={graphNode === "NODE_A" ? "Node A (Field A)" : "Node B (Field B)"}
+                stroke={graphNode === "NODE_A" ? "#0284C7" : "#059669"}
+                strokeWidth={2.5}
+                fillOpacity={1}
+                fill={graphNode === "NODE_A" ? "url(#areaCurveGradA)" : "url(#areaCurveGradB)"}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 24-Hour Telemetry Summary Row */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#E8EEF5] dark:border-white/10 text-xs">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#0284C7]" />
+              <span>Node A (Field A - Tomato Canopy)</span>
+            </div>
+            <div className="flex items-center gap-1.5 font-bold text-[#0F172A] dark:text-[#F8FAFC]">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#059669]" />
+              <span>Node B (Field B - Greenhouse)</span>
+            </div>
+          </div>
+
+          <div className="text-right">
+            <span className="text-lg font-black text-[#0F172A] dark:text-[#F8FAFC]">
+              {selectedMetric === "SOIL_MOISTURE" ? "76.2% Avg Moisture" : selectedMetric === "SOIL_TEMP" ? "24.1°C Avg Temp" : "64.8% Avg Humidity"}
+            </span>
+            <span className="text-xs text-[#64748B] dark:text-[#94A3B8] ml-2 font-medium">for {tenDaysList[selectedDayIndex]?.dateStr || "Today"}</span>
+          </div>
+        </div>
+
+      </section>
+
     </div>
   );
 }

@@ -1,70 +1,44 @@
 @import "tailwindcss";
 
 :root {
-  /* Soft Futuristic Bento Color Tokens (Inspired by Reference Design) */
-  --color-canvas-bg: #EEF1F5;
-  --color-card-bg: #FFFFFF;
-  --color-card-subtle: #F6F8FA;
+  /* Clean, Aesthetic Pastel Design System Tokens */
+  --background: #F8FAFC;
+  --foreground: #0F172A;
   
-  --color-mint-hero: #D6EBE7;
-  --color-mint-card: #DCEFEA;
-  --color-mint-subtle: #EAF4F2;
-  --color-mint-accent: #4FA89B;
+  --card-bg: rgba(255, 255, 255, 0.88);
+  --card-border: rgba(255, 255, 255, 0.9);
+  --card-shadow: 0 14px 34px -6px rgba(15, 23, 42, 0.06), 0 2px 8px rgba(0, 0, 0, 0.02);
   
-  --color-charcoal-primary: #121417;
-  --color-charcoal-card: #1C1F24;
-  --color-charcoal-muted: #2E333A;
-  
-  --color-slate-text: #5E6977;
-  --color-slate-light: #8E9BAA;
-  --color-border-subtle: #E2E7ED;
-  
-  --color-lilac-accent: #E8DFF5;
-  --color-lilac-text: #7C5CBF;
-  --color-amber-accent: #FDE68A;
-  --color-amber-text: #D97706;
-  --color-rose-accent: #FFE4E6;
-  --color-rose-text: #E11D48;
+  --color-primary: #0F172A;
+  --color-muted: #64748B;
+  --color-subtle: #94A3B8;
 
-  --background: #EEF1F5;
-  --foreground: #121417;
-  
-  --radius-canvas: 36px;
-  --radius-card: 28px;
-  --radius-card-sm: 18px;
-  --radius-pill: 9999px;
+  /* Pastel Palette Tokens */
+  --pastel-sky: #E0F2FE;
+  --pastel-sky-text: #0284C7;
+  --pastel-peach: #FFEDD5;
+  --pastel-peach-text: #EA580C;
+  --pastel-mint: #D1FAE5;
+  --pastel-mint-text: #059669;
+  --pastel-rose: #FFE4E6;
+  --pastel-rose-text: #E11D48;
+  --pastel-lavender: #EDE9FE;
+  --pastel-lavender-text: #6366F1;
+  --pastel-amber: #FEF3C7;
+  --pastel-amber-text: #D97706;
 }
 
-/* ========================================================================= */
-/* DARK MODE TOKENS & OVERRIDES */
-/* ========================================================================= */
 .dark, html.dark {
-  --background: #0B0E14;
-  --foreground: #F3F6F9;
+  --background: #0B0F17;
+  --foreground: #F8FAFC;
   
-  --color-canvas-bg: #0B0E14;
-  --color-card-bg: #151921;
-  --color-card-subtle: #1C222D;
+  --card-bg: rgba(18, 24, 38, 0.85);
+  --card-border: rgba(255, 255, 255, 0.1);
+  --card-shadow: 0 16px 36px -6px rgba(0, 0, 0, 0.5);
   
-  --color-mint-hero: #142E28;
-  --color-mint-card: #18352E;
-  --color-mint-subtle: #1C3D35;
-  --color-mint-accent: #52C2B1;
-  
-  --color-charcoal-primary: #FFFFFF;
-  --color-charcoal-card: #151921;
-  --color-charcoal-muted: #242C38;
-  
-  --color-slate-text: #94A3B8;
-  --color-slate-light: #64748B;
-  --color-border-subtle: #242C38;
-  
-  --color-lilac-accent: #2C223E;
-  --color-lilac-text: #B494F5;
-  --color-amber-accent: #382A12;
-  --color-amber-text: #FBBF24;
-  --color-rose-accent: #3B151F;
-  --color-rose-text: #FB7185;
+  --color-primary: #F8FAFC;
+  --color-muted: #94A3B8;
+  --color-subtle: #64748B;
 }
 
 @theme inline {
@@ -73,250 +47,185 @@
   --font-sans: var(--font-jakarta), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
+/* ========================================================================= */
+/* 1. PASTEL AMBIENT CANVAS BACKGROUND */
+/* ========================================================================= */
 body {
-  background-color: var(--background);
-  color: var(--foreground);
+  background-color: #F8FAFC;
+  color: #0F172A;
   font-family: var(--font-sans);
   background-image: 
-    radial-gradient(circle at 12% 10%, rgba(214, 235, 231, 0.65), transparent 45%),
-    radial-gradient(circle at 88% 12%, rgba(232, 223, 245, 0.45), transparent 40%),
-    radial-gradient(circle at 50% 90%, rgba(214, 235, 231, 0.4), transparent 50%),
-    radial-gradient(circle at 85% 85%, rgba(226, 231, 237, 0.8), transparent 45%);
+    radial-gradient(circle at 8% 10%, rgba(224, 242, 254, 0.8) 0%, transparent 42%),
+    radial-gradient(circle at 92% 12%, rgba(254, 237, 213, 0.75) 0%, transparent 38%),
+    radial-gradient(circle at 50% 32%, rgba(237, 233, 254, 0.65) 0%, transparent 50%),
+    radial-gradient(circle at 12% 72%, rgba(209, 250, 229, 0.7) 0%, transparent 45%),
+    radial-gradient(circle at 88% 78%, rgba(254, 228, 230, 0.65) 0%, transparent 40%),
+    linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 50%, #EFF6FF 100%);
   background-attachment: fixed;
+  background-size: 100% 100%;
   min-height: 100vh;
   -webkit-tap-highlight-color: transparent;
-  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .dark body, body.dark {
-  background-color: #0B0E14 !important;
-  color: #F3F6F9 !important;
+  background-color: #0B0F17;
+  color: #F8FAFC;
   background-image: 
-    radial-gradient(circle at 12% 10%, rgba(20, 46, 40, 0.45), transparent 45%),
-    radial-gradient(circle at 88% 12%, rgba(44, 34, 62, 0.35), transparent 40%),
-    radial-gradient(circle at 50% 90%, rgba(20, 46, 40, 0.3), transparent 50%),
-    radial-gradient(circle at 85% 85%, rgba(24, 32, 44, 0.7), transparent 45%) !important;
+    radial-gradient(circle at 10% 10%, rgba(2, 132, 199, 0.18) 0%, transparent 45%),
+    radial-gradient(circle at 90% 15%, rgba(234, 88, 12, 0.15) 0%, transparent 40%),
+    radial-gradient(circle at 50% 35%, rgba(99, 102, 241, 0.16) 0%, transparent 55%),
+    radial-gradient(circle at 15% 75%, rgba(16, 185, 129, 0.15) 0%, transparent 48%),
+    radial-gradient(circle at 85% 80%, rgba(225, 29, 72, 0.14) 0%, transparent 42%),
+    linear-gradient(140deg, #070A10 0%, #0F172A 50%, #0B0F19 100%);
 }
 
-/* Master Outer Shell */
-.outer-screen-frame {
-  background: #F3F6F9;
-  border-radius: 40px;
-  border: 1.5px solid #E2E7ED;
-  box-shadow: 0 25px 70px -15px rgba(28, 31, 36, 0.08), 0 4px 20px rgba(0, 0, 0, 0.02);
-  transition: all 0.3s ease;
+/* ========================================================================= */
+/* 2. FROSTED GLASS BENTO CARDS */
+/* ========================================================================= */
+.modern-card, .bento-card, .frosted-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border-radius: 26px;
+  border: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.dark .outer-screen-frame {
-  background: #11141B !important;
-  border-color: #242C38 !important;
-  box-shadow: 0 25px 70px -15px rgba(0, 0, 0, 0.6), 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+.modern-card:hover, .bento-card:hover {
+  box-shadow: 0 18px 42px -6px rgba(15, 23, 42, 0.08), 0 4px 12px rgba(0, 0, 0, 0.03);
 }
 
-/* Crisp Bento Card */
-.bento-card {
+.dark .modern-card:hover, .dark .bento-card:hover {
+  box-shadow: 0 20px 48px -6px rgba(0, 0, 0, 0.65);
+}
+
+/* ========================================================================= */
+/* 3. PASTEL BADGES & CHIPS */
+/* ========================================================================= */
+.badge-pastel-sky {
+  background-color: #E0F2FE;
+  color: #0284C7;
+  border: 1px solid #BAE6FD;
+}
+
+.badge-pastel-peach {
+  background-color: #FFEDD5;
+  color: #EA580C;
+  border: 1px solid #FED7AA;
+}
+
+.badge-pastel-mint {
+  background-color: #D1FAE5;
+  color: #059669;
+  border: 1px solid #A7F3D0;
+}
+
+.badge-pastel-rose {
+  background-color: #FFE4E6;
+  color: #E11D48;
+  border: 1px solid #FECDD3;
+}
+
+.badge-pastel-lavender {
+  background-color: #EDE9FE;
+  color: #6366F1;
+  border: 1px solid #DDD6FE;
+}
+
+.badge-pastel-amber {
+  background-color: #FEF3C7;
+  color: #D97706;
+  border: 1px solid #FDE68A;
+}
+
+/* ========================================================================= */
+/* 4. POPOVERS & CONTROLS */
+/* ========================================================================= */
+.popover-shadow {
+  box-shadow: 0 20px 45px -10px rgba(15, 23, 42, 0.15), 0 0 0 1px rgba(15, 23, 42, 0.05);
+}
+
+.dark .popover-shadow {
+  box-shadow: 0 24px 50px -10px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.dpad-btn {
   background: #FFFFFF;
-  border-radius: var(--radius-card);
-  border: 1px solid #E5EAEF;
-  box-shadow: 0 4px 20px -2px rgba(18, 20, 23, 0.03), 0 1px 4px rgba(0, 0, 0, 0.01);
-  transition: all 0.3s ease;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.06);
+  color: #0F172A;
+  transition: all 0.15s ease;
 }
 
-.dark .bento-card {
-  background: #151921 !important;
-  border-color: #242C38 !important;
-  color: #F3F6F9 !important;
-  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4) !important;
-}
-
-/* Mint Hero Pill Card */
-.mint-hero-card {
-  background: linear-gradient(135deg, #DCEFEA, #D2E8E3);
-  border-radius: var(--radius-card);
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  box-shadow: 0 8px 25px -4px rgba(79, 168, 155, 0.12);
-  transition: all 0.3s ease;
-}
-
-.dark .mint-hero-card {
-  background: linear-gradient(135deg, #142E28, #18352E) !important;
-  border-color: #24483E !important;
-  box-shadow: 0 8px 25px -4px rgba(0, 0, 0, 0.4) !important;
-}
-
-/* Capsule Buttons & Pills */
-.capsule-pill {
-  background: #FFFFFF;
-  border-radius: var(--radius-pill);
-  border: 1px solid #E2E7ED;
-  color: var(--color-slate-text);
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.capsule-pill:hover {
-  border-color: #CBD5E1;
-  color: var(--color-charcoal-primary);
+.dpad-btn:hover {
+  background: #F8FAFC;
   transform: translateY(-1px);
 }
 
-.capsule-pill-active {
-  background: #DCEFEA !important;
-  color: #121417 !important;
-  font-weight: 800;
-  border-color: #BDE0D8 !important;
+.dpad-btn:active {
+  background: #0F172A;
+  color: #FFFFFF;
+  transform: scale(0.95);
 }
 
-.dark .capsule-pill {
-  background: #1C222D !important;
-  border-color: #242C38 !important;
-  color: #94A3B8 !important;
+.dark .dpad-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #F8FAFC;
 }
 
-.dark .capsule-pill:hover {
-  border-color: #334155 !important;
-  color: #FFFFFF !important;
+.dark .dpad-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
 }
 
-.dark .capsule-pill-active {
-  background: #142E28 !important;
-  color: #52C2B1 !important;
-  border-color: #24483E !important;
-}
-
-/* Form Inputs in Dark Mode */
-.dark input, .dark select, .dark textarea {
-  background-color: #1C222D !important;
-  border-color: #242C38 !important;
-  color: #F3F6F9 !important;
-}
-
-.dark input::placeholder {
-  color: #64748B !important;
-}
-
-/* Sub-panels and light-background overrides in Dark Mode */
-.dark .bg-white {
-  background-color: #1C222D !important;
-  border-color: #242C38 !important;
-  color: #F3F6F9 !important;
-}
-
-.dark .bg-white\/85,
-.dark .bg-white\/80,
-.dark .bg-white\/70,
-.dark .bg-white\/60 {
-  background-color: rgba(28, 34, 45, 0.85) !important;
-  border-color: rgba(36, 44, 56, 0.8) !important;
-  color: #F3F6F9 !important;
-}
-
-.dark .bg-\[\#F4F7FA\],
-.dark .bg-\[\#F8FAFC\],
-.dark .bg-\[\#F3F6F9\],
-.dark .bg-\[\#EEF1F5\] {
-  background-color: #161A22 !important;
-  border-color: #242C38 !important;
-  color: #F3F6F9 !important;
-}
-
-.dark .text-\[\#121417\] {
-  color: #F3F6F9 !important;
-}
-
-.dark .text-\[\#5E6977\] {
-  color: #94A3B8 !important;
-}
-
-.dark .text-\[\#8E9BAA\] {
-  color: #64748B !important;
-}
-
-.dark .border-\[\#E2E7ED\],
-.dark .border-\[\#E5EAEF\] {
-  border-color: #242C38 !important;
-}
-
-/* Toggle Switch Capsule */
-.toggle-switch-capsule {
-  width: 48px;
-  height: 26px;
-  border-radius: var(--radius-pill);
-  background: #121417;
-  padding: 3px;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.toggle-switch-capsule.off {
-  background: #E2E7ED;
-}
-
-.dark .toggle-switch-capsule {
-  background: #52C2B1 !important;
-}
-
-.dark .toggle-switch-capsule.off {
-  background: #242C38 !important;
-}
-
-.toggle-dot {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: #FFFFFF;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
-  transform: translateX(22px);
-  transition: transform 0.25s ease;
-}
-
-.toggle-switch-capsule.off .toggle-dot {
-  transform: translateX(0);
-}
-
-/* Holographic 3D Glow Card */
-.hologram-card {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(232, 223, 245, 0.45));
-  border-radius: var(--radius-card);
-  border: 1.5px solid rgba(232, 223, 245, 0.8);
-  box-shadow: 0 10px 30px -5px rgba(124, 92, 191, 0.08);
-}
-
-.dark .hologram-card {
-  background: linear-gradient(135deg, rgba(21, 25, 33, 0.95), rgba(44, 34, 62, 0.45)) !important;
-  border-color: #2C223E !important;
-}
-
-/* Custom Scrollbar */
+/* Modern Sleek Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
 ::-webkit-scrollbar-track {
-  background: rgba(238, 241, 245, 0.6);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(94, 105, 119, 0.25);
+  background: rgba(148, 163, 184, 0.35);
   border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(18, 20, 23, 0.45);
+  background: rgba(100, 116, 139, 0.6);
 }
 
-.dark ::-webkit-scrollbar-track {
-  background: rgba(11, 14, 20, 0.6);
+.modern-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(148, 163, 184, 0.25);
+@keyframes floatSlow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(1deg); }
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(148, 163, 184, 0.45);
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 0.9; transform: scale(1.03); }
 }
 
+@keyframes fadeInScale {
+  0% { opacity: 0; transform: scale(0.97); }
+  100% { opacity: 1; transform: scale(1); }
+}
 
+.animate-float-slow {
+  animation: floatSlow 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 3s ease-in-out infinite;
+}
+
+.animate-fade-in-scale {
+  animation: fadeInScale 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

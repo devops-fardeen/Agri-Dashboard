@@ -211,41 +211,41 @@ class AgriSmartDisplayGUI:
     Color Palette Graded: #051F20, #0B2B26, #163832, #235347, #8EB69B, #DAF1DE.
     """
 
-    BG_DARK = "#f0f7f2"        # Luminous Soft Mint Canvas
-    CARD_BG = "#ffffff"        # Elevated White Panel
-    INNER_BG = "#daf1de"       # Soft Pale Mint Metric Box
-    BORDER_COLOR = "#8eb69b"   # Soft Sage Border
-    BORDER_GLOW = "#235347"    # Forest Sage Glow
-    TEXT_MAIN = "#051f20"      # Forest Noir (Darkest Pine)
-    TEXT_MUTED = "#163832"     # Dark Spruce
-    TEXT_ACCENT = "#235347"    # Forest Sage
+    BG_DARK = "#F5F1E8"        # Crextio Warm Sunshine Cream Canvas
+    CARD_BG = "#FFFFFF"        # Crisp Elevated White Panel
+    INNER_BG = "#FAF7F2"       # Soft Light Bento Metric Box
+    BORDER_COLOR = "#EFE9DD"   # Subtle Warm Border
+    BORDER_GLOW = "#F7CE46"    # Warm Sunshine Yellow Glow
+    TEXT_MAIN = "#18191F"      # Deep Charcoal Text
+    TEXT_MUTED = "#6B7280"     # Soft Grey Text
+    TEXT_ACCENT = "#18191F"    # Primary Charcoal Accent
     
     # Semantic Accents
-    AMBER_PRIMARY = "#235347"  # Forest Sage Primary
-    SLATE_PRIMARY = "#163832"  # Dark Spruce
-    DEEP_SLATE = "#051f20"     # Forest Noir
-    GREEN_ON = "#235347"       # Active Forest Sage
-    GREEN_TEXT = "#051f20"     # Forest Readout
-    GREEN_ALERT_BG = "#daf1de" # Pale Mint Alert Banner
-    GREEN_ALERT_BORDER = "#8eb69b"
+    AMBER_PRIMARY = "#F7CE46"  # Crextio Sunshine Yellow
+    SLATE_PRIMARY = "#4B5563"  # Muted Slate
+    DEEP_SLATE = "#1E1F24"     # Deep Charcoal Bento Pill
+    GREEN_ON = "#10B981"       # Active Emerald Green
+    GREEN_TEXT = "#047857"     # Emerald Readout
+    GREEN_ALERT_BG = "#E6F8F0" # Soft Emerald Mint Banner
+    GREEN_ALERT_BORDER = "#10B981"
     
-    AMBER_WARN = "#8eb69b"     # Soft Sage Warning
-    AMBER_ALERT_BG = "#daf1de" # Pale Mint Alert Banner
-    AMBER_ALERT_BORDER = "#8eb69b"
+    AMBER_WARN = "#F59E0B"     # Amber Warning
+    AMBER_ALERT_BG = "#FDF5D6" # Soft Sunshine Banner
+    AMBER_ALERT_BORDER = "#F7CE46"
     
-    RED_STOP = "#be123c"       # Emergency Rose
-    RED_ACTIVE = "#e11d48"
-    RED_ALERT_BG = "#fef2f2"   # Light Red Alert Banner
-    RED_ALERT_BORDER = "#fecaca"
+    RED_STOP = "#EF4444"       # Soft Coral Red
+    RED_ACTIVE = "#DC2626"
+    RED_ALERT_BG = "#FEE2E2"   # Soft Red Alert Banner
+    RED_ALERT_BORDER = "#EF4444"
     
-    BLUE_ACCENT = "#163832"    # Dark Spruce
-    ORANGE_TEMP = "#235347"    # Forest Sage Temp
-    CYAN_HUMID = "#235347"     # Humidity
-    PURPLE_ACCENT = "#051f20"  # Stage
+    BLUE_ACCENT = "#0284C7"    # Sky / Cyan
+    ORANGE_TEMP = "#F59E0B"    # Amber Temp
+    CYAN_HUMID = "#0284C7"     # Cyan Humidity
+    PURPLE_ACCENT = "#7C3AED"  # Purple AI Accent
     
-    BTN_IDLE = "#daf1de"       # Idle Actuator Button
-    BTN_IDLE_HOVER = "#8eb69b"
-    BTN_ACTIVE_LANG = "#051f20"# Highlighted Language Pill
+    BTN_IDLE = "#FAF7F2"       # Idle Actuator Button
+    BTN_IDLE_HOVER = "#F2EDE4"
+    BTN_ACTIVE_LANG = "#1E1F24"# Highlighted Dark Pill
 
     def __init__(self, root: tk.Tk):
         self.root = root

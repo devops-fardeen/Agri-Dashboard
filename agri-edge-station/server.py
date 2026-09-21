@@ -4,7 +4,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List, Tuple
 import requests
-from fastapi import FastAPI, HTTPException, Path, Body, UploadFile, File, Form
+import urllib.parse
+from fastapi import FastAPI, HTTPException, Path, Body, UploadFile, File, Form, Query
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -361,7 +362,7 @@ def fetch_and_cache_live_weather(lat: Optional[float] = None, lon: Optional[floa
         f"latitude={target_lat}&longitude={target_lon}"
         f"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation"
         f"&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,uv_index_max"
-        f"&timezone=auto"
+        f"&forecast_days=14&timezone=auto"
     )
 
     try:
@@ -380,12 +381,24 @@ def fetch_and_cache_live_weather(lat: Optional[float] = None, lon: Optional[floa
 
             formatted_days = []
             today_str = datetime.now().strftime("%Y-%m-%d")
-            for i in range(min(len(dates), 7)):
+            
+            # Find start index for today or subsequent days
+            start_idx = 0
+            for idx, d_str in enumerate(dates):
+                if d_str >= today_str:
+                    start_idx = idx
+                    break
+
+            valid_indices = list(range(start_idx, min(len(dates), start_idx + 7)))
+            if not valid_indices:
+                valid_indices = list(range(min(len(dates), 7)))
+
+            for pos, i in enumerate(valid_indices):
                 wcode = weather_codes[i] if i < len(weather_codes) else 0
                 wmo_info = interpret_wmo_code(wcode)
                 d_date = dates[i]
                 d_obj = datetime.fromisoformat(d_date)
-                day_name = "Today" if (i == 0 or d_date == today_str) else d_obj.strftime("%a")
+                day_name = "Today" if pos == 0 else d_obj.strftime("%a")
 
                 formatted_days.append({
                     "date": d_date,
@@ -479,6 +492,66 @@ def refresh_weather():
         "message": "Live 7-day weather forecast updated from Open-Meteo" if success else "Internet unreachable. Serving 7-day offline cached forecast from SQLite.",
         "data": res
     }
+
+@app.get("/api/edge/weather/search")
+def search_weather_locations(query: str = Query(..., min_length=2)):
+    """Searches for matching cities/districts with coordinates (online Open-Meteo geocoding with rich offline Indian/global hub dictionary)."""
+    q = query.strip().lower()
+    
+    # Try Open-Meteo Geocoding API if online
+    try:
+        url = f"https://geocoding-api.open-meteo.com/v1/search?name={urllib.parse.quote(query)}&count=6&language=en&format=json"
+        res = requests.get(url, timeout=3.0)
+        if res.status_code == 200:
+            data = res.json()
+            results = data.get("results", [])
+            if results:
+                formatted = []
+                for item in results:
+                    name = item.get("name", "")
+                    admin1 = item.get("admin1", "")
+                    country = item.get("country", "")
+                    full_name = f"{name}, {admin1}" if admin1 else f"{name}, {country}"
+                    formatted.append({
+                        "name": full_name,
+                        "city": name,
+                        "admin1": admin1,
+                        "country": country,
+                        "latitude": round(float(item.get("latitude", 0.0)), 4),
+                        "longitude": round(float(item.get("longitude", 0.0)), 4),
+                        "elevation": item.get("elevation", 0)
+                    })
+                return {"success": True, "source": "LIVE_API", "results": formatted}
+    except Exception:
+        pass
+        
+    # Offline Fallback Dictionary of Key Agricultural & Urban Centres
+    offline_hubs = [
+        {"name": "Lucknow, Uttar Pradesh", "city": "Lucknow", "admin1": "Uttar Pradesh", "country": "India", "latitude": 26.8467, "longitude": 80.9462},
+        {"name": "Ludhiana, Punjab", "city": "Ludhiana", "admin1": "Punjab", "country": "India", "latitude": 30.9010, "longitude": 75.8573},
+        {"name": "Nashik, Maharashtra", "city": "Nashik", "admin1": "Maharashtra", "country": "India", "latitude": 19.9975, "longitude": 73.7898},
+        {"name": "Pune, Maharashtra", "city": "Pune", "admin1": "Maharashtra", "country": "India", "latitude": 18.5204, "longitude": 73.8567},
+        {"name": "Karnal, Haryana", "city": "Karnal", "admin1": "Haryana", "country": "India", "latitude": 29.6857, "longitude": 76.9905},
+        {"name": "Nagpur, Maharashtra", "city": "Nagpur", "admin1": "Maharashtra", "country": "India", "latitude": 21.1458, "longitude": 79.0882},
+        {"name": "Anand, Gujarat", "city": "Anand", "admin1": "Gujarat", "country": "India", "latitude": 22.5645, "longitude": 72.9289},
+        {"name": "Coimbatore, Tamil Nadu", "city": "Coimbatore", "admin1": "Tamil Nadu", "country": "India", "latitude": 11.0168, "longitude": 76.9558},
+        {"name": "Jaipur, Rajasthan", "city": "Jaipur", "admin1": "Rajasthan", "country": "India", "latitude": 26.9124, "longitude": 75.7873},
+        {"name": "Hyderabad, Telangana", "city": "Hyderabad", "admin1": "Telangana", "country": "India", "latitude": 17.3850, "longitude": 78.4867},
+        {"name": "Bengaluru, Karnataka", "city": "Bengaluru", "admin1": "Karnataka", "country": "India", "latitude": 12.9716, "longitude": 77.5946},
+        {"name": "Delhi / NCR", "city": "Delhi", "admin1": "Delhi", "country": "India", "latitude": 28.6139, "longitude": 77.2090},
+        {"name": "Bhopal, Madhya Pradesh", "city": "Bhopal", "admin1": "Madhya Pradesh", "country": "India", "latitude": 23.2599, "longitude": 77.4126},
+        {"name": "Patna, Bihar", "city": "Patna", "admin1": "Bihar", "country": "India", "latitude": 25.5941, "longitude": 85.1376},
+        {"name": "Varanasi, Uttar Pradesh", "city": "Varanasi", "admin1": "Uttar Pradesh", "country": "India", "latitude": 25.3176, "longitude": 82.9739},
+        {"name": "Chandigarh", "city": "Chandigarh", "admin1": "Chandigarh", "country": "India", "latitude": 30.7333, "longitude": 76.7794},
+        {"name": "Indore, Madhya Pradesh", "city": "Indore", "admin1": "Madhya Pradesh", "country": "India", "latitude": 22.7196, "longitude": 75.8577},
+        {"name": "Shimla, Himachal Pradesh", "city": "Shimla", "admin1": "Himachal Pradesh", "country": "India", "latitude": 31.1048, "longitude": 77.1734}
+    ]
+    
+    matches = [h for h in offline_hubs if q in h["name"].lower() or q in h["city"].lower() or q in h["admin1"].lower()]
+    if not matches:
+        matches = offline_hubs[:5]
+        
+    return {"success": True, "source": "OFFLINE_HUB_DATABASE", "results": matches}
 
 @app.post("/api/edge/weather/location")
 def set_weather_location(req: WeatherLocationRequest):
@@ -609,12 +682,127 @@ def send_rover_command(payload: RoverCommandRequest):
         "rover": updated
     }
 
+@app.post("/api/edge/rover/mode/{mode}")
+def set_rover_mode(mode: str = Path(..., description="Driving mode: AUTO or MANUAL")):
+    """Switches rover driving mode between AUTO and MANUAL."""
+    updated = database.update_rover_mode(mode)
+    return {
+        "success": True,
+        "mode": updated.get("mode", "AUTO"),
+        "rover": updated
+    }
+
+class RoverPatrolRequest(BaseModel):
+    field: Optional[str] = "FIELD_A"
+
+@app.post("/api/edge/rover/patrol/trigger")
+def trigger_rover_patrol(req: Optional[RoverPatrolRequest] = None):
+    """Triggers an autonomous patrol cycle in the specified field, updating rover state and executing AI diagnostic scan."""
+    fld = (req.field if req else "FIELD_A") or "FIELD_A"
+    fld_clean = "FIELD_B" if "B" in fld.upper() else "FIELD_A"
+    
+    # 1. Check if post-rain drying hold timer is active (waiting 30 min after rain and pump off)
+    rover_state = database.get_rover_state()
+    if rover_state.get("rain_hold_until"):
+        try:
+            hold_time = datetime.fromisoformat(rover_state["rain_hold_until"])
+            if hold_time.tzinfo is None:
+                hold_time = hold_time.replace(tzinfo=timezone.utc)
+            now = datetime.now(timezone.utc)
+            if now < hold_time:
+                rem_mins = int((hold_time - now).total_seconds() / 60) + 1
+                return {
+                    "success": False,
+                    "blocked_by_rain": True,
+                    "message": f"Patrol hold active: Post-rain drying in progress ({rem_mins} min remaining) to protect crop root zone.",
+                    "rover": rover_state
+                }
+        except Exception:
+            pass
+
+    # 2. Check active rain on hardware sensor or cached weather API (last 15 min)
+    latest_a = database.get_latest_telemetry("ZONE_A") or {}
+    sensor_rain = bool(latest_a.get("rain_detected", 0))
+    
+    cached_wx = database.get_cached_weather()
+    weather_rain = False
+    if cached_wx and cached_wx.get("forecast"):
+        curr = cached_wx["forecast"].get("current", {})
+        precip = float(curr.get("precipitation", 0.0))
+        cond = str(curr.get("condition", "")).lower()
+        age = float(cached_wx.get("age_minutes", 999))
+        if age <= 15.0 and (precip > 0.0 or "rain" in cond or "shower" in cond or "thunder" in cond or "drizzle" in cond):
+            weather_rain = True
+
+    if sensor_rain or weather_rain:
+        database.set_rover_rain_hold(30)
+        # Force shut down pumps
+        database.set_actuator_state("PUMP_ZONE_A", 0)
+        database.set_actuator_state("PUMP_ZONE_B", 0)
+        return {
+            "success": False,
+            "blocked_by_rain": True,
+            "message": "Patrol aborted: Active precipitation detected (" + ("Rain Sensor" if sensor_rain else "Weather API") + "). Water pumps shut down and 30-min drying timer initiated.",
+            "rover": database.get_rover_state()
+        }
+    
+    database.update_rover_position(status="PATROLLING", current_field=fld_clean)
+    
+    # Run AI patrol scan for this field node
+    node_id = "SLAVE_01" if fld_clean == "FIELD_A" else "SLAVE_02"
+    scan_res = simulate_patrol_scan(SimulatePatrolScanRequest(node_id=node_id))
+    
+    return {
+        "success": True,
+        "status": "PATROLLING",
+        "current_field": fld_clean,
+        "scan_diagnosis": scan_res,
+        "rover": database.get_rover_state()
+    }
+
+@app.post("/api/edge/rover/capture-photo")
+def capture_rover_photo():
+    """Captures an instant snapshot from the ESP32-CAM and performs AI disease diagnosis."""
+    res = simulate_patrol_scan(SimulatePatrolScanRequest(node_id="ESP32_CAM_ROVER"))
+    return {
+        "success": True,
+        "message": "Snapshot captured via ESP32-CAM",
+        "diagnosis": res,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    }
+
+@app.get("/api/edge/sync/status")
+def get_sync_status():
+    """Returns the edge-to-cloud live sync state."""
+    stats = database.get_edge_stats()
+    cloud_url = os.getenv("CLOUD_BASE_URL", "http://localhost:3000")
+    is_online = False
+    is_syncing = False
+    try:
+        r = requests.get(f"{cloud_url}/api/commands", timeout=1.0)
+        if r.status_code in [200, 401, 403]:
+            is_online = True
+            is_syncing = stats.get("unsynced_records", 0) > 0
+    except Exception:
+        is_online = False
+        is_syncing = False
+
+    return {
+        "success": True,
+        "is_online": is_online,
+        "is_syncing": is_syncing,
+        "status": "SYNCING" if (is_online and is_syncing) else ("ONLINE" if is_online else "OFFLINE"),
+        "last_synced_at": stats.get("last_synced_at"),
+        "unsynced_records": stats.get("unsynced_records", 0),
+        "total_records": stats.get("total_records", 0)
+    }
+
 @app.post("/api/edge/pump/{target}/{action}")
 def control_pump(
     target: str = Path(..., description="Target pump: PUMP_ZONE_A or PUMP_ZONE_B"),
     action: str = Path(..., description="Action: ON, OFF, or TOGGLE")
 ):
-    """Toggles or sets the hardware pump relay state in SQLite."""
+    """Toggles or sets the hardware pump relay state in SQLite with rain protection."""
     target_clean = target.upper().strip()
     if target_clean in ["ZONE_A", "PUMP_A", "A"]:
         target_clean = "PUMP_ZONE_A"
@@ -627,14 +815,40 @@ def control_pump(
     action_clean = action.upper().strip()
     if action_clean in ["ON", "1", "TRUE", "START"]:
         new_state = 1
-        database.set_actuator_state(target_clean, new_state)
     elif action_clean in ["OFF", "0", "FALSE", "STOP"]:
         new_state = 0
-        database.set_actuator_state(target_clean, new_state)
     elif action_clean in ["TOGGLE", "SWITCH"]:
-        new_state = database.toggle_actuator_state(target_clean)
+        current = database.get_actuator_state(target_clean)
+        new_state = 0 if current else 1
     else:
         raise HTTPException(status_code=400, detail="Invalid action. Use ON, OFF, or TOGGLE")
+
+    # If turning pump ON, check rain safety interlock
+    if new_state == 1:
+        latest_a = database.get_latest_telemetry("ZONE_A") or {}
+        sensor_rain = bool(latest_a.get("rain_detected", 0))
+        cached_wx = database.get_cached_weather()
+        weather_rain = False
+        if cached_wx and cached_wx.get("forecast"):
+            curr = cached_wx["forecast"].get("current", {})
+            precip = float(curr.get("precipitation", 0.0))
+            cond = str(curr.get("condition", "")).lower()
+            age = float(cached_wx.get("age_minutes", 999))
+            if age <= 15.0 and (precip > 0.0 or "rain" in cond or "shower" in cond or "thunder" in cond or "drizzle" in cond):
+                weather_rain = True
+
+        if sensor_rain or weather_rain:
+            database.set_actuator_state(target_clean, 0)
+            return {
+                "success": False,
+                "blocked_by_rain": True,
+                "target": target_clean,
+                "state": 0,
+                "state_name": "PROTECTED_OFF",
+                "message": "Pump activation blocked: Active rain detected. Pumps remain protected."
+            }
+
+    database.set_actuator_state(target_clean, new_state)
         
     return {
         "success": True,

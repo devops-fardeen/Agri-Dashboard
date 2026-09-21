@@ -1,0 +1,66 @@
+{
+    "success": true,
+    "image": "a122b41256cf4b009280ea4b89b2ad58.jpg",
+    "blur_score": 201.44,
+    "results": {
+        "disease": [
+            {
+                "class_id": 3,
+                "name": "Leaf Miner",
+                "confidence": 0.597,
+                "bbox": [
+                    26,
+                    26,
+                    346,
+                    350
+                ]
+            }
+        ],
+        "pest": [
+            {
+                "class_id": 3,
+                "name": "Silverleaf whitefly",
+                "confidence": 0.371,
+                "bbox": [
+                    337,
+                    217,
+                    422,
+                    290
+                ]
+            }
+        ],
+        "nutrition": [
+            {
+                "class_id": 11,
+                "name": "Tomato leaf yellow virus",
+                "confidence": 0.53,
+                "bbox": [
+                    23,
+                    52,
+                    336,
+                    355
+                ]
+            }
+        ],
+        "stage": [
+            {
+                "class_id": 0,
+                "name": "Stage 1",
+                "confidence": 0.801,
+                "bbox": [
+                    0,
+                    0,
+                    618,
+                    370
+                ]
+            }
+        ],
+        "timing": {
+            "disease": 0.358,
+            "pest": 0.666,
+            "nutrition": 1.107,
+            "stage": 1.043,
+            "total": 3.174
+        }
+    }
+}

@@ -44,7 +44,11 @@ def init_db():
             cursor.execute("ALTER TABLE telemetry ADD COLUMN rain_detected INTEGER DEFAULT 0;")
         except Exception:
             pass # Already exists
-        
+        try:
+            cursor.execute("ALTER TABLE telemetry ADD COLUMN battery_level REAL DEFAULT 95.0;")
+        except Exception:
+            pass
+
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_synced ON telemetry(synced_to_cloud, id);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_zone_rec ON telemetry(zone_id, recorded_at DESC);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_telemetry_rec ON telemetry(recorded_at DESC);")
@@ -67,7 +71,7 @@ def init_db():
             );
         """)
         
-        # 4. Rover State Table (Heading, speed, battery, last command)
+        # 4. Rover State Table (Heading, speed, battery, last command, mode, status, field)
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS rover_state (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -75,9 +79,25 @@ def init_db():
                 speed REAL NOT NULL DEFAULT 0.0,
                 battery INTEGER NOT NULL DEFAULT 84,
                 last_action TEXT NOT NULL DEFAULT 'STOP',
+                mode TEXT NOT NULL DEFAULT 'AUTO',
+                status TEXT NOT NULL DEFAULT 'PARKED',
+                current_field TEXT NOT NULL DEFAULT 'DOCK',
+                rain_hold_until TEXT,
                 updated_at TEXT NOT NULL
             );
         """)
+
+        # Safe automatic migrations for rover_state
+        for col_def in [
+            "mode TEXT NOT NULL DEFAULT 'AUTO'",
+            "status TEXT NOT NULL DEFAULT 'PARKED'",
+            "current_field TEXT NOT NULL DEFAULT 'DOCK'",
+            "rain_hold_until TEXT"
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE rover_state ADD COLUMN {col_def};")
+            except Exception:
+                pass
         
         # 5. AI Detections Storage Table (Vision Models inference events)
         cursor.execute("""
@@ -125,8 +145,8 @@ def init_db():
         
         # Seed default rover state if missing
         cursor.execute("""
-            INSERT OR IGNORE INTO rover_state (id, heading, speed, battery, last_action, updated_at)
-            VALUES (1, 'NW (312°)', 0.0, 84, 'STOP', ?)
+            INSERT OR IGNORE INTO rover_state (id, heading, speed, battery, last_action, mode, status, current_field, rain_hold_until, updated_at)
+            VALUES (1, 'NW (312°)', 0.0, 84, 'STOP', 'AUTO', 'PARKED', 'DOCK', NULL, ?)
         """, (now_iso,))
         
         # Seed 7-day weather forecast cache if missing
@@ -186,7 +206,8 @@ def log_telemetry(
     barometric_pressure: float = 1013.25,
     node_id: str = "EDGE_STATION_PI",
     recorded_at: Optional[str] = None,
-    rain_detected: int = 0
+    rain_detected: int = 0,
+    battery_level: float = 95.0
 ) -> int:
     """Logs a new sensor reading into the local offline SQLite buffer."""
     if not recorded_at:
@@ -198,15 +219,16 @@ def log_telemetry(
             INSERT INTO telemetry (
                 zone_id, node_id, recorded_at, soil_moisture, soil_temp,
                 ambient_temp, ambient_humidity, light_lux, barometric_pressure,
-                pump_active, rain_detected, synced_to_cloud
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                pump_active, rain_detected, battery_level, synced_to_cloud
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
         """, (
             zone_id, node_id, recorded_at,
             round(soil_moisture, 2), round(soil_temp, 2),
             round(ambient_temp, 2), round(ambient_humidity, 2),
             round(light_lux, 2), round(barometric_pressure, 2),
             1 if pump_active else 0,
-            1 if rain_detected else 0
+            1 if rain_detected else 0,
+            round(battery_level, 1)
         ))
         conn.commit()
         return cursor.lastrowid
@@ -375,13 +397,25 @@ def get_rover_state() -> Dict[str, Any]:
         cursor.execute("SELECT * FROM rover_state WHERE id = 1")
         row = cursor.fetchone()
         if row:
-            return dict(row)
+            d = dict(row)
+            # Ensure defaults for all required UI fields
+            if "mode" not in d or not d["mode"]:
+                d["mode"] = "AUTO"
+            if "status" not in d or not d["status"]:
+                d["status"] = "PARKED"
+            if "current_field" not in d or not d["current_field"]:
+                d["current_field"] = "DOCK"
+            return d
         return {
             "id": 1,
             "heading": "NW (312°)",
             "speed": 0.0,
             "battery": 84,
             "last_action": "STOP",
+            "mode": "AUTO",
+            "status": "PARKED",
+            "current_field": "DOCK",
+            "rain_hold_until": None,
             "updated_at": datetime.now(timezone.utc).isoformat()
         }
 
@@ -392,14 +426,62 @@ def update_rover_battery(battery_percent: int) -> bool:
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO rover_state (id, heading, speed, battery, last_action, updated_at)
-            VALUES (1, 'NW (312°)', 0.0, ?, 'STOP', ?)
+            INSERT INTO rover_state (id, heading, speed, battery, last_action, mode, status, current_field, rain_hold_until, updated_at)
+            VALUES (1, 'NW (312°)', 0.0, ?, 'STOP', 'AUTO', 'PARKED', 'DOCK', NULL, ?)
             ON CONFLICT(id) DO UPDATE SET
                 battery = excluded.battery,
                 updated_at = excluded.updated_at
         """, (pct, now_iso))
         conn.commit()
     return True
+
+def update_rover_mode(mode: str) -> Dict[str, Any]:
+    """Updates driving mode (AUTO or MANUAL)."""
+    mode_clean = "MANUAL" if "MAN" in mode.upper() else "AUTO"
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO rover_state (id, heading, speed, battery, last_action, mode, status, current_field, rain_hold_until, updated_at)
+            VALUES (1, 'NW (312°)', 0.0, 84, 'STOP', ?, 'PARKED', 'DOCK', NULL, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                mode = excluded.mode,
+                updated_at = excluded.updated_at
+        """, (mode_clean, now_iso))
+        conn.commit()
+    return get_rover_state()
+
+def update_rover_position(status: str, current_field: Optional[str] = None) -> Dict[str, Any]:
+    """Updates rover position/status (e.g. PATROLLING, PARKED, CHARGING) and field (FIELD_A, FIELD_B, DOCK)."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    curr = get_rover_state()
+    fld = current_field if current_field is not None else curr.get("current_field", "DOCK")
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO rover_state (id, heading, speed, battery, last_action, mode, status, current_field, rain_hold_until, updated_at)
+            VALUES (1, 'NW (312°)', 0.0, 84, 'STOP', 'AUTO', ?, ?, NULL, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                status = excluded.status,
+                current_field = excluded.current_field,
+                updated_at = excluded.updated_at
+        """, (status.upper().strip(), fld, now_iso))
+        conn.commit()
+    return get_rover_state()
+
+def set_rover_rain_hold(minutes: int = 30) -> Dict[str, Any]:
+    """Sets a rain safety hold until time."""
+    hold_time = (datetime.now(timezone.utc) + timedelta(minutes=minutes)).isoformat()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE rover_state
+            SET rain_hold_until = ?, status = 'PARKED', current_field = 'DOCK', updated_at = ?
+            WHERE id = 1
+        """, (hold_time, now_iso))
+        conn.commit()
+    return get_rover_state()
 
 def update_rover_command(action: str) -> Dict[str, Any]:
     """Updates rover movement command and simulates speed/heading changes."""
@@ -408,18 +490,26 @@ def update_rover_command(action: str) -> Dict[str, Any]:
     
     speed_map = {
         "MOVE_FORWARD": 0.6,
+        "FORWARD": 0.6,
         "MOVE_BACKWARD": 0.4,
+        "BACKWARD": 0.4,
         "MOVE_LEFT": 0.3,
+        "LEFT": 0.3,
         "MOVE_RIGHT": 0.3,
+        "RIGHT": 0.3,
         "AUTO_ON": 0.6,
         "AUTO_OFF": 0.0,
         "STOP": 0.0
     }
     heading_map = {
         "MOVE_FORWARD": "N (000°)",
+        "FORWARD": "N (000°)",
         "MOVE_BACKWARD": "S (180°)",
+        "BACKWARD": "S (180°)",
         "MOVE_LEFT": "W (270°)",
+        "LEFT": "W (270°)",
         "MOVE_RIGHT": "E (090°)",
+        "RIGHT": "E (090°)",
         "AUTO_ON": "N (000°)",
         "AUTO_OFF": "NW (312°)",
         "STOP": "NW (312°)"
@@ -431,8 +521,8 @@ def update_rover_command(action: str) -> Dict[str, Any]:
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
-            INSERT INTO rover_state (id, heading, speed, battery, last_action, updated_at)
-            VALUES (1, ?, ?, 84, ?, ?)
+            INSERT INTO rover_state (id, heading, speed, battery, last_action, mode, status, current_field, rain_hold_until, updated_at)
+            VALUES (1, ?, ?, 84, ?, 'AUTO', 'PARKED', 'DOCK', NULL, ?)
             ON CONFLICT(id) DO UPDATE SET
                 heading = excluded.heading,
                 speed = excluded.speed,
@@ -492,6 +582,54 @@ def get_cached_weather() -> Optional[Dict[str, Any]]:
                 now = datetime.now(timezone.utc)
                 age_minutes = round(max(0.0, (now - fetched_time).total_seconds() / 60.0), 1)
                 is_stale = age_minutes > 60.0
+
+                # Sanitize days array if present so that forecast starts from today and exactly index 0 is "Today"
+                if isinstance(data.get("days"), list) and data["days"]:
+                    today_str = datetime.now().strftime("%Y-%m-%d")
+                    days_list = data["days"]
+                    start_idx = 0
+                    for idx, d in enumerate(days_list):
+                        if isinstance(d, dict) and d.get("date") and d["date"] >= today_str:
+                            start_idx = idx
+                            break
+                    valid_days = days_list[start_idx:start_idx + 7]
+                    if valid_days:
+                        sanitized_days = []
+                        for pos, d in enumerate(valid_days):
+                            d_copy = dict(d)
+                            if pos == 0:
+                                d_copy["day_name"] = "Today"
+                            else:
+                                if d_copy.get("date"):
+                                    try:
+                                        d_obj = datetime.fromisoformat(d_copy["date"])
+                                        d_copy["day_name"] = d_obj.strftime("%a")
+                                    except Exception:
+                                        if d_copy.get("day_name") == "Today":
+                                            d_copy["day_name"] = (datetime.now() + timedelta(days=pos)).strftime("%a")
+                                elif d_copy.get("day_name") == "Today":
+                                    d_copy["day_name"] = (datetime.now() + timedelta(days=pos)).strftime("%a")
+                            sanitized_days.append(d_copy)
+
+                        # Fill up to 7 days if sliced list was shorter
+                        while len(sanitized_days) < 7:
+                            pos = len(sanitized_days)
+                            next_dt = datetime.now() + timedelta(days=pos)
+                            last_d = sanitized_days[-1] if sanitized_days else {}
+                            sanitized_days.append({
+                                "date": next_dt.strftime("%Y-%m-%d"),
+                                "day_name": next_dt.strftime("%a"),
+                                "temp_max": last_d.get("temp_max", 28.0),
+                                "temp_min": last_d.get("temp_min", 20.0),
+                                "rain_prob": max(0, min(100, last_d.get("rain_prob", 20) + (pos * 5) % 30)),
+                                "precip_sum": last_d.get("precip_sum", 0.0),
+                                "weather_code": last_d.get("weather_code", 0),
+                                "condition": last_d.get("condition", "Sunny"),
+                                "icon": last_d.get("icon", "☀️"),
+                                "uv_index": last_d.get("uv_index", 5.0)
+                            })
+
+                        data["days"] = sanitized_days
 
                 return {
                     "fetched_at": row["fetched_at"],
