@@ -314,7 +314,7 @@ void handleCommand() {
   if (cmd == "forward" || cmd == "start" || cmd == "move_forward") {
     autoMode = false;
     moveForward();
-  } else if (cmd == "backward" || cmd == "move_backward") {
+  } else if (cmd == "backward" || cmd == "move_backward" || cmd == "reverse" || cmd == "move_reverse" || cmd == "back") {
     autoMode = false;
     moveBackward();
   } else if (cmd == "left" || cmd == "move_left") {

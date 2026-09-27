@@ -132,17 +132,13 @@ class FieldSensorSimulator:
         except Exception:
             pass
 
-        is_raining = sensor_rain or weather_rain
-
-        # Auto-protection interlock: if rain is detected, force shut down pumps & park rover with 30-min drying timer
-        if is_raining:
-            if bool(actuators.get("PUMP_ZONE_A", 0)):
-                database.set_actuator_state("PUMP_ZONE_A", 0)
-            if bool(actuators.get("PUMP_ZONE_B", 0)):
-                database.set_actuator_state("PUMP_ZONE_B", 0)
-            actuators["PUMP_ZONE_A"] = 0
-            actuators["PUMP_ZONE_B"] = 0
-            database.set_rover_rain_hold(30)
+        # Run Flowchart Pump Irrigation Evaluation Logic
+        try:
+            import pump_logic
+            pump_logic.run_automated_pump_check()
+            actuators = database.get_all_actuators()
+        except Exception as e:
+            logger.warning(f"Pump logic check error: {e}")
 
         pump_a = bool(actuators.get("PUMP_ZONE_A", 0))
         pump_b = bool(actuators.get("PUMP_ZONE_B", 0))

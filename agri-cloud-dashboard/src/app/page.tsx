@@ -81,6 +81,19 @@ import {
 // TYPES & DATA STRUCTURES
 // ---------------------------------------------------------------------------
 
+interface HourlyForecastItem {
+  time: string;
+  iso: string;
+  temp: number;
+  humidity: number;
+  rainProb: number;
+  windSpeed: number;
+  weatherCode: number;
+  condition: string;
+  icon: string;
+  isNow: boolean;
+}
+
 interface DailyForecastDay {
   date: string;
   dayLabel: string;
@@ -102,6 +115,7 @@ interface WeatherData {
   floodRisk: boolean;
   alertMessage?: string;
   days: DailyForecastDay[];
+  hourly?: HourlyForecastItem[];
 }
 
 interface FarmAlert {
@@ -367,6 +381,7 @@ export default function DashboardPage() {
   });
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [showWeatherSearch, setShowWeatherSearch] = useState(false);
+  const [showHourlyForecast, setShowHourlyForecast] = useState(false);
   const [mobileWeatherExpanded, setMobileWeatherExpanded] = useState(false);
   const [searchCityQuery, setSearchCityQuery] = useState("");
   const [isSearchingCity, setIsSearchingCity] = useState(false);
@@ -463,14 +478,35 @@ export default function DashboardPage() {
   // Weather Fetcher (Open-Meteo API)
   const fetchWeather = async (lat: number, lon: number): Promise<WeatherData> => {
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const getCondition = (code: number, prob: number) => {
+      if (code === 0) return "Sunny / Clear";
+      if (code === 1 || code === 2) return "Partly Cloudy";
+      if (code === 3) return "Overcast";
+      if (code >= 45 && code <= 48) return "Fog / Mist";
+      if (code >= 51 && code <= 55) return "Light Drizzle";
+      if (code >= 61 && code <= 65) return "Moderate Rain";
+      if (code >= 80 && code <= 82) return "Rain Showers";
+      if (code >= 95) return "Thunderstorm";
+      return prob > 40 ? "Rain Possible" : "Clear Sky";
+    };
+
+    const getIcon = (code: number, prob: number, isNight: boolean = false) => {
+      if (code === 0) return isNight ? "🌙" : "☀️";
+      if (code <= 3) return isNight ? "☁️" : "⛅";
+      if (code >= 45 && code <= 48) return "🌫️";
+      if (prob > 40 || code >= 51) return "🌧️";
+      return isNight ? "🌙" : "🌤️";
+    };
+
     try {
       const res = await fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weather_code&forecast_days=14&timezone=auto`
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,weather_code&forecast_days=14&timezone=auto`
       );
       if (!res.ok) throw new Error("Weather fetch failed");
       const data = await res.json();
       const current = data.current || {};
       const daily = data.daily || {};
+      const hourly = data.hourly || {};
       const precipitation = current.precipitation || 0;
       const dailyRain = daily.precipitation_sum?.[0] || 0;
       const floodRisk = dailyRain > 45 || precipitation > 15;
@@ -482,17 +518,46 @@ export default function DashboardPage() {
       const rainSums = daily.precipitation_sum || [];
       const weatherCodes = daily.weather_code || [];
 
-      const getCondition = (code: number, prob: number) => {
-        if (code === 0) return "Sunny / Clear";
-        if (code === 1 || code === 2) return "Partly Cloudy";
-        if (code === 3) return "Overcast";
-        if (code >= 45 && code <= 48) return "Fog / Mist";
-        if (code >= 51 && code <= 55) return "Light Drizzle";
-        if (code >= 61 && code <= 65) return "Moderate Rain";
-        if (code >= 80 && code <= 82) return "Rain Showers";
-        if (code >= 95) return "Thunderstorm";
-        return prob > 40 ? "Rain Possible" : "Clear Sky";
-      };
+      // 24-hour hourly sequence
+      const hTimes = hourly.time || [];
+      const hTemps = hourly.temperature_2m || [];
+      const hHums = hourly.relative_humidity_2m || [];
+      const hRains = hourly.precipitation_probability || [];
+      const hCodes = hourly.weather_code || [];
+      const hWinds = hourly.wind_speed_10m || [];
+
+      const nowLocal = new Date();
+      const nowIsoHour = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}T${String(nowLocal.getHours()).padStart(2, "0")}:00`;
+      
+      let hStartIdx = hTimes.findIndex((t: string) => t >= nowIsoHour);
+      if (hStartIdx < 0) hStartIdx = 0;
+
+      const hourlyList: HourlyForecastItem[] = [];
+      for (let step = 0; step < 24; step++) {
+        const idx = hStartIdx + step;
+        if (idx < hTimes.length) {
+          const tIso = hTimes[idx];
+          const parts = tIso.split("T");
+          const hourNum = parts[1] ? parseInt(parts[1].split(":")[0], 10) : 12;
+          const isNight = hourNum < 6 || hourNum >= 19;
+          const timeLabel = step === 0 ? "Now" : `${hourNum % 12 === 0 ? 12 : hourNum % 12} ${hourNum >= 12 ? "PM" : "AM"}`;
+          const code = hCodes[idx] || 0;
+          const prob = hRains[idx] ?? 0;
+          
+          hourlyList.push({
+            time: timeLabel,
+            iso: tIso,
+            temp: Math.round(hTemps[idx] ?? 28),
+            humidity: Math.round(hHums[idx] ?? 60),
+            rainProb: prob,
+            windSpeed: Math.round(hWinds[idx] ?? 8),
+            weatherCode: code,
+            condition: getCondition(code, prob),
+            icon: getIcon(code, prob, isNight),
+            isNow: step === 0,
+          });
+        }
+      }
 
       const now = new Date();
       const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -531,6 +596,7 @@ export default function DashboardPage() {
           ? "CRITICAL ALERT: Heavy precipitation detected. Root waterlogging risk active."
           : undefined,
         days,
+        hourly: hourlyList,
       };
     } catch {
       const now = new Date();
@@ -562,6 +628,26 @@ export default function DashboardPage() {
         });
       }
 
+      const fallbackHourly: HourlyForecastItem[] = [];
+      for (let i = 0; i < 24; i++) {
+        const d = new Date(now.getTime() + i * 3600000);
+        const h = d.getHours();
+        const isNight = h < 6 || h >= 19;
+        const timeLabel = i === 0 ? "Now" : `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? "PM" : "AM"}`;
+        fallbackHourly.push({
+          time: timeLabel,
+          iso: d.toISOString(),
+          temp: isNight ? 22 + (i % 3) : 28 + (i % 4),
+          humidity: 60 + (i % 15),
+          rainProb: (i * 7) % 35,
+          windSpeed: 6 + (i % 4),
+          weatherCode: 0,
+          condition: isNight ? "Clear Night" : "Sunny / Clear",
+          icon: isNight ? "🌙" : "☀️",
+          isNow: i === 0,
+        });
+      }
+
       return {
         temperature: 28,
         humidity: 64,
@@ -570,6 +656,7 @@ export default function DashboardPage() {
         time: "10:30 PM",
         floodRisk: false,
         days: fallbackDays,
+        hourly: fallbackHourly,
       };
     }
   };
@@ -712,6 +799,10 @@ export default function DashboardPage() {
   const [pumpZoneB, setPumpZoneB] = useState(false);
   const [isRaining, setIsRaining] = useState(false);
   const [edgeStationOnline, setEdgeStationOnline] = useState(false);
+  const [pumpLogicInfo, setPumpLogicInfo] = useState<{
+    ZONE_A?: { reason?: string; mode?: string; time_remaining_minutes?: number; action?: string; rain_chance?: number };
+    ZONE_B?: { reason?: string; mode?: string; time_remaining_minutes?: number; action?: string; rain_chance?: number };
+  }>({});
 
   // Field Telemetry Live State
   const [fieldTelemetry, setFieldTelemetry] = useState<{
@@ -743,6 +834,11 @@ export default function DashboardPage() {
           if (edgeData.actuators) {
             setPumpZoneA(Boolean(edgeData.actuators.PUMP_ZONE_A));
             setPumpZoneB(Boolean(edgeData.actuators.PUMP_ZONE_B));
+          }
+
+          // Sync Flowchart Pump Logic Decisions
+          if (edgeData.pump_logic) {
+            setPumpLogicInfo(edgeData.pump_logic);
           }
 
           // Sync Live Sensors & Rain Interlock
@@ -848,6 +944,7 @@ export default function DashboardPage() {
         battery: fieldTelemetry.fieldA.battery,
         pumpActive: pumpZoneA,
         pumpName: "Field A Drip Pump",
+        logic: pumpLogicInfo.ZONE_A,
       };
     } else {
       return {
@@ -859,17 +956,13 @@ export default function DashboardPage() {
         battery: fieldTelemetry.fieldB.battery,
         pumpActive: pumpZoneB,
         pumpName: "Field B Greenhouse Pump",
+        logic: pumpLogicInfo.ZONE_B,
       };
     }
-  }, [activeField, pumpZoneA, pumpZoneB, fieldTelemetry]);
+  }, [activeField, pumpZoneA, pumpZoneB, fieldTelemetry, pumpLogicInfo]);
 
   // Synchronized Pump Relay Toggle (Cloud <-> Edge Gateway Station)
   const togglePump = async () => {
-    if (isRaining) {
-      alert("⚠️ Rain Safety Interlock Active: Pumps cannot be started while rain is detected!");
-      return;
-    }
-
     const targetKey = activeField === "FIELD_A" ? "PUMP_ZONE_A" : "PUMP_ZONE_B";
     const isCurrentlyOn = activeField === "FIELD_A" ? pumpZoneA : pumpZoneB;
     const nextState = !isCurrentlyOn;
@@ -943,6 +1036,22 @@ export default function DashboardPage() {
     setTimeout(() => setActionNotice(null), 2500);
   };
 
+  const handleRoverSpeedChange = async (spd: number) => {
+    setRoverSpeed(spd);
+    try {
+      fetch("/api/commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "ROVER", action: "SPEED", speed: spd }),
+      }).catch(() => {});
+
+      fetch(`http://127.0.0.1:8000/api/edge/rover/speed/${spd}`, {
+        method: "POST",
+        signal: AbortSignal.timeout(1000),
+      }).catch(() => {});
+    } catch {}
+  };
+
   const handleRoverDpad = async (dir: string) => {
     if (roverMode === "AUTO") {
       setActionNotice("⚠️ Switch Rover to MANUAL mode to use D-Pad Joystick controls!");
@@ -957,13 +1066,13 @@ export default function DashboardPage() {
       fetch("/api/commands", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ target: "ROVER", action: dir }),
+        body: JSON.stringify({ target: "ROVER", action: dir, speed: roverSpeed }),
       }).catch(() => {});
 
       fetch("http://127.0.0.1:8000/api/edge/rover/command", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: dir }),
+        body: JSON.stringify({ action: dir, speed: roverSpeed }),
         signal: AbortSignal.timeout(1000),
       }).catch(() => {});
     } catch {}
@@ -1292,7 +1401,7 @@ export default function DashboardPage() {
           {/* Dark / Light Theme Toggle Button */}
           <button
             onClick={toggleTheme}
-            className="px-3.5 py-2 rounded-full bg-[#F8FAFC] hover:bg-[#EEF2F6] border border-[#E8EEF5] flex items-center gap-2 cursor-pointer transition shadow-xs select-none"
+            className="px-3.5 py-2 rounded-full bg-[#F8FAFC] dark:bg-[#1A2234] hover:bg-[#EEF2F6] dark:hover:bg-[#222C42] border border-[#E8EEF5] dark:border-[#212C42] flex items-center gap-2 cursor-pointer transition shadow-xs select-none"
             title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
           >
             {isDarkMode ? (
@@ -1314,7 +1423,7 @@ export default function DashboardPage() {
               onClick={() => setShowProfileModal(!showProfileModal)}
               onMouseEnter={() => setProfileHover(true)}
               onMouseLeave={() => setProfileHover(false)}
-              className="flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-full bg-[#1E2432] text-white hover:bg-[#2E3038] cursor-pointer transition shadow-sm select-none"
+              className="flex items-center gap-2 pl-3 pr-1.5 py-1.5 rounded-full bg-[#0F172A] dark:bg-[#1E293B] text-white hover:bg-[#1E293B] dark:hover:bg-[#334155] border border-slate-700/40 cursor-pointer transition shadow-sm select-none"
             >
               <div className="text-right hidden sm:block px-1">
                 <div className="text-xs font-black tracking-tight">{session.user?.name || "Farmer Master"}</div>
@@ -1356,7 +1465,7 @@ export default function DashboardPage() {
 
             {/* Hover Tooltip */}
             {profileHover && !showProfileModal && (
-              <div className="absolute top-full mt-2 right-0 z-40 bg-[#1E2432] text-white text-xs px-3 py-1.5 rounded-xl whitespace-nowrap shadow-xl border border-white/10 pointer-events-none">
+              <div className="absolute top-full mt-2 right-0 z-40 bg-[#0F172A] dark:bg-[#1E293B] text-white text-xs px-3 py-1.5 rounded-xl whitespace-nowrap shadow-xl border border-white/10 pointer-events-none">
                 <div className="font-bold">{session.user?.name || "Farmer Master"}</div>
                 <div className="text-[10.5px] text-[#9CA3AF] font-mono">{session.user?.email || "farmer@agrismart.io"}</div>
               </div>
@@ -1364,10 +1473,10 @@ export default function DashboardPage() {
 
             {/* Click: Interactive Profile Modal */}
             {showProfileModal && (
-              <div className="absolute top-full mt-2 right-0 z-50 w-80 bg-white rounded-3xl border border-[#E8EEF5] popover-shadow p-5 text-[#1E2432] animate-fade-in-scale">
-                <div className="flex justify-between items-start pb-4 border-b border-[#E8EEF5]">
+              <div className="absolute top-full mt-2 right-0 z-50 w-80 bg-white dark:bg-[#131926] rounded-3xl border border-[#E8EEF5] dark:border-[#212C42] popover-shadow p-5 text-[#0F172A] dark:text-[#F8FAFC] animate-fade-in-scale">
+                <div className="flex justify-between items-start pb-4 border-b border-[#E8EEF5] dark:border-[#212C42]">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full overflow-hidden bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center font-black text-base border-2 border-[#2563EB] shrink-0">
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-[#EFF6FF] dark:bg-[#1E293B] text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center font-black text-base border-2 border-[#2563EB] shrink-0">
                       {customAvatar ? (
                         <img
                           src={customAvatar}
@@ -1399,31 +1508,31 @@ export default function DashboardPage() {
                       )}
                     </div>
                     <div>
-                      <h4 className="text-sm font-black text-[#1E2432]">{session.user?.name || "Aarav Sharma"}</h4>
-                      <p className="text-xs text-[#8A94A6] font-mono">{session.user?.email || "aarav@agrismart.io"}</p>
+                      <h4 className="text-sm font-black text-[#0F172A] dark:text-[#F8FAFC]">{session.user?.name || "Aarav Sharma"}</h4>
+                      <p className="text-xs text-[#8A94A6] dark:text-[#94A3B8] font-mono">{session.user?.email || "aarav@agrismart.io"}</p>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowProfileModal(false)}
-                    className="w-7 h-7 rounded-full bg-[#F4F7FC] hover:bg-[#E2E8F0] flex items-center justify-center text-xs font-bold"
+                    className="w-7 h-7 rounded-full bg-[#F4F7FC] dark:bg-[#1E293B] hover:bg-[#E2E8F0] dark:hover:bg-[#334155] flex items-center justify-center text-xs font-bold text-[#64748B] dark:text-[#CBD5E1]"
                   >
                     ✕
                   </button>
                 </div>
 
                 <div className="py-3.5 space-y-2.5 text-xs">
-                  <div className="flex justify-between items-center py-1 border-b border-[#F4F7FC]">
-                    <span className="text-[#8A94A6] font-bold">Connected Nodes:</span>
+                  <div className="flex justify-between items-center py-1 border-b border-[#F4F7FC] dark:border-[#1E293B]">
+                    <span className="text-[#8A94A6] dark:text-[#94A3B8] font-bold">Connected Nodes:</span>
                     <span className="font-bold text-[#10B981]">2 Subnodes + 1 Rover</span>
                   </div>
-                  <div className="flex justify-between items-center py-1 border-b border-[#F4F7FC]">
-                    <span className="text-[#8A94A6] font-bold">Account Auth:</span>
-                    <span className="font-bold text-[#1E2432]">Google OAuth 2.0</span>
+                  <div className="flex justify-between items-center py-1 border-b border-[#F4F7FC] dark:border-[#1E293B]">
+                    <span className="text-[#8A94A6] dark:text-[#94A3B8] font-bold">Account Auth:</span>
+                    <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">Google OAuth 2.0</span>
                   </div>
 
                   <div className="pt-2">
-                    <label className="text-[11px] font-black text-[#8A94A6] block mb-1.5">Change Avatar Photo:</label>
-                    <label className="w-full py-2 px-3 rounded-xl border border-dashed border-[#CBD5E1] hover:border-[#1E2432] bg-[#F8FAFC] flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-[#4B5563]">
+                    <label className="text-[11px] font-black text-[#8A94A6] dark:text-[#94A3B8] block mb-1.5">Change Avatar Photo:</label>
+                    <label className="w-full py-2 px-3 rounded-xl border border-dashed border-[#CBD5E1] dark:border-[#334155] hover:border-[#0F172A] dark:hover:border-white bg-[#F8FAFC] dark:bg-[#1A2234] flex items-center justify-center gap-2 cursor-pointer text-xs font-bold text-[#4B5563] dark:text-[#CBD5E1]">
                       <Upload className="w-3.5 h-3.5" />
                       <span>Upload New Image</span>
                       <input
@@ -1443,7 +1552,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="pt-3 border-t border-[#E8EEF5]">
+                <div className="pt-3 border-t border-[#E8EEF5] dark:border-[#212C42]">
                   <button
                     onClick={async () => {
                       try {
@@ -1454,7 +1563,7 @@ export default function DashboardPage() {
                       setActionNotice("Logged out of session.");
                       setTimeout(() => setActionNotice(null), 2500);
                     }}
-                    className="w-full py-2.5 rounded-xl bg-[#FEE2E2] hover:bg-[#FCA5A5] text-[#B91C1C] font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
+                    className="w-full py-2.5 rounded-xl bg-[#FEE2E2] dark:bg-[#7F1D1D]/30 hover:bg-[#FCA5A5] dark:hover:bg-[#7F1D1D]/50 text-[#B91C1C] dark:text-[#FCA5A5] font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-xs"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Logout Account</span>
@@ -1474,24 +1583,24 @@ export default function DashboardPage() {
         {/* Header Row */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#E0F2FE] text-[#0284C7] flex items-center justify-center text-lg shadow-sm">
+            <div className="w-10 h-10 rounded-2xl bg-[#E0F2FE] dark:bg-[#0284C7]/20 text-[#0284C7] dark:text-[#38BDF8] flex items-center justify-center text-lg shadow-sm">
               🌤️
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tight text-[#1E2432]">Weather Widget</h2>
-              <p className="text-xs text-[#8A94A6]">
+              <h2 className="text-lg font-black tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">Weather Widget</h2>
+              <p className="text-xs text-[#8A94A6] dark:text-[#94A3B8]">
                 7-day microclimate forecast • Live temperature & humidity via Open-Meteo API
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="px-3 py-1.5 rounded-full bg-[#FEF3C7] text-[#92400E] font-black text-xs flex items-center gap-1.5 border border-[#FDE68A]">
+            <span className="px-3 py-1.5 rounded-full bg-[#FEF3C7] dark:bg-[#D97706]/15 text-[#92400E] dark:text-[#FDE68A] font-black text-xs flex items-center gap-1.5 border border-[#FDE68A] dark:border-[#D97706]/30">
               <Sun className="w-3.5 h-3.5 text-[#F59E0B]" />
               <span>Live Temp: {weather?.temperature ?? 28}°C</span>
             </span>
 
-            <span className="px-3 py-1.5 rounded-full bg-[#E0F2FE] text-[#0369A1] font-black text-xs flex items-center gap-1.5 border border-[#BAE6FD]">
+            <span className="px-3 py-1.5 rounded-full bg-[#E0F2FE] dark:bg-[#0284C7]/15 text-[#0369A1] dark:text-[#38BDF8] font-black text-xs flex items-center gap-1.5 border border-[#BAE6FD] dark:border-[#0284C7]/30">
               <Droplets className="w-3.5 h-3.5 text-[#0284C7]" />
               <span>Live Humidity: {weather?.humidity ?? 64}%</span>
             </span>
@@ -1504,7 +1613,7 @@ export default function DashboardPage() {
                 setActionNotice("🔄 Weather data refreshed from Open-Meteo Live API!");
                 setTimeout(() => setActionNotice(null), 2500);
               }}
-              className="px-3.5 py-1.5 rounded-full bg-[#F4F7FC] hover:bg-[#E8EDF4] text-[#1E2432] font-bold text-xs border border-[#E8EEF5] flex items-center gap-1.5 cursor-pointer transition shadow-xs"
+              className="px-3.5 py-1.5 rounded-full bg-[#F4F7FC] dark:bg-[#1A2234] hover:bg-[#E8EDF4] dark:hover:bg-[#222C42] text-[#0F172A] dark:text-[#F8FAFC] font-bold text-xs border border-[#E8EEF5] dark:border-[#212C42] flex items-center gap-1.5 cursor-pointer transition shadow-xs"
             >
               <RefreshCw className={`w-3.5 h-3.5 text-[#8A94A6] ${isSyncing ? "animate-spin text-[#10B981]" : ""}`} />
               <span>Sync Weather</span>
@@ -1513,12 +1622,12 @@ export default function DashboardPage() {
         </div>
 
         {/* Location Bar with Search Toggle Button */}
-        <div className="bg-[#F8FAFC] rounded-2xl p-3.5 border border-[#E8EEF5] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-[#F8FAFC] dark:bg-[#131926] rounded-2xl p-3.5 border border-[#E8EEF5] dark:border-[#212C42] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             <span className="text-lg">📍</span>
             <div>
-              <strong className="text-xs sm:text-sm font-black text-[#1E2432]">{weatherLocation.name}</strong>
-              <span className="text-xs text-[#8A94A6] ml-2 font-mono">
+              <strong className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-[#F8FAFC]">{weatherLocation.name}</strong>
+              <span className="text-xs text-[#8A94A6] dark:text-[#94A3B8] ml-2 font-mono">
                 (Lat: {weatherLocation.lat.toFixed(4)}° N, Lon: {weatherLocation.lon.toFixed(4)}° E)
               </span>
             </div>
@@ -1526,24 +1635,24 @@ export default function DashboardPage() {
 
           <button
             onClick={() => setShowWeatherSearch(!showWeatherSearch)}
-            className="px-4 py-1.5 rounded-full bg-[#1E2432] hover:bg-[#2E3038] text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition shadow-sm self-start sm:self-auto"
+            className="px-4 py-1.5 rounded-full bg-[#0F172A] dark:bg-[#0284C7] hover:bg-[#1E293B] dark:hover:bg-[#0369A1] text-white text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition shadow-sm self-start sm:self-auto"
           >
-            <Search className="w-3.5 h-3.5 text-[#3B82F6]" />
+            <Search className="w-3.5 h-3.5 text-[#3B82F6] dark:text-white" />
             <span>{showWeatherSearch ? "✕ Close Search" : "🔍 Search City / Lat-Lon"}</span>
           </button>
         </div>
 
         {/* Expandable City & GPS Coordinate Search Panel */}
         {showWeatherSearch && (
-          <div className="bg-[#FFFFFF] rounded-2xl p-4 border border-[#E8EEF5] shadow-inner space-y-4 animate-fade-in-scale">
+          <div className="bg-[#FFFFFF] dark:bg-[#131926] rounded-2xl p-4 border border-[#E8EEF5] dark:border-[#212C42] shadow-inner space-y-4 animate-fade-in-scale">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               
               {/* 1. Search City Name */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-black text-[#1E2432]">Search Any Indian / Global City or District:</label>
+                  <label className="text-xs font-black text-[#0F172A] dark:text-[#F8FAFC]">Search Any Indian / Global City or District:</label>
                   {isSearchingCity && (
-                    <span className="text-[11px] font-bold text-[#0284C7] flex items-center gap-1">
+                    <span className="text-[11px] font-bold text-[#0284C7] dark:text-[#38BDF8] flex items-center gap-1">
                       <RefreshCw className="w-3 h-3 animate-spin" />
                       Searching live...
                     </span>
@@ -1557,14 +1666,14 @@ export default function DashboardPage() {
                       placeholder="Type any city (e.g. Shahjahanpur, Lucknow, Bareilly, Nashik)..."
                       value={searchCityQuery}
                       onChange={(e) => setSearchCityQuery(e.target.value)}
-                      className="w-full pl-9 pr-7 py-2 rounded-xl bg-[#F8FAFC] border border-[#E8EEF5] text-xs font-bold text-[#1E2432] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                      className="w-full pl-9 pr-7 py-2 rounded-xl bg-[#F8FAFC] dark:bg-[#1A2234] border border-[#E8EEF5] dark:border-[#212C42] text-xs font-bold text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
                     />
                     <Search className="w-4 h-4 text-[#8A94A6] absolute left-3 top-1/2 -translate-y-1/2" />
                     {searchCityQuery && (
                       <button
                         type="button"
                         onClick={() => setSearchCityQuery("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#9CA3AF] hover:text-[#1E2432]"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-[#9CA3AF] hover:text-[#0F172A] dark:hover:text-white"
                       >
                         ✕
                       </button>
@@ -1572,7 +1681,7 @@ export default function DashboardPage() {
                   </div>
                   <button
                     type="submit"
-                    className="px-3.5 py-2 rounded-xl bg-[#1E2432] hover:bg-[#2E3038] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition shadow-sm"
+                    className="px-3.5 py-2 rounded-xl bg-[#0F172A] dark:bg-[#0284C7] hover:bg-[#1E293B] dark:hover:bg-[#0369A1] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition shadow-sm"
                   >
                     <Search className="w-3.5 h-3.5" />
                     <span>Search</span>
@@ -1588,17 +1697,17 @@ export default function DashboardPage() {
                         <button
                           key={c.id || i}
                           onClick={() => handleSelectLocation(displayName, c.latitude, c.longitude)}
-                          className="w-full p-2.5 rounded-xl bg-[#F8FAFC] hover:bg-[#EEF2F6] border border-[#E8EEF5] text-left flex items-center justify-between text-xs transition cursor-pointer"
+                          className="w-full p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-[#1A2234] hover:bg-[#EEF2F6] dark:hover:bg-[#222C42] border border-[#E8EEF5] dark:border-[#212C42] text-left flex items-center justify-between text-xs transition cursor-pointer"
                         >
-                          <span className="font-bold text-[#1E2432]">{displayName}</span>
-                          <span className="text-[#8A94A6] text-[11px] font-mono">
+                          <span className="font-bold text-[#0F172A] dark:text-[#F8FAFC]">{displayName}</span>
+                          <span className="text-[#8A94A6] dark:text-[#94A3B8] text-[11px] font-mono">
                             {c.latitude.toFixed(2)}°N, {c.longitude.toFixed(2)}°E
                           </span>
                         </button>
                       );
                     })
                   ) : (
-                    <div className="text-xs text-[#8A94A6] p-2 text-center">
+                    <div className="text-xs text-[#8A94A6] dark:text-[#94A3B8] p-2 text-center">
                       No matching cities found. Try typing district or state name.
                     </div>
                   )}
@@ -1607,28 +1716,28 @@ export default function DashboardPage() {
 
               {/* 2. Manual Decimal GPS Coordinates */}
               <div className="space-y-2">
-                <label className="text-xs font-black text-[#1E2432]">Direct GPS Coordinates (Decimal Latitude & Longitude):</label>
+                <label className="text-xs font-black text-[#0F172A] dark:text-[#F8FAFC]">Direct GPS Coordinates (Decimal Latitude & Longitude):</label>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <span className="text-[10.5px] font-bold text-[#8A94A6] block mb-1">Latitude (°N)</span>
+                    <span className="text-[10.5px] font-bold text-[#8A94A6] dark:text-[#94A3B8] block mb-1">Latitude (°N)</span>
                     <input
                       type="number"
                       step="0.0001"
                       placeholder="e.g. 27.8805"
                       value={manualLatInput}
                       onChange={(e) => setManualLatInput(e.target.value)}
-                      className="w-full p-2 rounded-xl bg-[#F8FAFC] border border-[#E8EEF5] text-xs font-bold text-[#1E2432] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                      className="w-full p-2 rounded-xl bg-[#F8FAFC] dark:bg-[#1A2234] border border-[#E8EEF5] dark:border-[#212C42] text-xs font-bold text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
                     />
                   </div>
                   <div>
-                    <span className="text-[10.5px] font-bold text-[#8A94A6] block mb-1">Longitude (°E)</span>
+                    <span className="text-[10.5px] font-bold text-[#8A94A6] dark:text-[#94A3B8] block mb-1">Longitude (°E)</span>
                     <input
                       type="number"
                       step="0.0001"
                       placeholder="e.g. 79.9122"
                       value={manualLonInput}
                       onChange={(e) => setManualLonInput(e.target.value)}
-                      className="w-full p-2 rounded-xl bg-[#F8FAFC] border border-[#E8EEF5] text-xs font-bold text-[#1E2432] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
+                      className="w-full p-2 rounded-xl bg-[#F8FAFC] dark:bg-[#1A2234] border border-[#E8EEF5] dark:border-[#212C42] text-xs font-bold text-[#0F172A] dark:text-[#F8FAFC] focus:outline-none focus:ring-2 focus:ring-[#3B82F6]"
                     />
                   </div>
                 </div>
@@ -1649,52 +1758,119 @@ export default function DashboardPage() {
           {weather?.days.map((day) => (
             <div
               key={day.date}
+              onClick={() => {
+                if (day.isToday) setShowHourlyForecast(!showHourlyForecast);
+              }}
+              title={day.isToday ? "Click to toggle 24-Hour hourly forecast" : undefined}
               className={`p-3.5 rounded-2xl border text-center space-y-1.5 transition ${
                 day.isToday
-                  ? "bg-[#EFF6FF] border-[#BFDBFE] shadow-xs"
-                  : "bg-[#F8FAFC] border-[#E8EEF5]"
+                  ? "bg-[#EFF6FF] dark:bg-[#1E293B] border-[#BFDBFE] dark:border-[#3B82F6] shadow-xs cursor-pointer hover:border-[#3B82F6] hover:shadow-md hover:-translate-y-0.5"
+                  : "bg-[#F8FAFC] dark:bg-[#131926] border-[#E8EEF5] dark:border-[#212C42]"
               }`}
             >
-              <div className="text-xs font-bold text-[#1E2432]">{day.dayLabel}</div>
+              <div className="flex items-center justify-center gap-1">
+                <span className="text-xs font-bold text-[#0F172A] dark:text-[#F8FAFC]">{day.dayLabel}</span>
+                {day.isToday && (
+                  <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-full bg-[#2563EB]/15 text-[#2563EB] dark:text-[#60A5FA]">
+                    {showHourlyForecast ? "24h ▲" : "24h ▼"}
+                  </span>
+                )}
+              </div>
               <div className="text-xl">
                 {day.weatherCode === 0 ? "☀️" : day.weatherCode <= 3 ? "⛅" : day.rainProb > 40 ? "🌧️" : "🌤️"}
               </div>
-              <div className="text-xs font-black text-[#1E2432]">
-                {day.tempMax}° / <span className="text-[#8A94A6] font-medium">{day.tempMin}°</span>
+              <div className="text-xs font-black text-[#0F172A] dark:text-[#F8FAFC]">
+                {day.tempMax}° / <span className="text-[#8A94A6] dark:text-[#94A3B8] font-medium">{day.tempMin}°</span>
               </div>
-              <div className="text-[10.5px] font-bold text-[#0284C7]">
+              <div className="text-[10.5px] font-bold text-[#0284C7] dark:text-[#38BDF8]">
                 💧 {day.rainProb}%
               </div>
             </div>
           ))}
         </div>
 
-        {/* Mobile View: Collapsible Forecast (Same as Edge Offline Dashboard) */}
+        {/* Google Weather Style 24-Hour Hourly Forecast Expandable Drawer (Desktop & Mobile) */}
+        {showHourlyForecast && weather?.hourly && (
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#F8FAFC] dark:bg-[#151D2A] border border-[#BFDBFE] dark:border-[#2563EB]/30 animate-fade-in-scale space-y-3 shadow-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0] dark:border-[#212C42]">
+              <div className="flex items-center gap-2">
+                <span className="text-base">⏱️</span>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-white">
+                    Next 24-Hour Weather Prediction
+                  </h4>
+                  <p className="text-[11px] text-[#8A94A6] dark:text-[#94A3B8] font-medium">
+                    Google Weather style hourly temperature, conditions, rain % and wind
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowHourlyForecast(false)}
+                className="px-2.5 py-1 text-xs font-bold rounded-lg bg-white dark:bg-[#1E2432] border border-[#E2E8F0] dark:border-[#334155] text-[#64748B] hover:text-[#0F172A] dark:hover:text-white transition cursor-pointer shadow-2xs"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Horizontal Scrollable Hourly Pill Cards */}
+            <div className="flex gap-2.5 overflow-x-auto p-1.5 pb-3 scrollbar-thin scrollbar-thumb-slate-300">
+              {weather.hourly.map((item, idx) => (
+                <div
+                  key={idx}
+                  className={`min-w-[82px] shrink-0 p-3 rounded-xl border text-center space-y-1.5 transition flex flex-col items-center justify-between ${
+                    item.isNow
+                      ? "bg-[#EFF6FF] dark:bg-[#1E293B] border-[#93C5FD] dark:border-[#3B82F6] shadow-xs"
+                      : "bg-white dark:bg-[#1A2234] border-[#E8EEF5] dark:border-[#212C42] hover:border-[#93C5FD] hover:shadow-xs"
+                  }`}
+                >
+                  <span className={`text-[11px] font-bold ${item.isNow ? "text-[#2563EB] dark:text-[#60A5FA] font-black" : "text-[#0F172A] dark:text-slate-200"}`}>
+                    {item.time}
+                  </span>
+                  <span className="text-xl my-0.5">{item.icon || "☀️"}</span>
+                  <span className="text-sm font-black text-[#0F172A] dark:text-white">
+                    {item.temp}°
+                  </span>
+                  <span className="text-[10px] font-bold text-[#0284C7] dark:text-[#38BDF8]">
+                    💧 {item.rainProb}%
+                  </span>
+                  <span className="text-[9.5px] font-semibold text-[#8A94A6] dark:text-[#94A3B8]">
+                    💨 {item.windSpeed}k/h
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Mobile View: Collapsible Forecast */}
         <div className="block md:hidden space-y-3">
           {/* Today's Active Weather Card */}
           {weather?.days[0] && (
-            <div className="p-4 rounded-2xl bg-[#EFF6FF] dark:bg-[#1A2234] border border-[#BFDBFE] dark:border-[#2563EB]/40 shadow-xs flex items-center justify-between transition">
+            <div
+              onClick={() => setShowHourlyForecast(!showHourlyForecast)}
+              className="p-4 rounded-2xl bg-[#EFF6FF] dark:bg-[#1A2234] border border-[#BFDBFE] dark:border-[#2563EB]/40 shadow-xs flex items-center justify-between transition cursor-pointer hover:border-[#3B82F6]"
+            >
               <div className="flex items-center gap-3">
                 <div className="text-3xl">
                   {weather.days[0].weatherCode === 0 ? "☀️" : weather.days[0].weatherCode <= 3 ? "⛅" : weather.days[0].rainProb > 40 ? "🌧️" : "🌤️"}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-black text-[#1E2432]">Today</span>
-                    <span className="px-2 py-0.5 rounded-full bg-[#2563EB]/10 text-[#2563EB] font-bold text-[10px]">
-                      Active Forecast
+                    <span className="text-xs font-black text-[#0F172A] dark:text-[#F8FAFC]">Today</span>
+                    <span className="px-2 py-0.5 rounded-full bg-[#2563EB]/10 dark:bg-[#2563EB]/25 text-[#2563EB] dark:text-[#60A5FA] font-bold text-[10px]">
+                      {showHourlyForecast ? "24h Active ▲" : "Tap 24h ▾"}
                     </span>
                   </div>
-                  <p className="text-xs text-[#8A94A6] font-medium mt-0.5">
+                  <p className="text-xs text-[#8A94A6] dark:text-[#94A3B8] font-medium mt-0.5">
                     {weather.days[0].condition || "Clear Conditions"}
                   </p>
                 </div>
               </div>
               <div className="text-right">
-                <div className="text-sm font-black text-[#1E2432]">
-                  {weather.days[0].tempMax}° / <span className="text-[#8A94A6] font-medium">{weather.days[0].tempMin}°</span>
+                <div className="text-sm font-black text-[#0F172A] dark:text-[#F8FAFC]">
+                  {weather.days[0].tempMax}° / <span className="text-[#8A94A6] dark:text-[#94A3B8] font-medium">{weather.days[0].tempMin}°</span>
                 </div>
-                <div className="text-[11px] font-bold text-[#0284C7] mt-0.5">
+                <div className="text-[11px] font-bold text-[#0284C7] dark:text-[#38BDF8] mt-0.5">
                   💧 {weather.days[0].rainProb}% Rain
                 </div>
               </div>
@@ -1709,14 +1885,14 @@ export default function DashboardPage() {
                   key={day.date}
                   className="p-3 rounded-2xl border bg-[#F8FAFC] dark:bg-[#1A2234] border-[#E8EEF5] dark:border-[#212C42] text-center space-y-1.5 transition"
                 >
-                  <div className="text-xs font-bold text-[#1E2432]">{day.dayLabel}</div>
+                  <div className="text-xs font-bold text-[#0F172A] dark:text-[#F8FAFC]">{day.dayLabel}</div>
                   <div className="text-xl">
                     {day.weatherCode === 0 ? "☀️" : day.weatherCode <= 3 ? "⛅" : day.rainProb > 40 ? "🌧️" : "🌤️"}
                   </div>
-                  <div className="text-xs font-black text-[#1E2432]">
-                    {day.tempMax}° / <span className="text-[#8A94A6] font-medium">{day.tempMin}°</span>
+                  <div className="text-xs font-black text-[#0F172A] dark:text-[#F8FAFC]">
+                    {day.tempMax}° / <span className="text-[#8A94A6] dark:text-[#94A3B8] font-medium">{day.tempMin}°</span>
                   </div>
-                  <div className="text-[10.5px] font-bold text-[#0284C7]">
+                  <div className="text-[10.5px] font-bold text-[#0284C7] dark:text-[#38BDF8]">
                     💧 {day.rainProb}%
                   </div>
                 </div>
@@ -1730,8 +1906,8 @@ export default function DashboardPage() {
               onClick={() => setMobileWeatherExpanded(!mobileWeatherExpanded)}
               className={`w-full py-2.5 px-4 rounded-full border font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-xs select-none ${
                 mobileWeatherExpanded
-                  ? "bg-[#1E2432] text-white border-[#1E2432]"
-                  : "bg-[#F8FAFC] hover:bg-[#EEF2F6] text-[#1E2432] border-[#E8EEF5]"
+                  ? "bg-[#0F172A] dark:bg-[#0284C7] text-white border-[#0F172A] dark:border-[#0284C7]"
+                  : "bg-[#F8FAFC] dark:bg-[#1A2234] hover:bg-[#EEF2F6] dark:hover:bg-[#222C42] text-[#0F172A] dark:text-[#F8FAFC] border-[#E8EEF5] dark:border-[#212C42]"
               }`}
             >
               <span>{mobileWeatherExpanded ? "✕ Hide 6-Day Forecast" : "📅 View 6-Day Forecast"}</span>
@@ -1757,48 +1933,48 @@ export default function DashboardPage() {
             {/* Header with Trigger Patrol Button */}
             <div className="flex items-center justify-between gap-3 mb-3 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-[#FEE2E2] text-[#DC2626] flex items-center justify-center text-lg shadow-sm">
+                <div className="w-10 h-10 rounded-2xl bg-[#FEE2E2] dark:bg-[#EF4444]/20 text-[#DC2626] dark:text-[#F87171] flex items-center justify-center text-lg shadow-sm">
                   🔍
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-base sm:text-lg font-black tracking-tight text-[#1E2432]">
+                    <h2 className="text-base sm:text-lg font-black tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">
                       Alerts & AI Scouting Patrol
                     </h2>
                     {alertsList.length > 0 && (
-                      <span className="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full bg-[#EFF6FF] text-[#2563EB] border border-[#DBEAFE]">
+                      <span className="text-[10.5px] font-extrabold px-2 py-0.5 rounded-full bg-[#EFF6FF] dark:bg-[#1E293B] text-[#2563EB] dark:text-[#60A5FA] border border-[#DBEAFE] dark:border-[#3B82F6]/30">
                         {alertsList.length}
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-[#8A94A6]">Autonomous 2x daily schedule • Disease diagnostics & pest alerts</p>
+                  <p className="text-xs text-[#8A94A6] dark:text-[#94A3B8]">Autonomous 2x daily schedule • Disease diagnostics & pest alerts</p>
                 </div>
               </div>
 
               <button
                 onClick={handleTriggerPatrol}
                 disabled={patrolRunning}
-                className="px-3.5 py-1.5 rounded-full bg-[#1E2432] hover:bg-[#2E3038] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition shadow-sm shrink-0"
+                className="px-3.5 py-1.5 rounded-full bg-[#0F172A] dark:bg-[#0284C7] hover:bg-[#1E293B] dark:hover:bg-[#0369A1] text-white text-xs font-black flex items-center gap-1.5 cursor-pointer transition shadow-sm shrink-0"
               >
-                <Sparkles className="w-3.5 h-3.5 text-[#3B82F6]" />
+                <Sparkles className="w-3.5 h-3.5 text-[#3B82F6] dark:text-white" />
                 <span>{patrolRunning ? "Patrol Scanning..." : "🚀 Trigger AI Patrol"}</span>
               </button>
             </div>
 
             {/* Routine Patrol Times */}
             <div className="grid grid-cols-2 gap-2.5 mb-3.5 shrink-0">
-              <div className="bg-[#F8FAFC] rounded-xl p-2.5 border border-[#E8EEF5] flex items-center gap-2">
+              <div className="bg-[#F8FAFC] dark:bg-[#131926] rounded-xl p-2.5 border border-[#E8EEF5] dark:border-[#212C42] flex items-center gap-2">
                 <span className="text-base">🌅</span>
                 <div>
-                  <span className="text-[10.5px] font-bold text-[#8A94A6] block">Morning Patrol:</span>
-                  <span className="text-xs font-black text-[#059669]">07:00 AM (Completed)</span>
+                  <span className="text-[10.5px] font-bold text-[#8A94A6] dark:text-[#94A3B8] block">Morning Patrol:</span>
+                  <span className="text-xs font-black text-[#059669] dark:text-[#34D399]">07:00 AM (Completed)</span>
                 </div>
               </div>
-              <div className="bg-[#F8FAFC] rounded-xl p-2.5 border border-[#E8EEF5] flex items-center gap-2">
+              <div className="bg-[#F8FAFC] dark:bg-[#131926] rounded-xl p-2.5 border border-[#E8EEF5] dark:border-[#212C42] flex items-center gap-2">
                 <span className="text-base">🌇</span>
                 <div>
-                  <span className="text-[10.5px] font-bold text-[#8A94A6] block">Evening Patrol:</span>
-                  <span className="text-xs font-black text-[#0284C7]">05:30 PM (Scheduled)</span>
+                  <span className="text-[10.5px] font-bold text-[#8A94A6] dark:text-[#94A3B8] block">Evening Patrol:</span>
+                  <span className="text-xs font-black text-[#0284C7] dark:text-[#38BDF8]">05:30 PM (Scheduled)</span>
                 </div>
               </div>
             </div>
@@ -1810,26 +1986,26 @@ export default function DashboardPage() {
                   key={a.id}
                   className={`p-3.5 rounded-2xl border space-y-1.5 transition ${
                     a.type === "CRITICAL"
-                      ? "bg-[#FFF5F5] border-[#FEE2E2]"
+                      ? "bg-[#FFF5F5] dark:bg-[#EF4444]/10 border-[#FEE2E2] dark:border-[#EF4444]/25"
                       : a.type === "WARNING"
-                      ? "bg-[#FFFDF5] border-[#FEF3C7]"
-                      : "bg-[#F8FAFC] border-[#E8EEF5]"
+                      ? "bg-[#FFFDF5] dark:bg-[#F59E0B]/10 border-[#FEF3C7] dark:border-[#F59E0B]/25"
+                      : "bg-[#F8FAFC] dark:bg-[#131926] border-[#E8EEF5] dark:border-[#212C42]"
                   }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span className={`w-2.5 h-2.5 rounded-full ${a.type === "CRITICAL" ? "bg-[#EF4444]" : a.type === "WARNING" ? "bg-[#F59E0B]" : "bg-[#3B82F6]"}`} />
-                      <h4 className="text-xs font-black text-[#1E2432]">{a.title}</h4>
+                      <h4 className="text-xs font-black text-[#0F172A] dark:text-[#F8FAFC]">{a.title}</h4>
                     </div>
                     {a.confidence && (
-                      <span className="text-[10.5px] font-black px-2 py-0.5 rounded-full bg-white border border-[#E8EEF5]">
+                      <span className="text-[10.5px] font-black px-2 py-0.5 rounded-full bg-white dark:bg-[#1E293B] border border-[#E8EEF5] dark:border-[#334155] text-[#0F172A] dark:text-[#F8FAFC]">
                         {Math.round(a.confidence * 100)}% Conf
                       </span>
                     )}
                   </div>
-                  <p className="text-[11.5px] text-[#64748B]">{a.message}</p>
+                  <p className="text-[11.5px] text-[#64748B] dark:text-[#94A3B8]">{a.message}</p>
                   {a.treatment && (
-                    <div className={`text-[11px] font-bold pt-1 ${a.type === "CRITICAL" ? "text-[#DC2626]" : "text-[#D97706]"}`}>
+                    <div className={`text-[11px] font-bold pt-1 ${a.type === "CRITICAL" ? "text-[#DC2626] dark:text-[#F87171]" : "text-[#D97706] dark:text-[#FBBF24]"}`}>
                       <strong>Action Needed:</strong> {a.treatment}
                     </div>
                   )}
@@ -1838,7 +2014,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div className="text-[11px] text-[#8A94A6] font-mono text-center pt-2 shrink-0 border-t border-[#E8EEF5]/40">
+          <div className="text-[11px] text-[#8A94A6] dark:text-[#94A3B8] font-mono text-center pt-2 shrink-0 border-t border-[#E8EEF5]/40 dark:border-white/10">
             AI models: MobileNetV3 Disease, Pest Classifier, YOLOv8 Crop Health
           </div>
         </section>
@@ -1950,33 +2126,114 @@ export default function DashboardPage() {
 
             </div>
 
-            {/* Actuator Relay Card (Field A/B Pump) */}
-            <div className="bg-[#0F172A] dark:bg-[#1E293B] text-white p-4 sm:p-5 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md border border-white/10">
-              <div>
-                <span className="text-[10.5px] font-bold text-[#94A3B8] uppercase tracking-wider block">Actuator Control</span>
-                <h3 className="text-sm font-black text-white mt-0.5">{fieldData.pumpName}</h3>
-                <p className="text-xs text-[#94A3B8] flex items-center gap-1.5 mt-0.5">
-                  <span className={`w-2 h-2 rounded-full ${fieldData.pumpActive ? "bg-[#10B981] animate-ping" : "bg-[#64748B]"}`} />
-                  <span>{fieldData.pumpActive ? "Pump is currently pumping water" : "Standby • Ready for irrigation"}</span>
-                </p>
+            {/* Actuator Relay Card (Field A/B Pump with Flowchart Logic & Force Run Override) */}
+            <div className="bg-[#0F172A] dark:bg-[#1E293B] text-white p-4 sm:p-5 rounded-2xl flex flex-col gap-3 shadow-md border border-white/10">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10.5px] font-bold text-[#94A3B8] uppercase tracking-wider block">Actuator Control</span>
+                    {fieldData.logic?.mode && (
+                      <span className={`text-[9.5px] font-black px-2 py-0.5 rounded-full border ${
+                        fieldData.logic.mode === "MANUAL_FORCE_OVERRIDE"
+                          ? "bg-[#D97706]/20 text-[#FBBF24] border-[#D97706]/50"
+                          : fieldData.logic.mode === "RAIN_LOCKOUT"
+                          ? "bg-[#EF4444]/20 text-[#FCA5A5] border-[#EF4444]/40"
+                          : fieldData.logic.mode === "RAIN_IMMINENT_HOLD"
+                          ? "bg-[#F59E0B]/20 text-[#FCD34D] border-[#F59E0B]/40"
+                          : fieldData.logic.mode === "TIMED_CYCLE_15MIN"
+                          ? "bg-[#3B82F6]/20 text-[#93C5FD] border-[#3B82F6]/40"
+                          : "bg-[#10B981]/20 text-[#6EE7B7] border-[#10B981]/40"
+                      }`}>
+                        {fieldData.logic.mode.replace(/_/g, " ")}
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-sm font-black text-white mt-0.5">{fieldData.pumpName}</h3>
+                  <p className="text-xs text-[#94A3B8] flex items-center gap-1.5 mt-0.5">
+                    <span className={`w-2 h-2 rounded-full ${fieldData.pumpActive ? "bg-[#10B981] animate-ping" : "bg-[#64748B]"}`} />
+                    <span>
+                      {fieldData.pumpActive
+                        ? (fieldData.logic?.mode === "MANUAL_FORCE_OVERRIDE"
+                            ? "FORCED ON • Running regardless of weather/moisture"
+                            : fieldData.logic?.time_remaining_minutes
+                            ? `Running 15-min cycle (${fieldData.logic.time_remaining_minutes}m left)`
+                            : "Pump is currently pumping water • 45 L/h")
+                        : "Standby • Automated Flowchart Control Active"}
+                    </span>
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2 self-stretch sm:self-auto">
+                  {/* Dedicated Force Run / Override Button */}
+                  <button
+                    onClick={async () => {
+                      const targetKey = activeField === "FIELD_A" ? "PUMP_ZONE_A" : "PUMP_ZONE_B";
+                      const isForced = fieldData.logic?.mode === "MANUAL_FORCE_OVERRIDE" || fieldData.pumpActive;
+                      const nextAction = isForced ? "FORCE_OFF" : "FORCE_ON";
+                      
+                      if (activeField === "FIELD_A") setPumpZoneA(!isForced);
+                      else setPumpZoneB(!isForced);
+
+                      setActionNotice(
+                        !isForced
+                          ? `⚡ Force Override: ${activeField === "FIELD_A" ? "Field A" : "Field B"} Pump Forced ON!`
+                          : `🔄 Force Override Cleared: ${activeField === "FIELD_A" ? "Field A" : "Field B"} returned to Auto Logic`
+                      );
+
+                      try {
+                        await fetch("/api/commands", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ target: targetKey, action: nextAction }),
+                        });
+                        fetch(`http://127.0.0.1:8000/api/edge/pump/${targetKey}/${nextAction}`, {
+                          method: "POST",
+                          signal: AbortSignal.timeout(1000),
+                        }).catch(() => {});
+                      } catch {}
+                      setTimeout(() => setActionNotice(null), 3000);
+                    }}
+                    className={`flex-1 sm:flex-initial px-4 py-2.5 rounded-full font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer transition shadow-sm border ${
+                      fieldData.logic?.mode === "MANUAL_FORCE_OVERRIDE"
+                        ? "bg-[#D97706] hover:bg-[#B45309] text-white border-[#F59E0B]"
+                        : "bg-[#1E293B] hover:bg-[#334155] text-[#FBBF24] border-[#F59E0B]/40"
+                    }`}
+                    title="Force pump ON regardless of rain or soil moisture"
+                  >
+                    <span>⚡</span>
+                    <span>{fieldData.logic?.mode === "MANUAL_FORCE_OVERRIDE" ? "FORCE ACTIVE" : "FORCE RUN PUMP"}</span>
+                  </button>
+
+                  {/* Standard Start/Stop Toggle Button */}
+                  <button
+                    onClick={togglePump}
+                    className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-full font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-sm ${
+                      fieldData.pumpActive
+                        ? "bg-[#EF4444] hover:bg-[#DC2626] text-white"
+                        : "bg-[#0284C7] hover:bg-[#0369A1] text-white"
+                    }`}
+                  >
+                    <Power className="w-3.5 h-3.5" />
+                    <span>{fieldData.pumpActive ? "STOP PUMP" : "START PUMP"}</span>
+                  </button>
+                </div>
               </div>
 
-              <button
-                onClick={togglePump}
-                className={`px-5 py-2.5 rounded-full font-bold text-xs flex items-center gap-2 cursor-pointer transition shadow-sm ${
-                  fieldData.pumpActive
-                    ? "bg-[#EF4444] hover:bg-[#DC2626] text-white"
-                    : "bg-[#0284C7] hover:bg-[#0369A1] text-white"
-                }`}
-              >
-                <Power className="w-3.5 h-3.5" />
-                <span>{fieldData.pumpActive ? "STOP PUMP" : "START PUMP"}</span>
-              </button>
+              {/* Flowchart Rule & Reason Banner */}
+              {fieldData.logic?.reason && (
+                <div className="pt-2 border-t border-white/10 flex items-start gap-2 text-[11px] text-[#94A3B8]">
+                  <span className="text-xs shrink-0">{fieldData.logic.mode === "MANUAL_FORCE_OVERRIDE" ? "⚡" : "🧠"}</span>
+                  <span className="leading-snug">
+                    <strong className="text-white font-semibold">Pump Logic: </strong>
+                    {fieldData.logic.reason}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="text-[11px] text-[#64748B] dark:text-[#94A3B8] font-mono text-center pt-2">
-            ESP32 Subnode • LoRa 868MHz Mesh • Rain safety interlock armed
+            ESP32 Subnode • LoRa 868MHz Mesh • Automated Soil Moisture & Rain Decision Tree
           </div>
         </section>
 
@@ -2231,18 +2488,18 @@ export default function DashboardPage() {
                         min="50"
                         max="255"
                         value={roverSpeed}
-                        onChange={(e) => setRoverSpeed(Number(e.target.value))}
+                        onChange={(e) => handleRoverSpeedChange(Number(e.target.value))}
                         className="w-full accent-[#F59E0B] cursor-pointer"
                       />
                       <div className="flex justify-between gap-2 pt-1">
                         <button
-                          onClick={() => setRoverSpeed((s) => Math.max(50, s - 25))}
+                          onClick={() => handleRoverSpeedChange(Math.max(50, roverSpeed - 25))}
                           className="flex-1 py-1 rounded-lg bg-white dark:bg-white/10 hover:bg-[#EEF2F6] border border-[#E2E8F0] dark:border-white/10 text-[11px] font-black text-[#0F172A] dark:text-[#F8FAFC] cursor-pointer"
                         >
                           - Speed
                         </button>
                         <button
-                          onClick={() => setRoverSpeed((s) => Math.min(255, s + 25))}
+                          onClick={() => handleRoverSpeedChange(Math.min(255, roverSpeed + 25))}
                           className="flex-1 py-1 rounded-lg bg-white dark:bg-white/10 hover:bg-[#EEF2F6] border border-[#E2E8F0] dark:border-white/10 text-[11px] font-black text-[#0F172A] dark:text-[#F8FAFC] cursor-pointer"
                         >
                           + Speed
@@ -2277,14 +2534,14 @@ export default function DashboardPage() {
         {/* Header Row */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#EFF6FF] text-[#2563EB] flex items-center justify-center text-lg shadow-sm">
+            <div className="w-10 h-10 rounded-2xl bg-[#EFF6FF] dark:bg-[#1E293B] text-[#2563EB] dark:text-[#60A5FA] flex items-center justify-center text-lg shadow-sm border border-[#DBEAFE] dark:border-[#3B82F6]/30">
               📊
             </div>
             <div>
-              <h2 className="text-lg font-black tracking-tight text-[#1E2432]">
+              <h2 className="text-lg font-black tracking-tight text-[#0F172A] dark:text-[#F8FAFC]">
                 Graphical Representation of Sensor Data (Node A & B)
               </h2>
-              <p className="text-xs text-[#8A94A6]">
+              <p className="text-xs text-[#8A94A6] dark:text-[#94A3B8]">
                 24-Hour telemetry curves • Select any of the last 10 days to inspect historical day-wise records
               </p>
             </div>
@@ -2294,13 +2551,13 @@ export default function DashboardPage() {
           <div className="flex items-center gap-2.5 flex-wrap">
             
             {/* Node Switcher [ Node A | Node B ] */}
-            <div className="flex items-center p-1 rounded-full bg-[#F4F7FC] border border-[#E8EEF5]">
+            <div className="flex items-center p-1 rounded-full bg-[#F4F7FC] dark:bg-[#131926] border border-[#E8EEF5] dark:border-[#212C42]">
               <button
                 onClick={() => setGraphNode("NODE_A")}
                 className={`px-3 py-1 rounded-full text-xs font-black transition cursor-pointer ${
                   graphNode === "NODE_A"
-                    ? "bg-[#1E2432] text-white shadow-xs"
-                    : "text-[#64748B] hover:text-[#1E2432]"
+                    ? "bg-[#0F172A] dark:bg-[#0284C7] text-white shadow-xs"
+                    : "text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 Node A
@@ -2309,8 +2566,8 @@ export default function DashboardPage() {
                 onClick={() => setGraphNode("NODE_B")}
                 className={`px-3 py-1 rounded-full text-xs font-black transition cursor-pointer ${
                   graphNode === "NODE_B"
-                    ? "bg-[#1E2432] text-white shadow-xs"
-                    : "text-[#64748B] hover:text-[#1E2432]"
+                    ? "bg-[#0F172A] dark:bg-[#0284C7] text-white shadow-xs"
+                    : "text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white"
                 }`}
               >
                 Node B
@@ -2323,7 +2580,7 @@ export default function DashboardPage() {
               className={`px-3.5 py-1.5 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
                 selectedMetric === "SOIL_MOISTURE"
                   ? "bg-[#0284C7] text-white shadow-xs"
-                  : "bg-[#F4F7FC] text-[#64748B] hover:text-[#1E2432] border border-[#E8EEF5]"
+                  : "bg-[#F4F7FC] dark:bg-[#131926] text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white border border-[#E8EEF5] dark:border-[#212C42]"
               }`}
             >
               <span>💧 Soil Moisture</span>
@@ -2333,7 +2590,7 @@ export default function DashboardPage() {
               className={`px-3.5 py-1.5 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
                 selectedMetric === "SOIL_TEMP"
                   ? "bg-[#EA580C] text-white shadow-xs"
-                  : "bg-[#F4F7FC] text-[#64748B] hover:text-[#1E2432] border border-[#E8EEF5]"
+                  : "bg-[#F4F7FC] dark:bg-[#131926] text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white border border-[#E8EEF5] dark:border-[#212C42]"
               }`}
             >
               <span>🌡️ Soil Temp</span>
@@ -2343,7 +2600,7 @@ export default function DashboardPage() {
               className={`px-3.5 py-1.5 rounded-full text-xs font-black transition cursor-pointer flex items-center gap-1.5 ${
                 selectedMetric === "HUMIDITY"
                   ? "bg-[#059669] text-white shadow-xs"
-                  : "bg-[#F4F7FC] text-[#64748B] hover:text-[#1E2432] border border-[#E8EEF5]"
+                  : "bg-[#F4F7FC] dark:bg-[#131926] text-[#64748B] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white border border-[#E8EEF5] dark:border-[#212C42]"
               }`}
             >
               <span>💨 Humidity</span>
@@ -2353,9 +2610,9 @@ export default function DashboardPage() {
         </div>
 
         {/* 10-Day Historical Day Picker Calendar Tabs Bar */}
-        <div className="bg-[#F8FAFC] rounded-2xl p-2.5 border border-[#E8EEF5] overflow-x-auto">
+        <div className="bg-[#F8FAFC] dark:bg-[#131926] rounded-2xl p-2.5 border border-[#E8EEF5] dark:border-[#212C42] overflow-x-auto">
           <div className="flex items-center gap-2 min-w-max">
-            <span className="text-xs font-black text-[#8A94A6] uppercase px-2">10-Day Calendar:</span>
+            <span className="text-xs font-black text-[#8A94A6] dark:text-[#94A3B8] uppercase px-2">10-Day Calendar:</span>
             {tenDaysList.map((d) => (
               <button
                 key={d.index}
@@ -2363,7 +2620,7 @@ export default function DashboardPage() {
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition cursor-pointer flex flex-col items-center min-w-[70px] ${
                   selectedDayIndex === d.index
                     ? "bg-[#2563EB] text-white font-black shadow-sm"
-                    : "bg-white hover:bg-[#EEF2F6] text-[#64748B] border border-[#E8EEF5]"
+                    : "bg-white dark:bg-[#1A2234] hover:bg-[#EEF2F6] dark:hover:bg-[#222C42] text-[#64748B] dark:text-[#CBD5E1] border border-[#E8EEF5] dark:border-[#212C42]"
                 }`}
               >
                 <span className="text-[10px] opacity-80">{d.dayName}</span>

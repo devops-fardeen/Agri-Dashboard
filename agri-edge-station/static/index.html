@@ -755,6 +755,142 @@
       background: var(--accent-yellow-light);
       border-color: var(--accent-yellow);
       box-shadow: 0 4px 18px var(--accent-yellow-glow);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .weather-day-card.today:hover {
+      transform: translateY(-3px);
+      border-color: #F59E0B;
+      box-shadow: 0 6px 20px var(--accent-yellow-glow);
+    }
+
+    .w-today-badge {
+      font-size: 9.5px;
+      font-weight: 800;
+      color: #92400E;
+      background: rgba(245, 158, 11, 0.2);
+      padding: 2px 7px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+
+    @keyframes fadeInScale {
+      0% { opacity: 0; transform: translateY(-4px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes fadeIn {
+      0% { opacity: 0; }
+      100% { opacity: 1; }
+    }
+
+    /* Google Weather 24-Hour Hourly Forecast Drawer */
+    .hourly-weather-drawer {
+      margin-top: 18px;
+      padding: 16px 18px;
+      background: rgba(15, 23, 42, 0.03);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-2xl);
+      animation: fadeInScale 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    [data-theme="dark"] .hourly-weather-drawer {
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .hourly-drawer-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .hourly-scroll-container {
+      display: flex;
+      gap: 12px;
+      overflow-x: auto;
+      padding: 6px 4px 10px 4px;
+      scroll-behavior: smooth;
+      -webkit-overflow-scrolling: touch;
+    }
+
+    .hourly-scroll-container::-webkit-scrollbar {
+      height: 6px;
+    }
+    .hourly-scroll-container::-webkit-scrollbar-track {
+      background: rgba(0,0,0,0.04);
+      border-radius: 4px;
+    }
+    .hourly-scroll-container::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.18);
+      border-radius: 4px;
+    }
+
+    .hourly-pill-card {
+      min-width: 82px;
+      flex-shrink: 0;
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xl);
+      padding: 14px 10px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .hourly-pill-card:hover {
+      border-color: #0284C7;
+      box-shadow: 0 0 0 1px #0284C7, 0 4px 14px rgba(2, 132, 199, 0.18);
+    }
+
+    .hourly-pill-card.active-now {
+      background: #EFF6FF;
+      border-color: #93C5FD;
+      box-shadow: 0 2px 10px rgba(59, 130, 246, 0.15);
+    }
+
+    [data-theme="dark"] .hourly-pill-card.active-now {
+      background: rgba(37, 99, 235, 0.15);
+      border-color: #2563EB;
+    }
+
+    .h-time {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: var(--color-text-main);
+    }
+
+    .h-icon {
+      font-size: 22px;
+      margin: 1px 0;
+    }
+
+    .h-temp {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--color-text-main);
+    }
+
+    .h-rain {
+      font-size: 10px;
+      font-weight: 700;
+      color: #0284C7;
+    }
+
+    .h-wind {
+      font-size: 9.5px;
+      font-weight: 600;
+      color: var(--color-text-muted);
     }
 
     .w-day-title {
@@ -1654,6 +1790,23 @@
         <!-- Generated Dynamically by JS -->
       </div>
 
+      <!-- Google Weather Style 24-Hour Hourly Forecast Drawer (Expandable when clicking Today) -->
+      <div class="hourly-weather-drawer" id="hourlyWeatherDrawer" style="display: none;">
+        <div class="hourly-drawer-header">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 16px;">⏱️</span>
+            <div>
+              <strong style="font-family: 'Outfit', sans-serif; font-size: 13.5px; color: var(--color-text-main);">Next 24-Hour Weather Prediction</strong>
+              <span style="font-size: 11px; color: var(--color-text-muted); margin-left: 6px;">Hourly temperature, conditions, & rain probability</span>
+            </div>
+          </div>
+          <button class="badge-pill" onclick="toggleHourlyWeatherDrawer(false)" style="cursor: pointer; padding: 2px 10px; font-size: 11px;">✕ Close</button>
+        </div>
+        <div class="hourly-scroll-container" id="hourlyWeatherCards">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
       <!-- Mobile Dropdown Toggle Button (Visible only on mobile <= 768px) -->
       <div class="mobile-weather-toggle-wrap">
         <button class="mobile-weather-toggle-btn" id="btnMobileWeatherToggle" onclick="toggleMobileWeatherForecast()">
@@ -1797,15 +1950,35 @@
           </div>
         </div>
 
-        <!-- Irrigation Pump Switch for Selected Field -->
-        <div class="pump-control-card">
-          <div>
-            <strong style="font-family: 'Outfit', sans-serif; font-size: 14px; color: var(--color-text-main);" id="lblPumpTitle">Field A Drip Pump</strong>
-            <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 2px;" id="lblPumpStatus">Relay State: Standby (OFF)</p>
+        <!-- Irrigation Pump Switch for Selected Field with Flowchart Logic & Force Run Override -->
+        <div class="pump-control-card" style="display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-radius: var(--radius-xl); background: var(--bg-card); border: 1px solid var(--border-card);">
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; flex-wrap: wrap; gap: 10px;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <strong style="font-family: 'Outfit', sans-serif; font-size: 14px; color: var(--color-text-main);" id="lblPumpTitle">Field A Drip Pump</strong>
+                <span class="badge-pill" id="lblPumpModeBadge" style="font-size: 10px; padding: 2px 8px; background: rgba(16, 185, 129, 0.15); color: #10B981;">AUTO LOGIC</span>
+              </div>
+              <p style="font-size: 12px; color: var(--color-text-muted); margin-top: 3px;" id="lblPumpStatus">Relay State: Standby (OFF)</p>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <!-- Force Run Override Button -->
+              <button class="pump-btn" id="btnPumpForceToggle" onclick="toggleForceRunPump()" style="background: var(--accent-yellow); color: #18191F; border: 1px solid var(--border-card); font-weight: 800; font-size: 12px; padding: 8px 14px; border-radius: var(--radius-pill); cursor: pointer; transition: all 0.2s ease;">
+                ⚡ <span>FORCE RUN</span>
+              </button>
+
+              <!-- Standard Toggle Button -->
+              <button class="pump-btn off" id="btnPumpToggle" onclick="toggleCurrentFieldPump()">
+                🚰 <span>Turn Pump ON</span>
+              </button>
+            </div>
           </div>
-          <button class="pump-btn off" id="btnPumpToggle" onclick="toggleCurrentFieldPump()">
-            🚰 <span>Turn Pump ON</span>
-          </button>
+
+          <!-- Flowchart Logic Banner -->
+          <div id="lblPumpReasonRow" style="font-size: 11.5px; color: var(--color-text-muted); border-top: 1px solid var(--border-subtle); padding-top: 8px; display: flex; align-items: center; gap: 6px;">
+            <span>🧠</span>
+            <span id="lblPumpReasonText">Pump Logic: Evaluating automated weather & soil moisture conditions...</span>
+          </div>
         </div>
       </section>
 
@@ -2349,16 +2522,94 @@
 
         const card = document.createElement('div');
         card.className = `weather-day-card ${isToday ? 'today' : ''}`;
-        card.innerHTML = `
-          <span class="w-day-title">${dayTitle}</span>
-          <span class="w-icon">${icon}</span>
-          <div>
-            <span class="w-temp-max">${Math.round(d.temp_max)}°</span>
-            <span class="w-temp-min">${Math.round(d.temp_min)}°</span>
-          </div>
-          <span class="w-rain-chance">💧 ${d.rain_prob}%</span>
-        `;
+        
+        if (isToday) {
+          card.title = "Click to view 24-hour hourly prediction";
+          card.onclick = () => toggleHourlyWeatherDrawer();
+          card.innerHTML = `
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+              <span class="w-day-title">${dayTitle}</span>
+              <span class="w-today-badge">24h ▾</span>
+            </div>
+            <span class="w-icon">${icon}</span>
+            <div>
+              <span class="w-temp-max">${Math.round(d.temp_max)}°</span>
+              <span class="w-temp-min">${Math.round(d.temp_min)}°</span>
+            </div>
+            <span class="w-rain-chance">💧 ${d.rain_prob}%</span>
+          `;
+        } else {
+          card.innerHTML = `
+            <span class="w-day-title">${dayTitle}</span>
+            <span class="w-icon">${icon}</span>
+            <div>
+              <span class="w-temp-max">${Math.round(d.temp_max)}°</span>
+              <span class="w-temp-min">${Math.round(d.temp_min)}°</span>
+            </div>
+            <span class="w-rain-chance">💧 ${d.rain_prob}%</span>
+          `;
+        }
         grid.appendChild(card);
+      });
+
+      // Populate 24-hour hourly prediction drawer
+      renderHourlyWeather(forecastData?.forecast?.hourly);
+    }
+
+    // Toggle 24-Hour Hourly Weather Drawer
+    let isHourlyDrawerOpen = false;
+    function toggleHourlyWeatherDrawer(explicitState) {
+      const drawer = document.getElementById('hourlyWeatherDrawer');
+      if (!drawer) return;
+      if (explicitState !== undefined) {
+        isHourlyDrawerOpen = explicitState;
+      } else {
+        isHourlyDrawerOpen = !isHourlyDrawerOpen;
+      }
+      drawer.style.display = isHourlyDrawerOpen ? 'block' : 'none';
+      if (isHourlyDrawerOpen) {
+        drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    function renderHourlyWeather(hourlyList) {
+      const container = document.getElementById('hourlyWeatherCards');
+      if (!container) return;
+      container.innerHTML = '';
+
+      let items = hourlyList;
+      if (!items || !Array.isArray(items) || items.length === 0) {
+        // Fallback realistic 24-hour sequence if offline
+        const now = new Date();
+        items = [];
+        for (let i = 0; i < 24; i++) {
+          const d = new Date(now.getTime() + i * 3600000);
+          const h = d.getHours();
+          const timeLabel = i === 0 ? 'Now' : `${h % 12 === 0 ? 12 : h % 12} ${h >= 12 ? 'PM' : 'AM'}`;
+          const isNight = h < 6 || h > 19;
+          items.push({
+            time: timeLabel,
+            temp: isNight ? 22 + (i % 3) : 28 + (i % 5),
+            rain_prob: (i * 7) % 35,
+            icon: isNight ? '🌙' : (i % 3 === 0 ? '☀️' : '⛅'),
+            condition: isNight ? 'Clear Night' : 'Sunny / Clear',
+            wind_speed: 6 + (i % 4),
+            is_now: i === 0
+          });
+        }
+      }
+
+      items.forEach((item) => {
+        const pill = document.createElement('div');
+        pill.className = `hourly-pill-card ${item.is_now ? 'active-now' : ''}`;
+        pill.innerHTML = `
+          <span class="h-time">${item.time}</span>
+          <span class="h-icon">${item.icon || '☀️'}</span>
+          <span class="h-temp">${Math.round(item.temp)}°</span>
+          <span class="h-rain">💧 ${item.rain_prob ?? 0}%</span>
+          <span class="h-wind">💨 ${Math.round(item.wind_speed ?? 8)} km/h</span>
+        `;
+        container.appendChild(pill);
       });
     }
 
@@ -2687,19 +2938,77 @@
       document.getElementById('meterSoilTemp').style.width = soilTemp !== null ? `${Math.min(100, (soilTemp / 40) * 100)}%` : '0%';
       document.getElementById('meterSubnodeBattery').style.width = `${Math.min(100, subBatt)}%`;
 
-      // Pump status
+      // Pump status & Flowchart Logic
       const btnPump = document.getElementById('btnPumpToggle');
+      const btnForce = document.getElementById('btnPumpForceToggle');
       const lblPump = document.getElementById('lblPumpStatus');
+      const lblMode = document.getElementById('lblPumpModeBadge');
+      const lblReason = document.getElementById('lblPumpReasonText');
+
+      // Fetch zone decision from pump_logic
+      const targetKey = currentSelectedField === 'FIELD_A' ? 'ZONE_A' : 'ZONE_B';
+      const pLogic = (data.pump_logic && data.pump_logic[targetKey]) ? data.pump_logic[targetKey] : null;
+
+      if (pLogic) {
+        if (pLogic.mode === 'MANUAL_FORCE_OVERRIDE') {
+          lblMode.textContent = 'FORCE OVERRIDE';
+          lblMode.style.background = 'rgba(217, 119, 6, 0.2)';
+          lblMode.style.color = '#D97706';
+        } else if (pLogic.mode === 'RAIN_LOCKOUT') {
+          lblMode.textContent = 'RAIN LOCKOUT';
+          lblMode.style.background = 'rgba(239, 68, 68, 0.2)';
+          lblMode.style.color = '#EF4444';
+        } else if (pLogic.mode === 'RAIN_IMMINENT_HOLD') {
+          lblMode.textContent = 'RAIN HOLD (85%)';
+          lblMode.style.background = 'rgba(245, 158, 11, 0.2)';
+          lblMode.style.color = '#F59E0B';
+        } else if (pLogic.mode === 'TIMED_CYCLE_15MIN') {
+          lblMode.textContent = '15-MIN CYCLE';
+          lblMode.style.background = 'rgba(2, 132, 199, 0.2)';
+          lblMode.style.color = '#0284C7';
+        } else {
+          lblMode.textContent = 'AUTO LOGIC';
+          lblMode.style.background = 'rgba(16, 185, 129, 0.15)';
+          lblMode.style.color = '#10B981';
+        }
+
+        if (pLogic.reason) {
+          lblReason.textContent = pLogic.reason;
+        }
+      }
+
+      if (btnForce) {
+        const isForced = pLogic && pLogic.mode === 'MANUAL_FORCE_OVERRIDE';
+        btnForce.style.background = isForced ? '#D97706' : 'var(--accent-yellow)';
+        btnForce.style.color = isForced ? '#FFFFFF' : '#18191F';
+        btnForce.innerHTML = isForced ? '⚡ <span>FORCE ACTIVE</span>' : '⚡ <span>FORCE RUN</span>';
+      }
+
       if (isPumpOn) {
         btnPump.className = 'pump-btn on';
         btnPump.innerHTML = '🚰 <span>Turn Pump OFF</span>';
-        lblPump.textContent = 'Relay State: ACTIVE (Irrigating)';
+        lblPump.textContent = (pLogic && pLogic.mode === 'MANUAL_FORCE_OVERRIDE')
+          ? 'Relay State: FORCED ON (Running regardless of conditions)'
+          : 'Relay State: ACTIVE (Irrigating)';
         lblPump.style.color = '#10B981';
       } else {
         btnPump.className = 'pump-btn off';
         btnPump.innerHTML = '🚰 <span>Turn Pump ON</span>';
         lblPump.textContent = 'Relay State: Standby (OFF)';
         lblPump.style.color = 'var(--color-text-muted)';
+      }
+    }
+
+    async function toggleForceRunPump() {
+      const target = currentSelectedField === 'FIELD_A' ? 'PUMP_ZONE_A' : 'PUMP_ZONE_B';
+      const btnForce = document.getElementById('btnPumpForceToggle');
+      const isCurrentlyForced = btnForce && btnForce.textContent.includes('ACTIVE');
+      const nextAction = isCurrentlyForced ? 'FORCE_OFF' : 'FORCE_ON';
+      try {
+        await fetch(`/api/edge/pump/${target}/${nextAction}`, { method: 'POST' });
+        fetchDashboardData();
+      } catch (e) {
+        console.error('Error toggling force override', e);
       }
     }
 

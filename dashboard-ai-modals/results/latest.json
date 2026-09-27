@@ -1,42 +1,31 @@
 {
     "success": true,
-    "image": "98f26098ab8244a6bc4031522e372c5e.jpg",
-    "blur_score": 397.94,
+    "image": "9fb39e99fcdd4c44943740af7a11c711.jpg",
+    "blur_score": 170.3,
     "results": {
         "disease": [
             {
-                "class_id": 1,
-                "name": "Healthy",
-                "confidence": 0.489,
+                "class_id": 2,
+                "name": "Late Blight",
+                "confidence": 0.781,
                 "bbox": [
-                    274,
-                    50,
-                    381,
-                    191
-                ]
-            },
-            {
-                "class_id": 1,
-                "name": "Healthy",
-                "confidence": 0.438,
-                "bbox": [
-                    51,
                     0,
-                    298,
-                    179
+                    2,
+                    455,
+                    394
                 ]
             }
         ],
         "pest": [
             {
-                "class_id": 3,
-                "name": "Silverleaf whitefly",
-                "confidence": 0.492,
+                "class_id": 0,
+                "name": "No Pests Detected",
+                "confidence": 0.95,
                 "bbox": [
-                    13,
                     0,
-                    317,
-                    224
+                    0,
+                    0,
+                    0
                 ]
             }
         ],
@@ -55,23 +44,23 @@
         ],
         "stage": [
             {
-                "class_id": 2,
-                "name": "Stage 3: Flowering",
-                "confidence": 0.98,
+                "class_id": 0,
+                "name": "Stage 1",
+                "confidence": 0.548,
                 "bbox": [
                     0,
                     0,
-                    0,
-                    0
+                    452,
+                    395
                 ]
             }
         ],
         "timing": {
-            "disease": 0.407,
-            "pest": 0.733,
-            "nutrition": 0.971,
-            "stage": 1.146,
-            "total": 3.257
+            "disease": 0.276,
+            "pest": 0.581,
+            "nutrition": 0.91,
+            "stage": 0.845,
+            "total": 2.611
         }
     }
 }

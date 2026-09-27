@@ -114,6 +114,7 @@ class CloudSyncWorker:
                             "FORWARD": "forward",
                             "MOVE_BACKWARD": "backward",
                             "BACKWARD": "backward",
+                            "REVERSE": "backward",
                             "MOVE_LEFT": "left",
                             "LEFT": "left",
                             "MOVE_RIGHT": "right",
@@ -276,6 +277,7 @@ class CloudSyncWorker:
             f"https://api.open-meteo.com/v1/forecast?"
             f"latitude={lat}&longitude={lon}"
             f"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation"
+            f"&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m"
             f"&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,uv_index_max"
             f"&forecast_days=14&timezone=auto"
         )
@@ -292,6 +294,51 @@ class CloudSyncWorker:
                 weather_codes = daily.get("weather_code", [])
                 uv_indices = daily.get("uv_index_max", [])
                 curr = data.get("current", {})
+
+                # Hourly forecast parsing (next 24 hours)
+                hourly = data.get("hourly", {})
+                h_times = hourly.get("time", [])
+                h_temps = hourly.get("temperature_2m", [])
+                h_hums = hourly.get("relative_humidity_2m", [])
+                h_rains = hourly.get("precipitation_probability", [])
+                h_codes = hourly.get("weather_code", [])
+                h_winds = hourly.get("wind_speed_10m", [])
+
+                now_local = datetime.now()
+                now_iso_hour = now_local.strftime("%Y-%m-%dT%H:00")
+                
+                h_start_idx = 0
+                for idx, t_str in enumerate(h_times):
+                    if t_str >= now_iso_hour:
+                        h_start_idx = idx
+                        break
+
+                formatted_hourly = []
+                for step in range(24):
+                    idx = h_start_idx + step
+                    if idx < len(h_times):
+                        t_iso = h_times[idx]
+                        try:
+                            t_dt = datetime.fromisoformat(t_iso)
+                            time_label = "Now" if step == 0 else t_dt.strftime("%I %p").lstrip("0")
+                        except Exception:
+                            time_label = f"+{step}h"
+                        
+                        wcode = h_codes[idx] if idx < len(h_codes) else 0
+                        cond, icon = self._interpret_wmo_code(wcode)
+                        
+                        formatted_hourly.append({
+                            "time": time_label,
+                            "iso": t_iso,
+                            "temp": round(h_temps[idx], 1) if idx < len(h_temps) else 28.0,
+                            "humidity": int(h_hums[idx]) if idx < len(h_hums) else 60,
+                            "rain_prob": int(h_rains[idx]) if (idx < len(h_rains) and h_rains[idx] is not None) else 0,
+                            "wind_speed": round(h_winds[idx], 1) if idx < len(h_winds) else 8.0,
+                            "weather_code": wcode,
+                            "condition": cond,
+                            "icon": icon,
+                            "is_now": step == 0
+                        })
 
                 formatted_days = []
                 today_str = datetime.now().strftime("%Y-%m-%d")
@@ -344,10 +391,11 @@ class CloudSyncWorker:
                         "icon": curr_icon
                     },
                     "cached_at": datetime.now(timezone.utc).isoformat(),
-                    "days": formatted_days
+                    "days": formatted_days,
+                    "hourly": formatted_hourly
                 }
                 database.save_cached_weather(forecast_payload, is_live=True)
-                logger.info(f"Updated 7-day live weather forecast for {loc_name} ({len(formatted_days)} days stored in SQLite).")
+                logger.info(f"Updated 7-day live weather forecast + 24h hourly for {loc_name} ({len(formatted_days)} days stored in SQLite).")
         except Exception as e:
             logger.debug(f"Weather cache refresh skipped (offline fallback): {e}")
 

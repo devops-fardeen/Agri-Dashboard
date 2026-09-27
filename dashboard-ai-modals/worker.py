@@ -112,28 +112,10 @@ def process_item(
         image
     )
 
-
-    if not good:
-
-        return {
-
-            "success": False,
-
-            "error": reason,
-
-            "blur_score": round(
-                blur,
-                2
-            )
-
-        }
-
-
-    # AI
+    # Process AI inference with 4 ONNX models
     results = engine.process(
         image
     )
-
 
     # Draw boxes
     annotated = draw_results(

@@ -1,8 +1,8 @@
-#include <Arduino.h>
-#include <Wire.h>
-#include <LoRa.h>
-#include <BH1750.h>
 #include <Adafruit_BMP280.h>
+#include <Arduino.h>
+#include <BH1750.h>
+#include <LoRa.h>
+#include <Wire.h>
 
 // =====================================================
 // I2C
@@ -39,12 +39,12 @@
 // LORA SX1278 RA-02
 // =====================================================
 
-#define LORA_SCK   18
-#define LORA_MISO  19
-#define LORA_MOSI  23
-#define LORA_SS     5
-#define LORA_RST   14
-#define LORA_DIO0  26
+#define LORA_SCK 18
+#define LORA_MISO 19
+#define LORA_MOSI 23
+#define LORA_SS 5
+#define LORA_RST 14
+#define LORA_DIO0 26
 
 #define LORA_FREQUENCY 433E6
 
@@ -88,36 +88,15 @@ struct SlaveData {
   unsigned long lastReceived;
 
   bool received;
-
 };
 
 // =====================================================
 // TWO SLAVE NODES
 // =====================================================
 
-SlaveData slave1 = {
-  1,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  false
-};
+SlaveData slave1 = {1, 0, 0, 0, 0, 0, 0, 0, false};
 
-SlaveData slave2 = {
-  2,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  0,
-  false
-};
+SlaveData slave2 = {2, 0, 0, 0, 0, 0, 0, 0, false};
 
 // =====================================================
 // RELAY CONTROL
@@ -132,9 +111,7 @@ void setRelay(int pin, bool on) {
   } else {
 
     digitalWrite(pin, on ? HIGH : LOW);
-
   }
-
 }
 
 // =====================================================
@@ -143,21 +120,15 @@ void setRelay(int pin, bool on) {
 
 void readLocalSensors() {
 
-  rainRaw =
-    analogRead(RAIN_SENSOR_PIN);
+  rainRaw = analogRead(RAIN_SENSOR_PIN);
 
-  waterLevelRaw =
-    analogRead(WATER_LEVEL_PIN);
+  waterLevelRaw = analogRead(WATER_LEVEL_PIN);
 
-  lightLux =
-    lightSensor.readLightLevel();
+  lightLux = lightSensor.readLightLevel();
 
-  bmpTemperature =
-    bmp.readTemperature();
+  bmpTemperature = bmp.readTemperature();
 
-  pressure =
-    bmp.readPressure() / 100.0F;
-
+  pressure = bmp.readPressure() / 100.0F;
 }
 
 // =====================================================
@@ -188,7 +159,6 @@ void printLocalSensors() {
   Serial.println(" hPa");
 
   Serial.println("====================================");
-
 }
 
 // =====================================================
@@ -207,16 +177,8 @@ bool parseSlavePacket(String packet) {
 
   float soilT;
 
-  int parsed = sscanf(
-    packet.c_str(),
-    "NODE=%d,T=%f,H=%f,SM=%d,SMRAW=%d,ST=%f",
-    &nodeID,
-    &airT,
-    &airH,
-    &soilM,
-    &soilRaw,
-    &soilT
-  );
+  int parsed = sscanf(packet.c_str(), "NODE=%d,T=%f,H=%f,SM=%d,SMRAW=%d,ST=%f",
+                      &nodeID, &airT, &airH, &soilM, &soilRaw, &soilT);
 
   if (parsed != 6) {
 
@@ -224,7 +186,6 @@ bool parseSlavePacket(String packet) {
     Serial.println(packet);
 
     return false;
-
   }
 
   SlaveData *node = nullptr;
@@ -243,7 +204,6 @@ bool parseSlavePacket(String packet) {
     Serial.println(nodeID);
 
     return false;
-
   }
 
   node->nodeID = nodeID;
@@ -265,7 +225,6 @@ bool parseSlavePacket(String packet) {
   node->received = true;
 
   return true;
-
 }
 
 // =====================================================
@@ -304,7 +263,6 @@ void printSlaveData(SlaveData &node) {
   Serial.println(" dBm");
 
   Serial.println("====================================");
-
 }
 
 // =====================================================
@@ -324,7 +282,6 @@ void receiveLoRa() {
   while (LoRa.available()) {
 
     packet += (char)LoRa.read();
-
   }
 
   Serial.println();
@@ -336,17 +293,13 @@ void receiveLoRa() {
     if (packet.indexOf("NODE=1") >= 0) {
 
       printSlaveData(slave1);
-
     }
 
     if (packet.indexOf("NODE=2") >= 0) {
 
       printSlaveData(slave2);
-
     }
-
   }
-
 }
 
 // =====================================================
@@ -362,7 +315,8 @@ void processSerialCommands() {
   while (Serial.available()) {
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
-    if (cmd.length() == 0) continue;
+    if (cmd.length() == 0)
+      continue;
 
     if (cmd.equalsIgnoreCase("PUMP1_ON")) {
       manualRelayOverride1 = true;
@@ -407,35 +361,18 @@ void irrigationControl() {
 
   bool rainDetected = rainRaw < 1500;
 
-  // Check each node separately.
-  // If a node has not sent data recently,
-  // keep its pump OFF.
-
-  bool node1Online =
-    slave1.received &&
-    (millis() - slave1.lastReceived < 30000);
-
-  bool node2Online =
-    slave2.received &&
-    (millis() - slave2.lastReceived < 30000);
+  // Rain sensor is used strictly for telemetry detection and display.
+  // Pump switching is managed via edge station Python controller (Weather API driven).
 
   bool pump1On = false;
   bool pump2On = false;
 
   if (manualRelayOverride1) {
     pump1On = manualRelayState1;
-  } else if (node1Online && !rainDetected) {
-    if (slave1.soilMoisture > 0 && slave1.soilMoisture < 30) {
-      pump1On = true;
-    }
   }
 
   if (manualRelayOverride2) {
     pump2On = manualRelayState2;
-  } else if (node2Online && !rainDetected) {
-    if (slave2.soilMoisture > 0 && slave2.soilMoisture < 30) {
-      pump2On = true;
-    }
   }
 
   setRelay(RELAY1_PIN, pump1On);
@@ -454,7 +391,6 @@ void irrigationControl() {
   Serial.println(pump2On ? "ON" : "OFF");
 
   Serial.println("================================");
-
 }
 
 // =====================================================
@@ -475,15 +411,9 @@ void setup() {
   // ADC
   analogReadResolution(12);
 
-  analogSetPinAttenuation(
-    RAIN_SENSOR_PIN,
-    ADC_11db
-  );
+  analogSetPinAttenuation(RAIN_SENSOR_PIN, ADC_11db);
 
-  analogSetPinAttenuation(
-    WATER_LEVEL_PIN,
-    ADC_11db
-  );
+  analogSetPinAttenuation(WATER_LEVEL_PIN, ADC_11db);
 
   // Relay setup
   pinMode(RELAY1_PIN, OUTPUT);
@@ -504,7 +434,6 @@ void setup() {
   } else {
 
     Serial.println("GY-302 initialization FAILED");
-
   }
 
   // BMP280
@@ -519,15 +448,10 @@ void setup() {
   } else {
 
     Serial.println("BMP280 initialization FAILED");
-
   }
 
   // LoRa
-  LoRa.setPins(
-    LORA_SS,
-    LORA_RST,
-    LORA_DIO0
-  );
+  LoRa.setPins(LORA_SS, LORA_RST, LORA_DIO0);
 
   Serial.println("Starting LoRa...");
 
@@ -538,7 +462,6 @@ void setup() {
     while (true) {
       delay(1000);
     }
-
   }
 
   LoRa.setTxPower(17);
@@ -554,7 +477,6 @@ void setup() {
   Serial.println("LoRa initialized successfully");
 
   Serial.println("MASTER NODE READY");
-
 }
 
 // =====================================================
@@ -562,7 +484,9 @@ void setup() {
 // =====================================================
 
 void loop() {
+
   processSerialCommands();
+
   receiveLoRa();
 
   static unsigned long lastSensorRead = 0;
@@ -576,7 +500,6 @@ void loop() {
     readLocalSensors();
 
     printLocalSensors();
-
   }
 
   if (millis() - lastIrrigation >= 5000) {
@@ -584,7 +507,5 @@ void loop() {
     lastIrrigation = millis();
 
     irrigationControl();
-
   }
-
 }

@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
           FORWARD: "forward",
           MOVE_BACKWARD: "backward",
           BACKWARD: "backward",
+          REVERSE: "backward",
           MOVE_LEFT: "left",
           LEFT: "left",
           MOVE_RIGHT: "right",

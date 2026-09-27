@@ -252,6 +252,10 @@ def get_edge_status():
         rain_detected=rain_detected
     )
     
+    # Live pump flowchart decision evaluation
+    import pump_logic
+    pump_evaluation = pump_logic.run_automated_pump_check()
+
     return {
         "success": True,
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -261,12 +265,26 @@ def get_edge_status():
             "PUMP_ZONE_A": actuators.get("PUMP_ZONE_A", 0),
             "PUMP_ZONE_B": actuators.get("PUMP_ZONE_B", 0),
         },
+        "pump_logic": pump_evaluation,
         "telemetry": telemetry,
         "rover": rover,
         "weather": weather,
         "stats": stats,
         "ai": ai_summary,
         "tomato_agronomy": agronomy_risk
+    }
+
+@app.get("/api/edge/pump/evaluate")
+@app.post("/api/edge/pump/evaluate")
+def evaluate_pump_flowchart():
+    """Runs the flowchart pump irrigation evaluation on demand and returns the decisions and states."""
+    import pump_logic
+    evaluation = pump_logic.run_automated_pump_check()
+    return {
+        "success": True,
+        "evaluation": evaluation,
+        "actuators": database.get_all_actuators(),
+        "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
 @app.get("/api/edge/agronomy/tomato-conditions")
@@ -361,6 +379,7 @@ def fetch_and_cache_live_weather(lat: Optional[float] = None, lon: Optional[floa
         f"https://api.open-meteo.com/v1/forecast?"
         f"latitude={target_lat}&longitude={target_lon}"
         f"&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m,precipitation"
+        f"&hourly=temperature_2m,relative_humidity_2m,precipitation_probability,weather_code,wind_speed_10m"
         f"&daily=temperature_2m_max,temperature_2m_min,precipitation_probability_max,weather_code,precipitation_sum,uv_index_max"
         f"&forecast_days=14&timezone=auto"
     )
@@ -378,6 +397,51 @@ def fetch_and_cache_live_weather(lat: Optional[float] = None, lon: Optional[floa
             weather_codes = daily.get("weather_code", [])
             uv_indices = daily.get("uv_index_max", [])
             curr = data.get("current", {})
+
+            # Hourly forecast parsing (next 24 hours)
+            hourly = data.get("hourly", {})
+            h_times = hourly.get("time", [])
+            h_temps = hourly.get("temperature_2m", [])
+            h_hums = hourly.get("relative_humidity_2m", [])
+            h_rains = hourly.get("precipitation_probability", [])
+            h_codes = hourly.get("weather_code", [])
+            h_winds = hourly.get("wind_speed_10m", [])
+
+            now_local = datetime.now()
+            now_iso_hour = now_local.strftime("%Y-%m-%dT%H:00")
+            
+            h_start_idx = 0
+            for idx, t_str in enumerate(h_times):
+                if t_str >= now_iso_hour:
+                    h_start_idx = idx
+                    break
+
+            formatted_hourly = []
+            for step in range(24):
+                idx = h_start_idx + step
+                if idx < len(h_times):
+                    t_iso = h_times[idx]
+                    try:
+                        t_dt = datetime.fromisoformat(t_iso)
+                        time_label = "Now" if step == 0 else t_dt.strftime("%I %p").lstrip("0")
+                    except Exception:
+                        time_label = f"+{step}h"
+                    
+                    wcode = h_codes[idx] if idx < len(h_codes) else 0
+                    wmo_h = interpret_wmo_code(wcode)
+                    
+                    formatted_hourly.append({
+                        "time": time_label,
+                        "iso": t_iso,
+                        "temp": round(h_temps[idx], 1) if idx < len(h_temps) else 28.0,
+                        "humidity": int(h_hums[idx]) if idx < len(h_hums) else 60,
+                        "rain_prob": int(h_rains[idx]) if (idx < len(h_rains) and h_rains[idx] is not None) else 0,
+                        "wind_speed": round(h_winds[idx], 1) if idx < len(h_winds) else 8.0,
+                        "weather_code": wcode,
+                        "condition": wmo_h["condition"],
+                        "icon": wmo_h["icon"],
+                        "is_now": step == 0
+                    })
 
             formatted_days = []
             today_str = datetime.now().strftime("%Y-%m-%d")
@@ -430,7 +494,8 @@ def fetch_and_cache_live_weather(lat: Optional[float] = None, lon: Optional[floa
                     "icon": curr_wmo["icon"]
                 },
                 "cached_at": datetime.now(timezone.utc).isoformat(),
-                "days": formatted_days
+                "days": formatted_days,
+                "hourly": formatted_hourly
             }
 
             database.save_cached_weather(forecast_payload, is_live=True)
@@ -620,7 +685,7 @@ def send_rover_command(payload: RoverCommandRequest):
     action = payload.action.upper().strip()
     valid_actions = [
         "MOVE_FORWARD", "MOVE_BACKWARD", "MOVE_LEFT", "MOVE_RIGHT", "STOP",
-        "FORWARD", "BACKWARD", "LEFT", "RIGHT", "AUTO_ON", "AUTO_OFF", "SPEED"
+        "FORWARD", "BACKWARD", "REVERSE", "LEFT", "RIGHT", "AUTO_ON", "AUTO_OFF", "SPEED"
     ]
     if action not in valid_actions:
         raise HTTPException(status_code=400, detail=f"Invalid rover command. Must be one of {valid_actions}")
@@ -642,6 +707,7 @@ def send_rover_command(payload: RoverCommandRequest):
             "FORWARD": "forward",
             "MOVE_BACKWARD": "backward",
             "BACKWARD": "backward",
+            "REVERSE": "backward",
             "MOVE_LEFT": "left",
             "LEFT": "left",
             "MOVE_RIGHT": "right",
@@ -800,9 +866,10 @@ def get_sync_status():
 @app.post("/api/edge/pump/{target}/{action}")
 def control_pump(
     target: str = Path(..., description="Target pump: PUMP_ZONE_A or PUMP_ZONE_B"),
-    action: str = Path(..., description="Action: ON, OFF, or TOGGLE")
+    action: str = Path(..., description="Action: ON, OFF, TOGGLE, FORCE_ON, or FORCE_OFF")
 ):
-    """Toggles or sets the hardware pump relay state in SQLite with rain protection."""
+    """Sets or toggles the hardware pump relay state in SQLite, with support for manual force override."""
+    import pump_logic
     target_clean = target.upper().strip()
     if target_clean in ["ZONE_A", "PUMP_A", "A"]:
         target_clean = "PUMP_ZONE_A"
@@ -813,40 +880,46 @@ def control_pump(
         raise HTTPException(status_code=400, detail="Invalid target. Must be PUMP_ZONE_A or PUMP_ZONE_B")
         
     action_clean = action.upper().strip()
+    
+    # 1. Force Override Actions (Runs pump forcefully regardless of all conditions)
+    if action_clean in ["FORCE_ON", "FORCE", "FORCE_START", "EMERGENCY_ON"]:
+        pump_logic.set_force_override(target_clean, True)
+        database.set_actuator_state(target_clean, 1)
+        return {
+            "success": True,
+            "target": target_clean,
+            "state": 1,
+            "state_name": "FORCED_RUNNING",
+            "force_override": True,
+            "message": f"Manual Force Override Active: {target_clean} is running forcefully regardless of weather and soil moisture.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    elif action_clean in ["FORCE_OFF", "CLEAR_FORCE", "AUTO"]:
+        pump_logic.set_force_override(target_clean, False)
+        database.set_actuator_state(target_clean, 0)
+        return {
+            "success": True,
+            "target": target_clean,
+            "state": 0,
+            "state_name": "IDLE",
+            "force_override": False,
+            "message": f"Force override cleared: {target_clean} returned to automated flowchart control.",
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+
+    # Standard Actions (ON / OFF / TOGGLE)
     if action_clean in ["ON", "1", "TRUE", "START"]:
         new_state = 1
+        pump_logic.set_force_override(target_clean, True)
     elif action_clean in ["OFF", "0", "FALSE", "STOP"]:
         new_state = 0
+        pump_logic.set_force_override(target_clean, False)
     elif action_clean in ["TOGGLE", "SWITCH"]:
         current = database.get_actuator_state(target_clean)
         new_state = 0 if current else 1
+        pump_logic.set_force_override(target_clean, bool(new_state))
     else:
-        raise HTTPException(status_code=400, detail="Invalid action. Use ON, OFF, or TOGGLE")
-
-    # If turning pump ON, check rain safety interlock
-    if new_state == 1:
-        latest_a = database.get_latest_telemetry("ZONE_A") or {}
-        sensor_rain = bool(latest_a.get("rain_detected", 0))
-        cached_wx = database.get_cached_weather()
-        weather_rain = False
-        if cached_wx and cached_wx.get("forecast"):
-            curr = cached_wx["forecast"].get("current", {})
-            precip = float(curr.get("precipitation", 0.0))
-            cond = str(curr.get("condition", "")).lower()
-            age = float(cached_wx.get("age_minutes", 999))
-            if age <= 15.0 and (precip > 0.0 or "rain" in cond or "shower" in cond or "thunder" in cond or "drizzle" in cond):
-                weather_rain = True
-
-        if sensor_rain or weather_rain:
-            database.set_actuator_state(target_clean, 0)
-            return {
-                "success": False,
-                "blocked_by_rain": True,
-                "target": target_clean,
-                "state": 0,
-                "state_name": "PROTECTED_OFF",
-                "message": "Pump activation blocked: Active rain detected. Pumps remain protected."
-            }
+        raise HTTPException(status_code=400, detail="Invalid action. Use ON, OFF, TOGGLE, FORCE_ON, or FORCE_OFF")
 
     database.set_actuator_state(target_clean, new_state)
         
@@ -855,6 +928,7 @@ def control_pump(
         "target": target_clean,
         "state": new_state,
         "state_name": "RUNNING" if new_state else "IDLE",
+        "force_override": bool(new_state),
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
