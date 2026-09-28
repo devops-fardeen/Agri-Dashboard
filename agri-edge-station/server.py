@@ -643,7 +643,7 @@ def get_rover():
 @app.get("/api/edge/rover/telemetry")
 def get_rover_live_telemetry(ip: Optional[str] = None):
     """Directly queries the live Rover ESP32 WebServer for battery, distance, and movement state."""
-    rover_ip = ip or os.getenv("ROVER_IP", "10.59.28.196")
+    rover_ip = ip or os.getenv("ROVER_IP", "10.208.70.197")
     try:
         resp = requests.get(f"http://{rover_ip}/telemetry", timeout=1.5)
         if resp.status_code == 200:
@@ -672,7 +672,7 @@ def get_rover_live_telemetry(ip: Optional[str] = None):
 @app.post("/api/edge/rover/speed/{value}")
 def set_rover_speed_direct(value: int = Path(..., ge=0, le=255), ip: Optional[str] = None):
     """Sets the rover motor speed directly."""
-    rover_ip = ip or os.getenv("ROVER_IP", "10.59.28.196")
+    rover_ip = ip or os.getenv("ROVER_IP", "10.208.70.197")
     try:
         resp = requests.get(f"http://{rover_ip}/speed?value={value}", timeout=1.5)
         return {"success": True, "speed": value, "rover_resp": resp.text}
@@ -691,7 +691,7 @@ def send_rover_command(payload: RoverCommandRequest):
         raise HTTPException(status_code=400, detail=f"Invalid rover command. Must be one of {valid_actions}")
         
     updated = database.update_rover_command(action)
-    rover_ip = payload.rover_ip or os.getenv("ROVER_IP", "10.59.28.196")
+    rover_ip = payload.rover_ip or os.getenv("ROVER_IP", "10.208.70.197")
 
     # Map action for Rover ESP32 WebServer
     if action == "SPEED" and payload.speed is not None:

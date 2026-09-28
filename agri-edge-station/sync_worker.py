@@ -108,7 +108,7 @@ class CloudSyncWorker:
                     elif target == "ROVER":
                         database.update_rover_command(action)
                         logger.info(f"Local Rover Command Updated: {action}")
-                        rover_ip = os.getenv("ROVER_IP", "10.59.28.196")
+                        rover_ip = os.getenv("ROVER_IP", "10.208.70.197")
                         cmd_map = {
                             "MOVE_FORWARD": "forward",
                             "FORWARD": "forward",
