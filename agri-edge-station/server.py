@@ -1,4 +1,5 @@
 import os
+import cv2
 import threading
 import logging
 from datetime import datetime, timezone
@@ -6,11 +7,12 @@ from typing import Optional, Dict, Any, List, Tuple
 import requests
 import urllib.parse
 from fastapi import FastAPI, HTTPException, Path, Body, UploadFile, File, Form, Query
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import database
 import tomato_favourable_conditions
+from apriltag_guidance import guidance_controller, TAG_NAMES, TAG_CHARGING_DOCK, TAG_ROVER, TAG_FIELD_A_ENTRY, TAG_FIELD_B_ENTRY
 
 logger = logging.getLogger("server")
 
@@ -849,6 +851,69 @@ def capture_rover_photo():
         "diagnosis": res,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
+
+# ==========================================
+# APRILTAG VISION GUIDANCE & PI CAMERA ROUTES
+# ==========================================
+
+class VisionMissionRequest(BaseModel):
+    target: Optional[str] = "FIELD_B"
+    force: Optional[bool] = False
+
+@app.get("/api/edge/vision/status")
+def get_vision_guidance_status():
+    """Returns real-time AprilTag positions, rover localization pose, and servoing mission state."""
+    return {
+        "success": True,
+        "guidance": guidance_controller.get_status(),
+        "tag_names": TAG_NAMES
+    }
+
+@app.post("/api/edge/vision/lock-tags")
+def lock_vision_tags():
+    """Manually lock detected static tag coordinates (Charging station, Field entries/exits)."""
+    guidance_controller.lock_tag_positions()
+    return {"success": True, "message": "Static AprilTag positions locked."}
+
+@app.post("/api/edge/vision/mission/start")
+def start_vision_guided_mission(req: VisionMissionRequest):
+    """Starts Pi 5 closed-loop visual servoing to navigate Rover to 20cm front approach, then entry, then auto patrol."""
+    target_field = (req.target or "FIELD_B").upper()
+    res = guidance_controller.start_mission(field=target_field)
+    database.update_rover_position(status="PATROLLING", current_field=target_field)
+    return res
+
+@app.post("/api/edge/vision/mission/dock")
+def return_rover_to_charging_dock():
+    """Guides Rover back to Charging Station / Dock (AprilTag ID 0)."""
+    res = guidance_controller.return_to_dock()
+    database.update_rover_position(status="CHARGING", current_field="DOCK")
+    return res
+
+@app.post("/api/edge/vision/mission/cancel")
+def cancel_vision_mission():
+    """Cancels active vision mission and halts rover."""
+    guidance_controller.cancel_mission()
+    return {"success": True, "message": "Vision mission cancelled. Rover halted."}
+
+def generate_pi_camera_mjpeg():
+    """Yields MJPEG stream of Master Node Base overhead camera with AprilTag overlays."""
+    while True:
+        frame = guidance_controller.last_annotated_frame
+        if frame is not None:
+            ret, jpeg = cv2.imencode('.jpg', frame)
+            if ret:
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n')
+        threading.Event().wait(0.06)
+
+@app.get("/api/edge/vision/stream")
+def stream_pi_camera():
+    """Live MJPEG stream of Pi NoIR V2 camera monitoring Master Node base and AprilTags."""
+    return StreamingResponse(
+        generate_pi_camera_mjpeg(),
+        media_type="multipart/x-mixed-replace; boundary=frame"
+    )
 
 @app.get("/api/edge/sync/status")
 def get_sync_status():

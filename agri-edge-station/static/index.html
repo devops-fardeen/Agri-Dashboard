@@ -3027,6 +3027,37 @@
       }
     }
 
+    // 3.5 AprilTag Vision Guidance System
+    async function setRoverPositionManual(pos) {
+      if (pos === 'CHARGING' || pos === 'DOCK') {
+        try {
+          await fetch('/api/edge/vision/mission/dock', { method: 'POST' });
+        } catch (e) {
+          await fetch('/api/edge/rover/position', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'PARKED', current_field: 'DOCK' })
+          });
+        }
+      } else {
+        const targetField = pos === 'FIELD_B' ? 'FIELD_B' : 'FIELD_A';
+        try {
+          await fetch('/api/edge/vision/mission/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: targetField })
+          });
+        } catch (e) {
+          await fetch('/api/edge/rover/position', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'PATROLLING', current_field: targetField })
+          });
+        }
+      }
+      fetchDashboardData();
+    }
+
     // 4. Rover Modes Switcher [ Auto | Manual ]
     async function switchRoverMode(mode) {
       currentRoverMode = mode;

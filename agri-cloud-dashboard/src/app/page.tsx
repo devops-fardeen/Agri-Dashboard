@@ -1049,6 +1049,32 @@ export default function DashboardPage() {
   const [roverBattery, setRoverBattery] = useState<number>(88);
   const [roverActionNotice, setRoverActionNotice] = useState<string>("Standby at Charging Dock");
 
+  const handleNavigateRoverWithVision = async (targetBay: "DOCK" | "FIELD_A" | "FIELD_B") => {
+    setRoverPosition(targetBay);
+    if (targetBay === "DOCK") {
+      setRoverActionNotice("🏷️ Pi 5 Vision Guiding Rover back to Charging Dock (Tag 0)...");
+      setActionNotice("⚡ Pi 5 Vision: Servoing Rover to Charging Station / Dock (AprilTag 0)");
+      try {
+        fetch("http://127.0.0.1:8000/api/edge/vision/mission/dock", {
+          method: "POST",
+          signal: AbortSignal.timeout(2000),
+        }).catch(() => {});
+      } catch {}
+    } else {
+      const fieldName = targetBay === "FIELD_A" ? "Field A" : "Field B";
+      setRoverActionNotice(`🏷️ Pi 5 Vision: Navigating 20cm front approach for ${fieldName} Entry (Tag ${targetBay === 'FIELD_A' ? 2 : 4})...`);
+      setActionNotice(`🚀 Pi 5 Vision: Locking static tags & guiding Rover to ${fieldName} Entry`);
+      try {
+        fetch("http://127.0.0.1:8000/api/edge/vision/mission/start", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ target: targetBay }),
+          signal: AbortSignal.timeout(2000),
+        }).catch(() => {});
+      } catch {}
+    }
+  };
+
   const handleSwitchRoverMode = async (mode: "AUTO" | "MANUAL") => {
     setRoverMode(mode);
     setActionNotice(
@@ -2309,10 +2335,7 @@ export default function DashboardPage() {
             {/* 3 Nav Bay Buttons */}
             <div className="grid grid-cols-3 gap-3 mb-3">
               <button
-                onClick={() => {
-                  setRoverPosition("DOCK");
-                  setRoverActionNotice("Standby at Charging Dock");
-                }}
+                onClick={() => handleNavigateRoverWithVision("DOCK")}
                 className={`p-3.5 rounded-2xl border text-center transition cursor-pointer ${
                   roverPosition === "DOCK"
                     ? "bg-[#0284C7] text-white border-[#0284C7] shadow-sm"
@@ -2322,15 +2345,12 @@ export default function DashboardPage() {
                 <div className="text-lg">⚡</div>
                 <div className="text-xs font-bold mt-1">Base Dock</div>
                 <div className={`text-[10px] ${roverPosition === "DOCK" ? "text-white/80" : "text-[#94A3B8]"}`}>
-                  {roverPosition === "DOCK" ? "● ACTIVE HERE" : "Standby"}
+                  {roverPosition === "DOCK" ? "● DOCKED (Tag 0)" : "Tag 0: Dock"}
                 </div>
               </button>
 
               <button
-                onClick={() => {
-                  setRoverPosition("FIELD_A");
-                  setRoverActionNotice("Navigating Field A (Tomato Canopy)");
-                }}
+                onClick={() => handleNavigateRoverWithVision("FIELD_A")}
                 className={`p-3.5 rounded-2xl border text-center transition cursor-pointer ${
                   roverPosition === "FIELD_A"
                     ? "bg-[#0284C7] text-white border-[#0284C7] shadow-sm"
@@ -2340,15 +2360,12 @@ export default function DashboardPage() {
                 <div className="text-lg">🍅</div>
                 <div className="text-xs font-bold mt-1">Field A</div>
                 <div className={`text-[10px] ${roverPosition === "FIELD_A" ? "text-white/80" : "text-[#94A3B8]"}`}>
-                  {roverPosition === "FIELD_A" ? "● ACTIVE HERE" : "Standby"}
+                  {roverPosition === "FIELD_A" ? "● NAVIGATING (Tag 2)" : "Tag 2: Entry"}
                 </div>
               </button>
 
               <button
-                onClick={() => {
-                  setRoverPosition("FIELD_B");
-                  setRoverActionNotice("Navigating Field B (Greenhouse)");
-                }}
+                onClick={() => handleNavigateRoverWithVision("FIELD_B")}
                 className={`p-3.5 rounded-2xl border text-center transition cursor-pointer ${
                   roverPosition === "FIELD_B"
                     ? "bg-[#0284C7] text-white border-[#0284C7] shadow-sm"
@@ -2358,7 +2375,7 @@ export default function DashboardPage() {
                 <div className="text-lg">🌿</div>
                 <div className="text-xs font-bold mt-1">Field B</div>
                 <div className={`text-[10px] ${roverPosition === "FIELD_B" ? "text-white/80" : "text-[#94A3B8]"}`}>
-                  {roverPosition === "FIELD_B" ? "● ACTIVE HERE" : "Standby"}
+                  {roverPosition === "FIELD_B" ? "● NAVIGATING (Tag 4)" : "Tag 4: Entry"}
                 </div>
               </button>
             </div>

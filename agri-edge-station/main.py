@@ -40,8 +40,14 @@ def main():
     sync_thread = sync_worker.start_background(interval_seconds=10.0)
     logger.info("Started Cloud Sync Worker thread (10s sync batch to Tier 3 Cloud)")
 
+    # 5. Start Master Node Base AprilTag Vision Guidance Controller (Pi NoIR V2 Cam)
+    from apriltag_guidance import guidance_controller
+    guidance_controller.start()
+    logger.info("Started Pi Camera Master Node Base AprilTag Vision Guidance Controller")
+
     def handle_shutdown(signum, frame):
         logger.info("Received termination signal. Shutting down AgriSmart Edge...")
+        guidance_controller.stop()
         serial_bridge.stop()
         simulator.stop()
         sync_worker.stop()
