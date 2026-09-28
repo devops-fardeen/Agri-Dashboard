@@ -5,9 +5,9 @@ Mounted: Raspberry Pi NoIR V2 Camera on Master Node base corner at ~1.5m height
 Base Dimensions: 2.0m x 1.5m
 Tag Standard: tag36h11
 
-AprilTag Map (6 Targets):
-  ID 0: CHARGING_STATION / DOCK (Default Position)
-  ID 1: ROVER (Mounted on top of Rover chassis with orientation header)
+AprilTag Map (6 Targets - from official PDF):
+  ID 0: ROVER (Mounted flat and square on Rover chassis top)
+  ID 1: DOCK (Charging Station / Default Position)
   ID 2: FIELD_A_ENTRY
   ID 3: FIELD_A_EXIT
   ID 4: FIELD_B_ENTRY
@@ -67,17 +67,17 @@ except ImportError:
         APRILTAG_LIB_AVAILABLE = False
         logger.warning("pupil-apriltags/apriltag library not found. Will use OpenCV Aruco tag36h11 fallback or simulated tag tracking.")
 
-# AprilTag Target IDs
-TAG_CHARGING_DOCK = 0
-TAG_ROVER = 1
+# AprilTag Target IDs (Matching PDF Sheet)
+TAG_ROVER = 0
+TAG_CHARGING_DOCK = 1
 TAG_FIELD_A_ENTRY = 2
 TAG_FIELD_A_EXIT = 3
 TAG_FIELD_B_ENTRY = 4
 TAG_FIELD_B_EXIT = 5
 
 TAG_NAMES = {
-    TAG_CHARGING_DOCK: "CHARGING_DOCK",
     TAG_ROVER: "ROVER",
+    TAG_CHARGING_DOCK: "DOCK",
     TAG_FIELD_A_ENTRY: "FIELD_A_ENTRY",
     TAG_FIELD_A_EXIT: "FIELD_A_EXIT",
     TAG_FIELD_B_ENTRY: "FIELD_B_ENTRY",
@@ -515,7 +515,7 @@ class AprilTagGuidanceController:
             cv2.circle(frame, (rx, ry), 16, (0, 100, 255), -1)
             cv2.circle(frame, (rx, ry), 20, (255, 255, 255), 2)
             cv2.arrowedLine(frame, (rx, ry), (arrow_x, arrow_y), (0, 255, 255), 3, tipLength=0.3)
-            cv2.putText(frame, "ROVER (Tag 1)", (rx - 35, ry - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 2)
+            cv2.putText(frame, "ROVER (Tag 0)", (rx - 35, ry - 25), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 2)
 
         # HUD Overlay Banner
         cv2.rectangle(frame, (0, 0), (w, 36), (20, 24, 33), -1)

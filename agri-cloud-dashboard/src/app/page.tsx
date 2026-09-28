@@ -1052,8 +1052,8 @@ export default function DashboardPage() {
   const handleNavigateRoverWithVision = async (targetBay: "DOCK" | "FIELD_A" | "FIELD_B") => {
     setRoverPosition(targetBay);
     if (targetBay === "DOCK") {
-      setRoverActionNotice("🏷️ Pi 5 Vision Guiding Rover back to Charging Dock (Tag 0)...");
-      setActionNotice("⚡ Pi 5 Vision: Servoing Rover to Charging Station / Dock (AprilTag 0)");
+      setRoverActionNotice("🏷️ Pi 5 Vision Guiding Rover back to Charging Dock (Tag 1)...");
+      setActionNotice("⚡ Pi 5 Vision: Servoing Rover to Charging Station / Dock (AprilTag 1)");
       try {
         fetch("http://127.0.0.1:8000/api/edge/vision/mission/dock", {
           method: "POST",
@@ -2345,7 +2345,7 @@ export default function DashboardPage() {
                 <div className="text-lg">⚡</div>
                 <div className="text-xs font-bold mt-1">Base Dock</div>
                 <div className={`text-[10px] ${roverPosition === "DOCK" ? "text-white/80" : "text-[#94A3B8]"}`}>
-                  {roverPosition === "DOCK" ? "● DOCKED (Tag 0)" : "Tag 0: Dock"}
+                  {roverPosition === "DOCK" ? "● DOCKED (Tag 1)" : "Tag 1: Dock"}
                 </div>
               </button>
 
