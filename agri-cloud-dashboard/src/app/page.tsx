@@ -757,7 +757,7 @@ export default function DashboardPage() {
       fetch("http://127.0.0.1:8000/api/edge/rover/patrol/trigger", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field: "FIELD_A" }),
+        body: JSON.stringify({ field: "FIELD_A", force: false }),
         signal: AbortSignal.timeout(2000),
       }).catch(() => {});
     } catch {}
@@ -767,6 +767,44 @@ export default function DashboardPage() {
       setActionNotice("✓ AI Patrol Completed: 24 leaf canopies analyzed. Alerts feed updated!");
       setTimeout(() => setActionNotice(null), 4000);
     }, 2500);
+  };
+
+  const handleForceAutoPatrol = async () => {
+    setRoverMode("AUTO");
+    setPatrolRunning(true);
+    setRoverActionNotice("⚡ FORCE AUTO PATROL ACTIVE (Conditions Bypassed)");
+    setActionNotice("⚡ Force Patrol Active: Rover running in Auto mode across field!");
+
+    try {
+      // 1. Direct hardware command to rover ESP32
+      fetch("/api/commands", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ target: "ROVER", action: "AUTO_ON" }),
+      }).catch(() => {});
+
+      // 2. Trigger edge patrol with force bypass
+      fetch("http://127.0.0.1:8000/api/edge/rover/patrol/trigger", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field: "FIELD_A", force: true }),
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => {});
+
+      // 3. Direct Edge Rover Command
+      fetch("http://127.0.0.1:8000/api/edge/rover/command", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "AUTO_ON" }),
+        signal: AbortSignal.timeout(1500),
+      }).catch(() => {});
+    } catch {}
+
+    setTimeout(() => {
+      setPatrolRunning(false);
+      setActionNotice("✓ Force Auto Patrol scanning field continuous loop.");
+      setTimeout(() => setActionNotice(null), 4000);
+    }, 2000);
   };
 
   const handleManualScanComplete = (data: any) => {
@@ -2413,15 +2451,26 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Start Scheduled Patrol Run Button */}
-                <button
-                  onClick={handleTriggerPatrol}
-                  disabled={patrolRunning}
-                  className="w-full py-3 rounded-2xl bg-[#0F172A] dark:bg-[#0284C7] hover:bg-[#1E293B] dark:hover:bg-[#0369A1] text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-md"
-                >
-                  <span>🚜</span>
-                  <span>{patrolRunning ? "Patrol Scan in Progress..." : "Start Scheduled Patrol Run Now"}</span>
-                </button>
+                {/* Patrol Actions: Standard & Force Auto Mode */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <button
+                    onClick={handleTriggerPatrol}
+                    disabled={patrolRunning}
+                    className="py-3 px-4 rounded-2xl bg-[#0F172A] dark:bg-[#0284C7] hover:bg-[#1E293B] dark:hover:bg-[#0369A1] text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-md disabled:opacity-50"
+                  >
+                    <span>🚜</span>
+                    <span>{patrolRunning ? "Patrol Running..." : "Start Scheduled Patrol"}</span>
+                  </button>
+
+                  <button
+                    onClick={handleForceAutoPatrol}
+                    disabled={patrolRunning}
+                    className="py-3 px-4 rounded-2xl bg-gradient-to-r from-[#D97706] to-[#EA580C] hover:from-[#B45309] hover:to-[#C2410C] text-white font-black text-xs flex items-center justify-center gap-2 cursor-pointer transition shadow-md shadow-amber-500/20 disabled:opacity-50"
+                  >
+                    <span>⚡</span>
+                    <span>Force Auto Patrol Now</span>
+                  </button>
+                </div>
               </div>
             ) : (
               /* 2. MANUAL MODE VIEW */

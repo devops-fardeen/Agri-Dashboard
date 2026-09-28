@@ -760,16 +760,18 @@ def set_rover_mode(mode: str = Path(..., description="Driving mode: AUTO or MANU
 
 class RoverPatrolRequest(BaseModel):
     field: Optional[str] = "FIELD_A"
+    force: Optional[bool] = False
 
 @app.post("/api/edge/rover/patrol/trigger")
 def trigger_rover_patrol(req: Optional[RoverPatrolRequest] = None):
     """Triggers an autonomous patrol cycle in the specified field, updating rover state and executing AI diagnostic scan."""
     fld = (req.field if req else "FIELD_A") or "FIELD_A"
+    force_run = bool(req.force if req else False)
     fld_clean = "FIELD_B" if "B" in fld.upper() else "FIELD_A"
     
-    # 1. Check if post-rain drying hold timer is active (waiting 30 min after rain and pump off)
+    # 1. Check if post-rain drying hold timer is active (waiting 30 min after rain and pump off) unless force_run
     rover_state = database.get_rover_state()
-    if rover_state.get("rain_hold_until"):
+    if not force_run and rover_state.get("rain_hold_until"):
         try:
             hold_time = datetime.fromisoformat(rover_state["rain_hold_until"])
             if hold_time.tzinfo is None:
@@ -786,7 +788,7 @@ def trigger_rover_patrol(req: Optional[RoverPatrolRequest] = None):
         except Exception:
             pass
 
-    # 2. Check active rain on hardware sensor or cached weather API (last 15 min)
+    # 2. Check active rain on hardware sensor or cached weather API (last 15 min) unless force_run
     latest_a = database.get_latest_telemetry("ZONE_A") or {}
     sensor_rain = bool(latest_a.get("rain_detected", 0))
     
@@ -800,7 +802,7 @@ def trigger_rover_patrol(req: Optional[RoverPatrolRequest] = None):
         if age <= 15.0 and (precip > 0.0 or "rain" in cond or "shower" in cond or "thunder" in cond or "drizzle" in cond):
             weather_rain = True
 
-    if sensor_rain or weather_rain:
+    if not force_run and (sensor_rain or weather_rain):
         database.set_rover_rain_hold(30)
         # Force shut down pumps
         database.set_actuator_state("PUMP_ZONE_A", 0)
@@ -811,6 +813,17 @@ def trigger_rover_patrol(req: Optional[RoverPatrolRequest] = None):
             "message": "Patrol aborted: Active precipitation detected (" + ("Rain Sensor" if sensor_rain else "Weather API") + "). Water pumps shut down and 30-min drying timer initiated.",
             "rover": database.get_rover_state()
         }
+    
+    # If force run, clear any active rain hold
+    if force_run:
+        database.update_rover_command("AUTO_ON")
+        rover_ip = os.getenv("ROVER_IP", "10.208.70.197")
+        def dispatch_force_auto(ip: str):
+            try:
+                requests.get(f"http://{ip}/cmd?move=auto_on", timeout=1.5)
+            except Exception:
+                pass
+        threading.Thread(target=dispatch_force_auto, args=(rover_ip,), daemon=True).start()
     
     database.update_rover_position(status="PATROLLING", current_field=fld_clean)
     

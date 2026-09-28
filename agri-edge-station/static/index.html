@@ -2094,9 +2094,14 @@
             </div>
           </div>
 
-          <button class="pump-btn" onclick="triggerPatrolScan()" style="width: 100%; justify-content: center; background: var(--bg-card-dark); color: #FFFFFF; padding: 13px; font-size: 13px;">
-            🚜 Start Scheduled Patrol Run Now
-          </button>
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <button class="pump-btn" onclick="triggerPatrolScan(false)" style="width: 100%; justify-content: center; background: var(--bg-card-dark); color: #FFFFFF; padding: 13px; font-size: 13px;">
+              🚜 Start Scheduled Patrol
+            </button>
+            <button class="pump-btn" onclick="triggerPatrolScan(true)" style="width: 100%; justify-content: center; background: linear-gradient(135deg, #D97706, #EA580C); color: #FFFFFF; padding: 13px; font-size: 13px; box-shadow: 0 4px 12px rgba(217, 119, 6, 0.25);">
+              ⚡ Force Auto Patrol Now
+            </button>
+          </div>
         </div>
 
         <!-- 2. IN MANUAL MODE VIEW -->
@@ -3078,12 +3083,12 @@
       }
     }
 
-    async function triggerPatrolScan() {
+    async function triggerPatrolScan(force = false) {
       try {
         const res = await fetch('/api/edge/rover/patrol/trigger', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ field: currentSelectedField })
+          body: JSON.stringify({ field: currentSelectedField, force: force })
         });
         const data = await res.json();
         if (data.blocked_by_rain) {
