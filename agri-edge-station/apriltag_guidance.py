@@ -447,7 +447,7 @@ class AprilTagGuidanceController:
                 logger.info(f"Rover ARRIVED at {mission} Entry! Tag locked and verified. Engaging AUTO patrol mode.")
                 with self.lock:
                     self.state = "AUTO_PATROLLING"
-                    self.status_message = f"✓ ARRIVED at {mission}! Switched to Firmware AUTO Patrol Mode."
+                    self.status_message = f"ARRIVED at {mission}! Switched to Firmware AUTO Patrol Mode."
                 # 1. Stop steering
                 self._send_rover_cmd("stop")
                 time.sleep(0.5)
@@ -460,10 +460,10 @@ class AprilTagGuidanceController:
 
         elif state == "NAVIGATING_TO_DOCK":
             if dist_cm <= self.target_reached_threshold_cm:
-                logger.info("Rover successfully arrived at Charging Station / Dock (Tag 0)! Locked in dock position.")
+                logger.info("Rover successfully arrived at Charging Station / Dock (Tag 1)! Locked in dock position.")
                 with self.lock:
                     self.state = "DOCKED"
-                    self.status_message = "✓ DOCKED: Rover safely parked at Charging Station (Tag 0)."
+                    self.status_message = "DOCKED: Rover safely parked at Charging Station (Tag 1)."
                 self._send_rover_cmd("stop")
                 return
             else:
